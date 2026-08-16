@@ -94,6 +94,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 | `dsh-web-auth` / `dsh-client-ui-web-auth` | 0.1.0-rc.6 | 源码即产物 | ✅ | ✅（正式 profile 已挂载） | 升级免疫；**已被「访问门禁」插件化替代（`dsh-AccessGate/`），正式切换待用户执行 `switch-to-https.sh`** |
 | `dsh-host-access-gate` / `dsh-client-ui-access-gate`（访问门禁） | 0.1.0-rc.6 | 源码即产物（依赖 fork 需重建 apiproxy） | ✅ 17 项集成 + 真实实例链路（test-env 3090） | ⏳ 待用户执行（`dsh-AccessGate/switch-to-https.sh`） | 升级免疫；apiproxy fork 含 `access-gate` 命名空间暴露 |
 | `dsh-mobile-adapt` | 0.1.0-rc.6 | ✅ | ✅ | ✅ | 升级免疫 |
+| `deepseek-pet`（收录上游桌宠） | 0.1.0-rc.6 | ✅ `node scripts/build.mjs`（lib/ 已入库） | ✅ test-env-2（3091）：boot 清单 + client bundle 加载全过 | ⏳ 待用户执行（`dsh plugin --profile web add github:keleus/deepseek-pet`） | 零改动收录（MIT）；上游自带测试 14 项中 1 项断言 bug 不影响运行；升级免疫 |
 | 补丁项目（默认目录 / 重试 / 鉴权安装包补丁） | 0.1.0-rc.6 | — | ✅（副本上全测） | ✅（已实施） | **升级后需重打**（幂等脚本 + `升级后重打补丁指南.md`；默认目录/重试已由 dsh-defaults 插件化替代，脚本保留兜底） |
 
 > 更新日期：2026-08-16 核对。DSH 升级后请按 §4 流程重验并更新本表。
@@ -122,4 +123,5 @@ dsh plugin add ./<包名>-<版本>.tgz
 | fork 插件（profile 覆盖） | 通常免疫；重验即可；上游 API 变动时改 `src/` 重新构建 | 覆盖前自动 `.bak` 备份，拷回即回退 |
 | `dsh-web-auth` / `dsh-host-access-gate` 等 npm 插件 | 随 profile 免疫；误删则重跑 `node dsh-AccessGate/install-access-gate-plugin.mjs --allow-formal`（旧版重跑 `node install-auth-plugin.mjs`） | 同脚本幂等重装 |
 | 安装包补丁（三个旧项目） | 重跑各自幂等补丁脚本 + `switch-to-https.sh` | 补丁旁 `.bak` / unpatch 说明 |
+| `deepseek-pet`（收录桌宠） | 随 profile 免疫；上游更新时 `git fetch` 合并 + `node scripts/build.mjs` 重建 + test-env 重验 | `dsh plugin --profile web remove deepseek-pet`；测试环境 `node deepseek-pet/install-pet-plugin.mjs --unpatch` |
 | retryPolicy 配置 | 重跑 `patch-retry-policy.py`（apply/幂等/unpatch 全测过） | 脚本 unpatch |
