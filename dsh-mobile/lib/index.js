@@ -64,10 +64,12 @@ const MOBILE_CSS = `
     display: none !important;
   }
   .aionui-floating-expand {
-    width: 34px !important;
-    height: 84px !important;
-    border-radius: 14px 0 0 14px !important;
-    font-size: 16px !important;
+    width: 24px !important;
+    height: 44px !important;
+    top: 104px !important;
+    transform: none !important;
+    border-radius: 10px 0 0 10px !important;
+    font-size: 14px !important;
   }
 
   /* ── 2. 输入区：贴边 + 安全区 + 16px 防 iOS 聚焦缩放 ───────────── */
@@ -78,6 +80,16 @@ const MOBILE_CSS = `
   [data-composer-seat] textarea {
     font-size: 16px !important; /* 防止 iOS 聚焦时自动放大页面 */
     line-height: 1.5;
+  }
+  /* hero 输入区（空会话）：工作区/预设/分支 chip 一行放不下时换行，避免右缘裁剪 */
+  [data-composer-seat] [class*="heroWorkspaceRow"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+  /* Git 分支快捷 chip（input.dock 槽）：hero 空会话态在手机上无空位可放
+     （与预设座重叠），窄屏下隐藏；分支仍可在文件树抽屉/Git 图谱查看 */
+  [data-composer-seat] [class*="anchorDock"] {
+    display: none !important;
   }
 
   /* ── 3. 设置弹层：图标栏导航 + 字段纵向堆叠 ────────────────────── */
