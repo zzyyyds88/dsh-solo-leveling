@@ -148,6 +148,11 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   assert.match(cardHtml, /缓存命中/)
   assert.match(cardHtml, /缓存写入/)
   assert.match(cardHtml, /输出/)
+  // 官方 ValueField 版式：每个字段 label 行 → control 独占行
+  const fieldCount = (cardHtml.match(/class="dshp-field"/g) ?? []).length
+  assert.ok(fieldCount >= 12, `字段数不足: ${fieldCount}`)
+  assert.match(cardHtml, /dshp-control/)
+  assert.doesNotMatch(cardHtml, /rateGrid/)
 
   for (const cleanup of cleanups.reverse()) cleanup()
   delete globalThis.window

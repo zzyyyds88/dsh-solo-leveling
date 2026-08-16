@@ -1,95 +1,133 @@
-diff --git a/deepseek-pet/src/client/DeepSeekPet.jsx b/deepseek-pet/src/client/DeepSeekPet.jsx
-index 4f9da64..fb2542d 100644
---- a/deepseek-pet/src/client/DeepSeekPet.jsx
-+++ b/deepseek-pet/src/client/DeepSeekPet.jsx
-@@ -608,20 +608,16 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-     speak(words[Math.floor(Math.random() * words.length)], '')
-   }, [effectiveVisual.kind, speak])
- 
--  /** 切换静音（双击 / 工具条按钮共用）。折叠态双击仍是展开。 */
-+  /** 切换静音（工具条按钮）。双击不再触发。 */
-   const handleToggleMute = useCallback(() => {
--    if (collapsed) {
--      setCollapsed(false)
--      return
--    }
-     unlockAudio()
-     const nextMuted = toggleMuted()
-     setMuted(nextMuted)
-     if (alertEnabled('prompt')) speakVoice(nextMuted ? 'muted' : 'unmuted')
--    speak(nextMuted ? '声音已关闭 🔇（双击恢复）' : '声音已开启 🔊（双击静音）', '')
--  }, [collapsed, speak])
-+    speak(nextMuted ? '声音已关闭 🔇（工具条可恢复）' : '声音已开启 🔊', '')
-+  }, [speak])
- 
--  /** 单击计数：三连击触发诊断；两连击（且不再来第三下）切静音；单点戳一戳。 */
-+  /** 单击计数：三连击触发诊断；双击折叠态展开；其余单击戳一戳（不再双击切静音）。 */
-   const handleClick = useCallback(() => {
-     if (dragged.current) { dragged.current = false; return }
-     const now = Date.now()
-@@ -629,23 +625,23 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-     lastClickAtRef.current = now
-     window.clearTimeout(clickTimerRef.current)
-     if (clickCountRef.current >= 3) {
--      // 三连击：清掉可能排队的双击静音，直接开诊断
-+      // 三连击：清掉可能排队的双击动作，直接开诊断
-       clickCountRef.current = 0
-       setDiagOpen(current => !current)
-       return
-     }
-     clickTimerRef.current = window.setTimeout(() => {
-       if (longPressFired.current) { longPressFired.current = false; return }
--      if (clickCountRef.current >= 2) {
--        // 两次点击后 450ms 内没有第三下 → 判定为双击 → 切静音
--        clickCountRef.current = 0
--        handleToggleMute()
-+      const count = clickCountRef.current
-+      clickCountRef.current = 0
-+      if (count >= 2 && collapsed) {
-+        // 折叠态双击：展开
-+        setCollapsed(false)
-         return
-       }
--      clickCountRef.current = 0
-       tap()
-     }, 450)
--  }, [tap, handleToggleMute])
-+  }, [tap, collapsed])
- 
-   /** 长按摸头（700ms）：跳跃庆祝 + 台词 + 音效。 */
-   const handlePointerDownForInteraction = useCallback((event) => {
-@@ -729,7 +725,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-         {confetti.map(piece => <i key={piece.id} style={{ '--cf-x': `${piece.x}%`, '--cf-delay': `${piece.delay}s`, '--cf-dur': `${piece.duration}s`, '--cf-color': piece.color, '--cf-rot': `${piece.rotate}deg`, '--cf-drift': `${piece.drift}px` }} />)}
-       </div>}
-       <div className="dsh-live2d-stage">
--        <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动/单击/长按/双击/三击 DeepSeek 状态助手'}
-+        <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动/单击/长按/三击 DeepSeek 状态助手'}
-           onClick={handleClick} onPointerDown={event => { pointerDown(event); handlePointerDownForInteraction(event) }}
-           onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={wheelScale}>
-           <span className="dsh-live2d-sprites" aria-hidden="true">
 diff --git a/deepseek-pet/src/client/settings-card.jsx b/deepseek-pet/src/client/settings-card.jsx
-index 20f050e..d669deb 100644
+index d669deb..20cf81b 100644
 --- a/deepseek-pet/src/client/settings-card.jsx
 +++ b/deepseek-pet/src/client/settings-card.jsx
-@@ -186,7 +186,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
-           <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声">
-             <PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />
-           </PetField>
--          <PetField label="启用声音" hint="总静音开关（与双击桌宠联动）">
-+          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）">
-             <PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />
-           </PetField>
-           {Object.entries(ALERT_LABELS).map(([key, label]) => (
-diff --git a/deepseek-pet/src/client/sound.js b/deepseek-pet/src/client/sound.js
-index 1e29ffa..bd05b95 100644
---- a/deepseek-pet/src/client/sound.js
-+++ b/deepseek-pet/src/client/sound.js
-@@ -76,7 +76,7 @@ export function alertToggles() {
-   return { ...settings.alerts }
+@@ -41,6 +41,7 @@ const CARD_CSS = `
+ .dshp-field+.dshp-field{border-top:1px solid var(--dsw-alias-border-l2)}
+ .dshp-head{align-items:center;gap:8px;display:flex}
+ .dshp-label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}
++.dshp-control{display:flex;align-items:center}
+ .dshp-badges{align-items:center;gap:8px;display:inline-flex}
+ .dshp-badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}
+ .dshp-hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}
+@@ -51,11 +52,9 @@ const CARD_CSS = `
+ .dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
+ .dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
+ .dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
+-.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:96px}
++.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:100%}
+ .dshp-number:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
+-.dshp-rateGrid{grid-template-columns:1fr 1fr;gap:0 14px;display:grid}
+-.dshp-rateItem{flex-direction:column;gap:4px;min-width:0;display:flex}
+-.dshp-rateLabel{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;white-space:nowrap}
++.dshp-message{min-width:0;color:var(--dsw-alias-state-success-primary);flex:1;margin:0;font-size:12px;line-height:1.5}
+ 
+ `
+ 
+@@ -82,14 +81,18 @@ function PetSwitch({ checked, onChange, label }) {
+   )
  }
  
--/** 是否静音（双击桌宠切换）。 */
-+/** 是否静音（工具条按钮切换）。 */
- export function isMuted() { return settings.muted }
+-/** 一条字段：head（标签 + 右侧控件）+ 提示。开关/滑块统一走这个版式。 */
+-function PetField({ label, hint, children }) {
++/**
++ * 官方 ValueField 版式：head 行（label + badges）→ 控件独占一行 → hint。
++ * 与官方 BashCard/WebSearchCard 字段形态一致（fields.module.css）。
++ */
++function PetField({ label, hint, control, badge }) {
+   return (
+     <div className="dshp-field">
+       <div className="dshp-head">
+         <span className="dshp-label">{label}</span>
+-        {children}
++        {badge && <span className="dshp-badge">{badge}</span>}
+       </div>
++      {control && <div className="dshp-control">{control}</div>}
+       {hint && <p className="dshp-hint">{hint}</p>}
+     </div>
+   )
+@@ -183,47 +186,30 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+       </button>
+       {open && (
+         <div className="dshp-body">
+-          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声">
+-            <PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />
+-          </PetField>
+-          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）">
+-            <PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />
+-          </PetField>
++          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声"
++            control={<PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />} />
++          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）"
++            control={<PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />} />
+           {Object.entries(ALERT_LABELS).map(([key, label]) => (
+-            <PetField key={key} label={label}>
+-              <PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />
+-            </PetField>
++            <PetField key={key} label={label}
++              control={<PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />} />
++          ))}
++          <PetField label="总音量" badge={`${totalPercent}%`}
++            control={<input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
++              onChange={event => setTotal(event.target.value)} aria-label="总音量" />} />
++          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒"
++            control={<PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />} />
++          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
++            control={<input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
++              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />} />
++          <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
++          {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
++            <PetField key={key} label={label}
++              control={<input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
++                onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />} />
+           ))}
+-          <PetField label="总音量" hint={`${totalPercent}%`}>
+-            <span className="dshp-badge">{totalPercent}%</span>
+-          </PetField>
+-          <div className="dshp-field">
+-            <input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
+-              onChange={event => setTotal(event.target.value)} aria-label="总音量" />
+-          </div>
+-          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒">
+-            <PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />
+-          </PetField>
+-          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒">
+-            <input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
+-              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />
+-          </PetField>
+-          <PetField label="费率（¥ / 百万 token）" hint="按 deepseek-chat 官方价估算，可自行覆盖">
+-            <span className="dshp-badge">deepseek-chat</span>
+-          </PetField>
+-          <div className="dshp-field">
+-            <div className="dshp-rateGrid">
+-              {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
+-                <label key={key} className="dshp-rateItem">
+-                  <span className="dshp-rateLabel">{label}</span>
+-                  <input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
+-                    onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />
+-                </label>
+-              ))}
+-            </div>
+-          </div>
+-          {message && <p className="dshp-failed">{message}</p>}
+           <div className="dshp-footer">
++            {message && <p className="dshp-message">{message}</p>}
+             <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
+             <button type="button" className="dshp-save" disabled={!dirty} onClick={save}>保存</button>
+           </div>
+diff --git a/deepseek-pet/tests/unit/client-bundle.test.js b/deepseek-pet/tests/unit/client-bundle.test.js
+index 1b7da0d..b4a0943 100644
+--- a/deepseek-pet/tests/unit/client-bundle.test.js
++++ b/deepseek-pet/tests/unit/client-bundle.test.js
+@@ -148,6 +148,11 @@ test('built dsh.client bundle registers an embedded shell overlay', async () =>
+   assert.match(cardHtml, /缓存命中/)
+   assert.match(cardHtml, /缓存写入/)
+   assert.match(cardHtml, /输出/)
++  // 官方 ValueField 版式：每个字段 label 行 → control 独占行
++  const fieldCount = (cardHtml.match(/class="dshp-field"/g) ?? []).length
++  assert.ok(fieldCount >= 12, `字段数不足: ${fieldCount}`)
++  assert.match(cardHtml, /dshp-control/)
++  assert.doesNotMatch(cardHtml, /rateGrid/)
  
- /** 切换静音，返回新状态。 */
+   for (const cleanup of cleanups.reverse()) cleanup()
+   delete globalThis.window

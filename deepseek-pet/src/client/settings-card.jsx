@@ -41,6 +41,7 @@ const CARD_CSS = `
 .dshp-field+.dshp-field{border-top:1px solid var(--dsw-alias-border-l2)}
 .dshp-head{align-items:center;gap:8px;display:flex}
 .dshp-label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}
+.dshp-control{display:flex;align-items:center}
 .dshp-badges{align-items:center;gap:8px;display:inline-flex}
 .dshp-badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}
 .dshp-hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}
@@ -51,11 +52,9 @@ const CARD_CSS = `
 .dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
 .dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
 .dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
-.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:96px}
+.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:100%}
 .dshp-number:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
-.dshp-rateGrid{grid-template-columns:1fr 1fr;gap:0 14px;display:grid}
-.dshp-rateItem{flex-direction:column;gap:4px;min-width:0;display:flex}
-.dshp-rateLabel{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;white-space:nowrap}
+.dshp-message{min-width:0;color:var(--dsw-alias-state-success-primary);flex:1;margin:0;font-size:12px;line-height:1.5}
 
 `
 
@@ -82,14 +81,18 @@ function PetSwitch({ checked, onChange, label }) {
   )
 }
 
-/** 一条字段：head（标签 + 右侧控件）+ 提示。开关/滑块统一走这个版式。 */
-function PetField({ label, hint, children }) {
+/**
+ * 官方 ValueField 版式：head 行（label + badges）→ 控件独占一行 → hint。
+ * 与官方 BashCard/WebSearchCard 字段形态一致（fields.module.css）。
+ */
+function PetField({ label, hint, control, badge }) {
   return (
     <div className="dshp-field">
       <div className="dshp-head">
         <span className="dshp-label">{label}</span>
-        {children}
+        {badge && <span className="dshp-badge">{badge}</span>}
       </div>
+      {control && <div className="dshp-control">{control}</div>}
       {hint && <p className="dshp-hint">{hint}</p>}
     </div>
   )
@@ -183,47 +186,30 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
       </button>
       {open && (
         <div className="dshp-body">
-          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声">
-            <PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />
-          </PetField>
-          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）">
-            <PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />
-          </PetField>
+          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声"
+            control={<PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />} />
+          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）"
+            control={<PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />} />
           {Object.entries(ALERT_LABELS).map(([key, label]) => (
-            <PetField key={key} label={label}>
-              <PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />
-            </PetField>
+            <PetField key={key} label={label}
+              control={<PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />} />
           ))}
-          <PetField label="总音量" hint={`${totalPercent}%`}>
-            <span className="dshp-badge">{totalPercent}%</span>
-          </PetField>
-          <div className="dshp-field">
-            <input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
-              onChange={event => setTotal(event.target.value)} aria-label="总音量" />
-          </div>
-          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒">
-            <PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />
-          </PetField>
-          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒">
-            <input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
-              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />
-          </PetField>
-          <PetField label="费率（¥ / 百万 token）" hint="按 deepseek-chat 官方价估算，可自行覆盖">
-            <span className="dshp-badge">deepseek-chat</span>
-          </PetField>
-          <div className="dshp-field">
-            <div className="dshp-rateGrid">
-              {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
-                <label key={key} className="dshp-rateItem">
-                  <span className="dshp-rateLabel">{label}</span>
-                  <input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
-                    onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />
-                </label>
-              ))}
-            </div>
-          </div>
-          {message && <p className="dshp-failed">{message}</p>}
+          <PetField label="总音量" badge={`${totalPercent}%`}
+            control={<input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
+              onChange={event => setTotal(event.target.value)} aria-label="总音量" />} />
+          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒"
+            control={<PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />} />
+          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
+            control={<input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
+              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />} />
+          <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
+          {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
+            <PetField key={key} label={label}
+              control={<input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
+                onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />} />
+          ))}
           <div className="dshp-footer">
+            {message && <p className="dshp-message">{message}</p>}
             <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
             <button type="button" className="dshp-save" disabled={!dirty} onClick={save}>保存</button>
           </div>
