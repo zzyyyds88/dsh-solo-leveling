@@ -41,8 +41,8 @@
 
 从官方源码 fork 同名包（`@deepseek-ai/*`）定制，构建后装进
 `<DSH_HOME>/profiles/web/node_modules/@deepseek-ai/`，Loader 以 profile 目录为解析
-起点、同名包优先于全局安装 → **升级免疫**。参考实现：`定制插件化改造/`（五个 fork
-全部构建 + 测试环境验证通过）。
+起点、同名包优先于全局安装 → **升级免疫**。参考实现：`dsh-AccessGate/packages/` 与
+`dsh-Moresettings/packages/`（八个 fork 全部构建 + 测试环境验证通过）。
 
 ### C. 上游贡献（最稳）
 
@@ -127,7 +127,8 @@ DSH我独自升级/
 - **同包名覆盖（Same-name Override）**：fork 保留官方包名（如
   `@deepseek-ai/dsh-host-webserver`），构建后装进测试/正式 profile 的
   `node_modules/@deepseek-ai/`，profile 同名包优先于全局 → 定制生效且升级免疫。
-  原理与五个 fork 的实现见 `定制插件化改造/改造方案.md`。
+  原理与八个 fork 的实现见 `dsh-AccessGate/README.md`、`dsh-Moresettings/README.md`
+  及各自 `定制记录/`（原母工程已解散，fork 源码归位到两项目 `packages/`）。
 - **命名**：新插件一律 `dsh-` 前缀；客户端 UI 类插件按惯例
   `dsh-client-ui-*`、后端 `dsh-host-*`。
 - **构建工具链**：tsdown（`build/tsdown.client.ts` 预设 vendored 自
@@ -164,8 +165,8 @@ Config schema / 打包分发三方式 / Web UI 使用）+ 本工作区约定（G
 标准打包测试流程：
 
 ```bash
-cd 定制插件化改造 && ./build.sh && cd ..          # 1. 构建
-scripts/test-env-install.sh --from-project 定制插件化改造   # 2. 装进测试环境
+cd dsh-AccessGate && ./build.sh && cd ..          # 1. 构建（或 dsh-Moresettings）
+scripts/test-env-install.sh --from-project dsh-AccessGate   # 2. 装进测试环境
 scripts/test-env-stop.sh && scripts/test-env-start.sh      # 3. 重启测试实例
 # 浏览器 http://127.0.0.1:3090 验证（口令 test123456）
 # 4. 全部通过后，正式安装脚本才允许由用户在 SSH 终端手动执行

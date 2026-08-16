@@ -3,8 +3,8 @@
 # 包需已构建（目录含 lib/ 与 package.json，package.json.name 为 @deepseek-ai/* 或 dsh-*）。
 # 覆盖前自动备份现有包为 .bak（回退：把 .bak 拷回）。
 # 用法：
-#   scripts/test-env-install.sh 定制插件化改造/packages/dsh-host-webserver ...
-#   scripts/test-env-install.sh --from-project 定制插件化改造   # 自动装其 packages/* 下所有已构建包
+#   scripts/test-env-install.sh dsh-AccessGate/packages/dsh-host-webserver ...
+#   scripts/test-env-install.sh --from-project dsh-AccessGate   # 自动装其 packages/* 下所有已构建包
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

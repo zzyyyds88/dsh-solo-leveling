@@ -66,10 +66,11 @@
 
 ```bash
 # A. profile 同名覆盖（本仓库的 fork 插件：定制 @deepseek-ai 同名包，升级免疫）
-git clone <本仓库> && cd 定制插件化改造 && ./build.sh
+git clone <本仓库> && cd dsh-AccessGate && ./build.sh        # 门闸三件套 fork
+#   或 cd dsh-Moresettings && ./build.sh                      # 默认值五个 fork
 bash install-to-profile.sh        # 会停/重启 dsh web，需在 SSH 终端手动执行
-#   （测试先行：scripts/test-env-install.sh --from-project 定制插件化改造
-#     + scripts/test-env-start.sh，端口 3090 验证）
+#   （测试先行：scripts/test-env-install.sh --from-project dsh-AccessGate
+#     或显式指定 fork 包路径 + scripts/test-env-start.sh，端口 3090 验证）
 
 # B. npm 包安装（发布到 npm 的独立插件）
 dsh plugin add <包名>             # 例如 dsh plugin add @zzyyyds88/dsh-xxx
@@ -99,7 +100,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 
 | 插件 | 适配 DSH 版本 | 构建 | 测试环境验证 | 正式安装 | 备注 |
 |---|---|---|---|---|---|
-| 八个 fork 插件（webserver / apiproxy / connection / host-directory-picker / llm / llm-deepseek / pi-ai / 退役的 client-directory-picker） | 0.1.0-rc.6 | ✅ 全部构建通过 | ✅ 全链路 + 强度菜单 + 默认目录 + 全局重试兜底 | ⏳ 待用户执行（`dsh-defaults/install-to-profile.sh`） | 同包名覆盖，升级天然免疫 |
+| 八个 fork 插件（webserver / apiproxy / connection / host-directory-picker / llm / llm-deepseek / pi-ai / 退役的 client-directory-picker） | 0.1.0-rc.6 | ✅ 全部构建通过（源码归位：门闸三件套在 `dsh-AccessGate/packages/`，其余在 `dsh-Moresettings/packages/`） | ✅ 全链路 + 强度菜单 + 默认目录 + 全局重试兜底 | ⏳ 待用户执行（`dsh-Moresettings/install-to-profile.sh`） | 同包名覆盖，升级天然免疫；apiproxy 为两项目共享（AccessGate 维护源码） |
 | `dsh-defaults` / `dsh-client-ui-defaults`（统一默认值插件） | 0.1.0-rc.6 | 源码即产物 | ✅ verify-defaults.mjs 9 项全过 | ⏳ 待用户执行 | 插件配置卡片：默认工作目录 + 对所有供应商生效的默认重试次数 |
 | `dsh-web-auth` / `dsh-client-ui-web-auth` | 0.1.0-rc.6 | 源码即产物 | ✅ | ✅（正式 profile 已挂载） | 升级免疫；**已被「访问门禁」插件化替代（`dsh-AccessGate/`），正式切换待用户执行 `switch-to-https.sh`** |
 | `dsh-host-access-gate` / `dsh-client-ui-access-gate`（访问门禁） | 0.1.0-rc.6 | 源码即产物（依赖 fork 需重建 apiproxy） | ✅ 17 项集成 + 真实实例链路（test-env 3090） | ⏳ 待用户执行（`dsh-AccessGate/switch-to-https.sh`） | 升级免疫；apiproxy fork 含 `access-gate` 命名空间暴露 |
@@ -123,7 +124,8 @@ dsh plugin add ./<包名>-<版本>.tgz
 1. 更新根 README「当前安装版本」；查看上游 [changelog](https://github.com/deepseek-ai/deepseek-harness) 的破坏性变更。
 2. 各补丁项目执行 `升级后重打补丁指南.md`（幂等重打脚本，如 `patch-*.py` / `install-auth-plugin.mjs` / `switch-to-https.sh`）。
 3. 重建测试环境基线：`scripts/test-env-init.sh --force`（从新正式 profile 克隆），
-   再 `scripts/test-env-install.sh --from-project 定制插件化改造` 重装定制插件。
+   再 `scripts/test-env-install.sh --from-project dsh-AccessGate`（或按需指定
+   `dsh-Moresettings` / 显式 fork 路径）重装定制插件。
 4. 启动测试实例（`scripts/test-env-start.sh`，端口 3090）按 §2 验证要点逐条实测。
 5. 全部通过后，由用户在 SSH 终端执行正式安装脚本；**回填本表 §3 的适配版本与日期**。
 

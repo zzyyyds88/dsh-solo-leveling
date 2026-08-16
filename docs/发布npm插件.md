@@ -7,7 +7,7 @@
 
 | 类型 | 包名 | 能否发布 npm | 分发方式 |
 |---|---|---|---|
-| **同名覆盖 fork**（如 `@deepseek-ai/dsh-host-webserver`） | `@deepseek-ai/*`（scope 归 DeepSeek 所有，受保护，你发不上去；而且 `"private": true`） | ❌ | 本仓库 git 分发 / tarball / profile 挂载脚本（见 `定制插件化改造/`） |
+| **同名覆盖 fork**（如 `@deepseek-ai/dsh-host-webserver`） | `@deepseek-ai/*`（scope 归 DeepSeek 所有，受保护，你发不上去；而且 `"private": true`） | ❌ | 本仓库 git 分发 / tarball / profile 挂载脚本（见 `dsh-AccessGate/` 与 `dsh-Moresettings/` 的 packages/） |
 | **全新独立插件**（自己研发、不覆盖官方包） | `@<你的npm用户名>/dsh-*` 或独立名 | ✅ | `npm publish` → `dsh plugin add @<用户名>/dsh-xxx` |
 
 参考先例：`dsh-web-ui`（zhu1090093659）用个人 scope `@linxin666/dsh-*` 发布全家桶；
@@ -41,7 +41,7 @@ npm login                      # 需要 npmjs.com 账号（当前本机尚未登
 - **发布前必须先构建出 `lib/`**（`dsh plugin add` 装的是 npm 包里的预构建产物，
   不会替你跑 build；git 安装才需要 prepare 脚本——见 §4）。
 - 客户端插件（`dsh-client-ui-*`）bundle 构建用 tsdown，参照
-  `定制插件化改造/build/tsdown.client.ts` 与 `dsh-web-ui-main/shared/tsdown.client.ts`。
+  `dsh-web-ui-main/shared/tsdown.client.ts`。
 
 ## 4. 发布与安装
 

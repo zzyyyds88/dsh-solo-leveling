@@ -5,7 +5,7 @@
 # 用法：
 #   scripts/test-env-init.sh               # 已存在则跳过；不存在则从正式 profile 克隆基线
 #   scripts/test-env-init.sh --force       # 删除并重建（必须先停掉本脚本启动的实例）
-#   scripts/test-env-init.sh --from <种子> # 从指定已验证目录克隆（如 定制插件化改造/test-env）
+#   scripts/test-env-init.sh --from <种子> # 从指定已验证目录克隆（如 test-env-2）
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
