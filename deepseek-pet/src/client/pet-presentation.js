@@ -33,7 +33,8 @@ export function presentationForState(visual, phase = 0, signals = {}) {
   if (visual.kind === 'confused') return result('desk-confused')
   if (visual.kind === 'idle') {
     if ((signals.idleMs ?? 0) >= 2 * 60_000) return result(['relaxed', 'skeptical', 'thinking'][phase % 3])
-    return result(['idle', 'cheerful', 'relaxed', 'proud'][phase % 4])
+    // 待机变体轮换：idle 占多数（加权），偶尔活泼一下——待机大多数时候应是 idle
+    return result(['idle', 'idle', 'idle', 'cheerful', 'idle', 'relaxed', 'proud'][phase % 7])
   }
   return result('idle')
 }

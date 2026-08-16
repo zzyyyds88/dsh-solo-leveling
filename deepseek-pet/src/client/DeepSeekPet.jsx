@@ -47,11 +47,20 @@ const COMFORT_LINES = Object.freeze([
   '别担心，我收拾一下残局',
   '这个工具不听话，我换个方式',
 ])
-/** 状态 → 语音台词 key 候选（voice.generated.js）。 */
-const VOICE_FOR_STATE = Object.freeze({
+/**
+ * 语音台词 key 候选（voice.generated.js）。
+ * 分两套，避免同一事件被播两次：
+ *  - VOICE_FOR_EVENT：由事件驱动的一次性函数播（celebrateCompletion / comfortError）
+ *  - VOICE_FOR_STATE：由状态 effect 播（进入 approval/waiting/busy/thinking 时，30s 冷却）
+ * success/error/tool-error 只属于 EVENT，不属于 STATE——否则完成任务/出错时
+ * 事件函数和状态 effect 各播一次，语音叠加。
+ */
+const VOICE_FOR_EVENT = Object.freeze({
   success: ['done1', 'done2', 'done3', 'done4'],
   error: ['error1', 'error2', 'error3'],
   'tool-error': ['error1', 'error2', 'error3'],
+})
+const VOICE_FOR_STATE = Object.freeze({
   approval: ['approval1', 'approval2'],
   waiting: ['approval1', 'approval2'],
   busy: ['busy1', 'busy2'],
@@ -415,7 +424,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const celebrateCompletion = useCallback(() => {
     unlockAudio()
     playCelebrate()
-    speakVoice(pickVoiceKey(VOICE_FOR_STATE.success))
+    speakVoice(pickVoiceKey(VOICE_FOR_EVENT.success))
     setCollapsed(false)
     setCelebrating(true)
     setConfetti(Array.from({ length: CONFETTI_COUNT }, (_, index) => ({
@@ -439,7 +448,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const comfortError = useCallback(() => {
     unlockAudio()
     playSad()
-    speakVoice(pickVoiceKey(VOICE_FOR_STATE.error))
+    speakVoice(pickVoiceKey(VOICE_FOR_EVENT.error))
     speak(COMFORT_LINES[Math.floor(Math.random() * COMFORT_LINES.length)], '')
   }, [speak])
 
