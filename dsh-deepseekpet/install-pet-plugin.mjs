@@ -3,13 +3,11 @@
  * install-pet-plugin.mjs — 安装/卸载 deepseek-pet 桌宠插件（幂等，可重复执行）
  *
  * 做两件事：
- *   1) 把 deepseek-pet 包（package.json + lib/ + cordis.patch.yml）复制到
- *      web profile 的 node_modules/deepseek-pet（裸包名，Loader 以 profile
- *      目录为加载基准解析；本包不是 @deepseek-ai/* 前缀，不适用
- *      scripts/test-env-install.sh）。
- *   2) 把 web profile 的 cordis.patch.yml 升级为追加：
- *        - insert: deepseek-pet → 挂载桌宠插件
- *      （等价于上游包自带 cordis.patch.yml 的内容，幂等去重）。
+ *   1) 标准安装 deepseek-pet（上游已是标准插件包：dsh.bundle.patch 声明包内
+ *      cordis.patch.yml）。已标准安装（bundles 含包名）则跳过；否则
+ *      npm pack → dsh plugin --profile web add（不再手工拷目录）。
+ *   2) 收敛 web profile 的 cordis.patch.yml：移除 deepseek-pet 残留行
+ *      （标准安装下挂载在 bundle 层，用户层残留会 duplicate 崩溃）。
  *
  * YAML 合并用与 dsh 完全相同的 entryListSchema（含 `!!js` 表达式标签），
  * 与「访问门禁」项目的 install-access-gate-plugin.mjs 同一套实现。
@@ -25,8 +23,10 @@
  * 退出码：0 = 已是最新/处理完成；2 = 失败（已打印原因）。
  */
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 
@@ -101,21 +101,39 @@ if (unpatch) {
   process.exit(0);
 }
 
-// ---------- 1) 复制插件包 ----------
-for (const rel of PLUGIN_FILES) {
-  const src = join(PLUGIN_SRC, rel);
-  if (!existsSync(src)) fail(`插件源码缺失：${src}`);
-}
-const pluginDest = join(profileDir, "node_modules", "deepseek-pet");
-if (!dryRun) {
-  mkdirSync(join(pluginDest, "lib"), { recursive: true });
+// ---------- 1) 标准安装插件包（dsh plugin add：装 node_modules + 进 profile bundles） ----------
+const hasBundleEntry = (name) => {
+  try {
+    const manifest = JSON.parse(readFileSync(join(profileDir, "package.json"), "utf8"));
+    return (manifest.dsh?.profile?.bundles ?? []).includes(name);
+  } catch { return false; }
+};
+if (hasBundleEntry("deepseek-pet")) {
+  console.log("[1/2] deepseek-pet 已标准安装（bundles 含 deepseek-pet，跳过）");
+} else if (dryRun) {
+  console.log("  （--dry-run，将 npm pack → dsh plugin --profile web add）");
+} else {
   for (const rel of PLUGIN_FILES) {
-    cpSync(join(PLUGIN_SRC, rel), join(pluginDest, rel));
+    const src = join(PLUGIN_SRC, rel);
+    if (!existsSync(src)) fail(`插件源码缺失：${src}`);
   }
+  const packTmp = mkdtempSync(join(tmpdir(), "pet-pack-"));
+  const packed = spawnSync("npm", ["pack", "--pack-destination", packTmp, "--silent"], { cwd: PLUGIN_SRC, encoding: "utf8" });
+  if (packed.status !== 0) fail(`npm pack 失败：${packed.stderr ?? packed.stdout}`);
+  const tgzName = packed.stdout.trim().split("\n").pop().trim();
+  if (!tgzName.endsWith(".tgz")) fail(`npm pack 输出异常：${tgzName}`);
+  const profileName = basename(profileDir);
+  const add = spawnSync("dsh", ["plugin", "--profile", profileName, "add", join(packTmp, tgzName)], {
+    cwd: profileDir,
+    env: { ...process.env, DSH_HOME: dshHome },
+    encoding: "utf8",
+  });
+  if (add.status !== 0) fail(`dsh plugin add 失败（exit ${add.status}）：${add.stderr ?? add.stdout}`);
+  console.log("[1/2] 标准安装 deepseek-pet → bundles 已加入 ✓");
 }
-console.log(`[1/2] 插件包 → ${pluginDest} ${dryRun ? "（--dry-run，未写入）" : "✓"}`);
 
-// ---------- 2) 合并 cordis.patch.yml ----------
+// ---------- 2) 收敛用户层 patch：移除 deepseek-pet 残留行 ----------
+//    （标准插件包安装下挂载由 bundle 层 dsh.bundle.patch 承担；残留行会 duplicate 崩溃）
 const current = yaml.load(readFileSync(patchFile, "utf8"), { schema: entryListSchema });
 if (!Array.isArray(current)) fail(`patch 文件必须是顶层 YAML 数组：${patchFile}`);
 
@@ -126,35 +144,27 @@ if (!existsSync(backup) && !dryRun) {
   console.log(`[2/2] 备份原始 patch → ${backup}`);
 }
 
-const PET_INSERT = {
-  insert: [{ id: "deepseek-pet", name: "deepseek-pet" }],
-};
-
-/** 已存在 deepseek-pet 挂载行？ */
-const hasPetRow = () =>
-  current.some((e) => typeof e === "object" && e !== null && Array.isArray(e.insert) &&
-    e.insert.some((i) => i && i.id === "deepseek-pet")) ||
-  current.some((e) => typeof e === "object" && e !== null && e.id === "deepseek-pet");
-
 let changed = false;
-if (hasPetRow()) {
-  console.log("[2/2] deepseek-pet 挂载已存在（跳过）");
-} else {
-  const insertEntry = current.find((e) => typeof e === "object" && e !== null && Array.isArray(e.insert));
-  if (insertEntry) {
-    insertEntry.insert.push(PET_INSERT.insert[0]);
-  } else {
-    current.push(PET_INSERT);
+for (const entry of current) {
+  if (typeof entry !== "object" || entry === null) continue;
+  if (Array.isArray(entry.insert)) {
+    const before = entry.insert.length;
+    entry.insert = entry.insert.filter((i) => !(i && i.id === "deepseek-pet"));
+    if (entry.insert.length !== before) { changed = true; console.log("[2/2] 已移除用户层残留行（deepseek-pet）"); }
   }
-  changed = true;
-  console.log("[2/2] 追加 deepseek-pet 插件行");
 }
+const filtered = current.filter((e) => !(typeof e === "object" && e !== null && typeof e.id === "string" && e.id === "deepseek-pet"));
+if (filtered.length !== current.length) { changed = true; console.log("[2/2] 已移除顶层残留行（deepseek-pet）"); }
+current.length = 0;
+current.push(...filtered);
 
 if (changed && !dryRun) {
   writeFileSync(patchFile, yaml.dump(current, { schema: entryListSchema, lineWidth: 120 }));
   console.log("  已写入 " + patchFile);
 } else if (changed && dryRun) {
-  console.log("  （dry-run）将写入 deepseek-pet 插件行");
+  console.log("  （dry-run）将收敛 deepseek-pet 残留行");
+} else {
+  console.log("[2/2] 用户层 patch 无 deepseek-pet 残留行（标准安装模式）");
 }
 
 console.log(dryRun ? "== dry-run 预览结束 ==" : "== 完成。重启测试实例生效：scripts/test-env-stop.sh && scripts/test-env-start.sh ==");

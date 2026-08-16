@@ -8,16 +8,14 @@
  *       命名空间暴露时设置卡片不可用，故正式部署必须装 fork）；
  *   1b) 前置校验门闸基础（profile fork 优先，全局旧补丁兜底）：
  *       缺少 registerGate / 命名空间暴露 / settings.* 登录放行时拒绝安装。
- *   2) 把项目内两个插件包复制到 web profile 的 node_modules：
- *        dsh-host-access-gate / dsh-client-ui-access-gate
- *      （Loader 以裸包名解析，profile 目录是加载基准）。
- *   3) 把 web profile 的 cordis.patch.yml 升级为：
+ *   2) 标准安装两个插件包（dsh-host-access-gate / dsh-client-ui-access-gate）：
+ *       已标准安装（bundles 含包名）则跳过；否则 npm pack 项目包 → dsh plugin --profile web add
+ *      （挂载清单由包内 cordis.patch.yml 承担，不再手工拷目录/写用户层 insert 行）。
+ *   3) 把 web profile 的 cordis.patch.yml 收敛为仅保留部署配置覆盖：
  *        - id: webserver   → 监听地址 127.0.0.1（回环，HTTPS 反代在前；端口沿用 webStartup ?? 3080）；
  *        - id: connection  → trustedHosts 固化（免 --trusted-host）；
- *        - insert: access-gate → 挂载鉴权插件（口令取 DSH_ACCESS_GATE_PASSWORD，
- *          兼容旧名 DSH_WEB_PASSWORD）；
- *        - insert: ui-access-gate → 挂载前端卡片插件；
- *      同时把旧版行（web-auth / ui-web-auth）从 patch 中移除。
+ *      同时移除旧版行（web-auth / ui-web-auth）与残留的 access-gate / ui-access-gate
+ *      insert 行（标准安装下挂载在 bundle 层，用户层残留会 duplicate 崩溃）。
  *   4) 存量迁移：
  *        - settings.yaml 里旧命名空间 web-auth: 重命名为 access-gate:（仅当
  *          access-gate: 尚不存在；先备份 settings.yaml.bak）；
@@ -38,8 +36,10 @@
  * 退出码：0 = 已是最新/处理完成；2 = 失败（已打印原因）。
  */
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 
@@ -202,29 +202,48 @@ if (!apiproxyHit || !connectionHit) {
 }
 console.log(`[1b/5] 门闸基础校验就位（webserver: ${gateHit}）`);
 
-// 2) 复制插件包到 profile node_modules（host 插件 + 客户端卡片插件）
-const pluginDest = join(profileDir, "node_modules", "dsh-host-access-gate");
-const clientPluginDest = join(profileDir, "node_modules", "dsh-client-ui-access-gate");
-for (const rel of PLUGIN_FILES) {
-  const src = join(PLUGIN_SRC, rel);
-  if (!existsSync(src)) fail(`插件源码缺失：${src}`);
-}
-for (const rel of CLIENT_PLUGIN_FILES) {
-  const src = join(CLIENT_PLUGIN_SRC, rel);
-  if (!existsSync(src)) fail(`客户端插件源码缺失：${src}`);
-}
-if (!dryRun) {
-  mkdirSync(join(pluginDest, "lib"), { recursive: true });
-  mkdirSync(join(pluginDest, "assets"), { recursive: true });
+// 2) 标准安装插件包（dsh plugin add：装 node_modules + 进 profile bundles，不再手工拷目录/写 insert 行）
+//    检测 profile 是否已装（bundles 含包名）；未装则 npm pack 后 dsh plugin --profile web add。
+const hasBundleEntry = (name) => {
+  try {
+    const manifest = JSON.parse(readFileSync(join(profileDir, "package.json"), "utf8"));
+    return (manifest.dsh?.profile?.bundles ?? []).includes(name);
+  } catch { return false; }
+};
+const stdInstalled = hasBundleEntry("dsh-host-access-gate") && hasBundleEntry("dsh-client-ui-access-gate");
+if (stdInstalled) {
+  console.log("[2/5] 插件已标准安装（bundles 含 dsh-host-access-gate / dsh-client-ui-access-gate，跳过）");
+} else if (dryRun) {
+  console.log("  （--dry-run，将 npm pack 两个插件包 → dsh plugin --profile web add）");
+} else {
   for (const rel of PLUGIN_FILES) {
-    cpSync(join(PLUGIN_SRC, rel), join(pluginDest, rel), { recursive: true });
+    const src = join(PLUGIN_SRC, rel);
+    if (!existsSync(src)) fail(`插件源码缺失：${src}`);
   }
-  mkdirSync(join(clientPluginDest, "lib"), { recursive: true });
   for (const rel of CLIENT_PLUGIN_FILES) {
-    cpSync(join(CLIENT_PLUGIN_SRC, rel), join(clientPluginDest, rel));
+    const src = join(CLIENT_PLUGIN_SRC, rel);
+    if (!existsSync(src)) fail(`客户端插件源码缺失：${src}`);
   }
+  const packTmp = mkdtempSync(join(tmpdir(), "access-gate-pack-"));
+  const tgzs = [];
+  for (const src of [PLUGIN_SRC, CLIENT_PLUGIN_SRC]) {
+    const packed = spawnSync("npm", ["pack", "--pack-destination", packTmp, "--silent"], { cwd: src, encoding: "utf8" });
+    if (packed.status !== 0) fail(`npm pack 失败（${src}）：${packed.stderr ?? packed.stdout}`);
+    const name = packed.stdout.trim().split("\n").pop().trim();
+    if (!name.endsWith(".tgz")) fail(`npm pack 输出异常：${name}`);
+    tgzs.push(join(packTmp, name));
+  }
+  const profileName = basename(profileDir);
+  const add = spawnSync("dsh", ["plugin", "--profile", profileName, "add", ...tgzs], {
+    cwd: profileDir,
+    env: { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    encoding: "utf8",
+  });
+  if (add.status !== 0) {
+    fail(`dsh plugin add 失败（exit ${add.status}）：${add.stderr ?? add.stdout}`);
+  }
+  console.log("[2/5] 标准安装插件包 → bundles 已加入 dsh-host-access-gate / dsh-client-ui-access-gate ✓");
 }
-console.log(`[2/5] 插件包 → ${pluginDest} / ${clientPluginDest} ${dryRun ? "（--dry-run，未写入）" : "✓"}`);
 
 // 3) 合并 cordis.patch.yml（含旧行 web-auth/ui-web-auth 迁移）
 const patchFile = join(profileDir, "cordis.patch.yml");
@@ -261,24 +280,6 @@ const connectionOverride = {
       __jsExpr: `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : [process.env.DSH_WEB_TRUSTED_HOST ?? '${defaultLanHost}']`,
     },
   },
-};
-
-const accessGateInsert = {
-  insert: [
-    {
-      id: "access-gate",
-      name: "dsh-host-access-gate",
-      inject: ["webServer"],
-      config: {
-        password: { __jsExpr: "process.env.DSH_ACCESS_GATE_PASSWORD ?? process.env.DSH_WEB_PASSWORD" },
-        mode: "on",
-      },
-    },
-    {
-      id: "ui-access-gate",
-      name: "dsh-client-ui-access-gate",
-    },
-  ],
 };
 
 /** 移除旧版插件行（id=web-auth / ui-web-auth），返回是否发生过移除。 */
@@ -346,30 +347,31 @@ if (connEntry) {
   console.log("[3/5] 固化 connection trustedHosts（免 --trusted-host；DSH_WEB_TRUSTED_HOST 可覆盖默认 IP）");
 }
 
-// 3b) access-gate 插件行 + 设置卡片客户端插件行（合并进同一条 insert，杜绝重复）
-const insertEntry = current.find((e) => typeof e === "object" && e !== null && Array.isArray(e.insert));
-const hasRow = (id) =>
-  insertEntry?.insert.some((i) => i?.id === id) ||
-  current.some((e) => typeof e === "object" && e !== null && e.id === id);
-if (insertEntry) {
-  if (!hasRow("access-gate")) {
-    insertEntry.insert.push(accessGateInsert.insert[0]);
-    changed = true;
-    console.log("[3/5] 追加 access-gate 插件行（口令取 DSH_ACCESS_GATE_PASSWORD，兼容 DSH_WEB_PASSWORD）");
-  } else {
-    console.log("[3/5] access-gate 挂载已存在（跳过）");
+// 3b) 收敛用户层 patch：移除 access-gate / ui-access-gate 插件行
+//     （标准插件包安装下挂载由 bundle 层 dsh.bundle.patch 承担；
+//       用户层残留行会与 bundle 层重复挂载导致启动崩溃 duplicate entry id）
+const dropGateRows = (entries) => {
+  const ids = new Set(["access-gate", "ui-access-gate"]);
+  let dropped = 0;
+  for (const entry of entries) {
+    if (typeof entry !== "object" || entry === null) continue;
+    if (Array.isArray(entry.insert)) {
+      const before = entry.insert.length;
+      entry.insert = entry.insert.filter((i) => !(i && ids.has(i.id)));
+      dropped += before - entry.insert.length;
+    }
+    if (typeof entry.id === "string" && ids.has(entry.id)) dropped++;
   }
-  if (!hasRow("ui-access-gate")) {
-    insertEntry.insert.push(accessGateInsert.insert[1]);
-    changed = true;
-    console.log("[3/5] 追加 ui-access-gate 设置卡片行");
-  } else {
-    console.log("[3/5] ui-access-gate 设置卡片行已存在（跳过）");
-  }
-} else {
-  current.push(accessGateInsert);
+  return { dropped, kept: entries.filter((e) => !(typeof e === "object" && e !== null && typeof e.id === "string" && ids.has(e.id))) };
+};
+const gateDrop = dropGateRows(current);
+if (gateDrop.dropped > 0) {
+  current.length = 0;
+  current.push(...gateDrop.kept);
   changed = true;
-  console.log("[3/5] 新增 access-gate + ui-access-gate 插件行");
+  console.log(`[3/5] 已移除用户层 patch 中的 access-gate/ui-access-gate 插件行（${gateDrop.dropped} 处；标准安装由 bundle 层挂载）`);
+} else {
+  console.log("[3/5] 用户层 patch 无 access-gate/ui-access-gate 残留行（标准安装模式）");
 }
 
 if (changed && !dryRun) {

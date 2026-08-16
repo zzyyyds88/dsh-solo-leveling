@@ -3,14 +3,12 @@
  * install-defaults-plugin.mjs — 安装/卸载 dsh-defaults 统一默认值插件（幂等，可重复执行）
  *
  * 做两件事：
- *   1) 把 packages/dsh-defaults（宿主：注册设置命名空间）与
- *      packages/dsh-client-ui-defaults（前端：设置标签页）复制到
- *      web profile 的 node_modules（$DSH_HOME/profiles/web/node_modules/），
- *      使 Loader 以裸包名解析到它们；
- *   2) 把 web profile 的 cordis.patch.yml 合并进两条 insert 行：
- *        - id: dsh-defaults（宿主插件）
- *        - id: dsh-client-ui-defaults（设置标签页插件）
- *      （YAML 合并用与 dsh 完全相同的 entryListSchema，`!!js` 表达式无损读写。）
+ *   1) 标准安装 packages/dsh-defaults（宿主：注册设置命名空间）与
+ *      packages/dsh-client-ui-defaults（前端：设置标签页）：
+ *      已标准安装（bundles 含包名）则跳过；否则 npm pack → dsh plugin --profile web add
+ *      （挂载清单由包内 cordis.patch.yml 承担，不再手工拷目录/写用户层 insert 行）；
+ *   2) 收敛 web profile 的 cordis.patch.yml：移除 dsh-defaults / ui-dsh-defaults
+ *      残留行（标准安装下挂载在 bundle 层，用户层残留会 duplicate 崩溃）。
  *
  * 前置：fork 包（dsh-host-directory-picker-browse / dsh-llm-pi-ai /
  * dsh-host-apiproxy，均在本项目 packages/ 内的本地副本）已构建并覆盖进 profile
@@ -25,8 +23,10 @@
  * 退出码：0 = 已是最新/处理完成；2 = 失败（已打印原因）。
  */
 import { createRequire } from "node:module";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 
@@ -89,7 +89,6 @@ console.log(`web profile：${profileDir}`);
 
 const hostPluginDest = join(profileDir, "node_modules", "dsh-defaults");
 const clientPluginDest = join(profileDir, "node_modules", "dsh-client-ui-defaults");
-const patchFile = join(profileDir, "cordis.patch.yml");
 
 if (unpatch) {
   if (existsSync(patchFile + ".bak")) {
@@ -109,22 +108,47 @@ if (unpatch) {
   process.exit(0);
 }
 
-// 1) 复制插件包到 profile node_modules
-for (const rel of PLUGIN_FILES) {
-  if (!existsSync(join(HOST_PLUGIN_SRC, rel))) fail(`插件源码缺失：${join(HOST_PLUGIN_SRC, rel)}`);
+// 1) 标准安装插件包（dsh plugin add：装 node_modules + 进 profile bundles，不再手工拷目录/写 insert 行）
+const hasBundleEntry = (name) => {
+  try {
+    const manifest = JSON.parse(readFileSync(join(profileDir, "package.json"), "utf8"));
+    return (manifest.dsh?.profile?.bundles ?? []).includes(name);
+  } catch { return false; }
+};
+const stdInstalled = hasBundleEntry("dsh-defaults") && hasBundleEntry("dsh-client-ui-defaults");
+if (stdInstalled) {
+  console.log("[1/2] 插件已标准安装（bundles 含 dsh-defaults / dsh-client-ui-defaults，跳过）");
+} else if (dryRun) {
+  console.log("  （--dry-run，将 npm pack 两个插件包 → dsh plugin --profile web add）");
+} else {
+  for (const rel of PLUGIN_FILES) {
+    if (!existsSync(join(HOST_PLUGIN_SRC, rel))) fail(`插件源码缺失：${join(HOST_PLUGIN_SRC, rel)}`);
+  }
+  for (const rel of CLIENT_PLUGIN_FILES) {
+    if (!existsSync(join(CLIENT_PLUGIN_SRC, rel))) fail(`客户端插件源码缺失：${join(CLIENT_PLUGIN_SRC, rel)}`);
+  }
+  const packTmp = mkdtempSync(join(tmpdir(), "defaults-pack-"));
+  const tgzs = [];
+  for (const src of [HOST_PLUGIN_SRC, CLIENT_PLUGIN_SRC]) {
+    const packed = spawnSync("npm", ["pack", "--pack-destination", packTmp, "--silent"], { cwd: src, encoding: "utf8" });
+    if (packed.status !== 0) fail(`npm pack 失败（${src}）：${packed.stderr ?? packed.stdout}`);
+    const name = packed.stdout.trim().split("\n").pop().trim();
+    if (!name.endsWith(".tgz")) fail(`npm pack 输出异常：${name}`);
+    tgzs.push(join(packTmp, name));
+  }
+  const profileName = basename(profileDir);
+  const add = spawnSync("dsh", ["plugin", "--profile", profileName, "add", ...tgzs], {
+    cwd: profileDir,
+    env: { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    encoding: "utf8",
+  });
+  if (add.status !== 0) fail(`dsh plugin add 失败（exit ${add.status}）：${add.stderr ?? add.stdout}`);
+  console.log("[1/2] 标准安装插件包 → bundles 已加入 dsh-defaults / dsh-client-ui-defaults ✓");
 }
-for (const rel of CLIENT_PLUGIN_FILES) {
-  if (!existsSync(join(CLIENT_PLUGIN_SRC, rel))) fail(`客户端插件源码缺失：${join(CLIENT_PLUGIN_SRC, rel)}`);
-}
-if (!dryRun) {
-  mkdirSync(join(hostPluginDest, "lib"), { recursive: true });
-  for (const rel of PLUGIN_FILES) cpSync(join(HOST_PLUGIN_SRC, rel), join(hostPluginDest, rel));
-  mkdirSync(join(clientPluginDest, "lib"), { recursive: true });
-  for (const rel of CLIENT_PLUGIN_FILES) cpSync(join(CLIENT_PLUGIN_SRC, rel), join(clientPluginDest, rel));
-}
-console.log(`[1/2] 插件包 → ${hostPluginDest} / ${clientPluginDest} ${dryRun ? "（--dry-run，未写入）" : "✓"}`);
 
-// 2) 合并 cordis.patch.yml
+// 2) 收敛用户层 patch：移除 dsh-defaults / ui-dsh-defaults 残留行
+//    （标准插件包安装下挂载由 bundle 层 dsh.bundle.patch 承担；残留行会 duplicate 崩溃）
+const patchFile = join(profileDir, "cordis.patch.yml");
 if (!existsSync(patchFile)) fail(`找不到 profile patch 文件：${patchFile}`);
 if (!dryRun && !existsSync(patchFile + ".bak")) {
   cpSync(patchFile, patchFile + ".bak");
@@ -133,32 +157,20 @@ if (!dryRun && !existsSync(patchFile + ".bak")) {
 const current = yaml.load(readFileSync(patchFile, "utf8"), { schema: entryListSchema });
 if (!Array.isArray(current)) fail(`patch 文件必须是顶层 YAML 数组：${patchFile}`);
 
-const defaultsRows = [
-  { id: "dsh-defaults", name: "dsh-defaults" },
-  { id: "ui-dsh-defaults", name: "dsh-client-ui-defaults" },
-];
-
+const REMOVE_IDS = new Set(["dsh-defaults", "ui-dsh-defaults"]);
 let changed = false;
-// 收集所有 insert 块里的行 + 顶层 id 行（幂等判定要覆盖全部 insert，否则会重复追加）。
-const insertBlocks = current.filter((e) => typeof e === "object" && e !== null && Array.isArray(e.insert));
-const insertEntry = insertBlocks[0];
-const hasRow = (id) =>
-  insertBlocks.some((block) => block.insert.some((i) => i?.id === id)) ||
-  current.some((e) => typeof e === "object" && e !== null && e.id === id);
-
-for (const row of defaultsRows) {
-  if (hasRow(row.id)) {
-    console.log(`[2/2] ${row.id} 挂载已存在（跳过）`);
-  } else if (insertEntry) {
-    insertEntry.insert.push(row);
-    changed = true;
-    console.log(`[2/2] 追加 ${row.id} 插件行`);
-  } else {
-    current.push({ insert: [row] });
-    changed = true;
-    console.log(`[2/2] 新增 insert：${row.id}`);
+for (const entry of current) {
+  if (typeof entry !== "object" || entry === null) continue;
+  if (Array.isArray(entry.insert)) {
+    const before = entry.insert.length;
+    entry.insert = entry.insert.filter((i) => !(i && REMOVE_IDS.has(i.id)));
+    if (entry.insert.length !== before) { changed = true; console.log(`[2/2] 已移除残留行（${entry.insert.length < before ? "dsh-defaults / ui-dsh-defaults" : ""}）`); }
   }
 }
+const filtered = current.filter((e) => !(typeof e === "object" && e !== null && typeof e.id === "string" && REMOVE_IDS.has(e.id)));
+if (filtered.length !== current.length) { changed = true; console.log("[2/2] 已移除顶层残留行（dsh-defaults / ui-dsh-defaults）"); }
+current.length = 0;
+current.push(...filtered);
 
 if (!changed) {
   console.log("\n无变更，已是最新状态。");
