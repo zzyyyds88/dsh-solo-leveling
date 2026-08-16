@@ -9,7 +9,16 @@
 
 const VOLUME_KEY = 'deepseek-pet:sound'
 
-/** 各类提醒音效的开关（true = 开启）。用户可在诊断面板配置。 */
+/** 各类提醒音效的开关显示标签（诊断面板 / 设置卡片共用）。 */
+export const ALERT_LABELS = Object.freeze({
+  celebrate: '任务完成提醒',
+  error: '出错安慰',
+  prompt: '提问/审批提示',
+  poke: '戳一戳音效',
+  headpat: '摸头音效',
+})
+
+/** 各类提醒音效的开关（true = 开启）。用户可在诊断面板/设置卡片配置。 */
 const ALERT_TOGGLES = Object.freeze({
   celebrate: true, // 任务完成庆祝（琶音+语音+纸屑）
   error: true,     // 出错安慰（低音+语音）
@@ -45,7 +54,10 @@ function clampVolume(value) {
 const settings = loadSettings()
 
 function persist() {
-  try { window.localStorage?.setItem(VOLUME_KEY, JSON.stringify(settings)) } catch {}
+  try {
+    window.localStorage?.setItem(VOLUME_KEY, JSON.stringify(settings))
+    window.dispatchEvent(new Event('deepseek-pet:sound-changed'))
+  } catch {}
 }
 
 /** 某类提醒音效是否开启（celebrate/error/prompt/poke/headpat）。 */
@@ -93,6 +105,34 @@ export function getVolume() { return settings.total }
 export function setVolume(value) {
   settings.total = clampVolume(value)
   persist()
+}
+
+/** 读取全量设置快照（设置卡片用）。 */
+export function soundSettingsSnapshot() {
+  return {
+    muted: settings.muted,
+    total: settings.total,
+    voice: settings.voice,
+    sfx: settings.sfx,
+    celebrate: settings.celebrate,
+    alerts: { ...settings.alerts },
+  }
+}
+
+/** 设置卡片批量保存：一次写入多个字段（total/alerts/muted 等），返回新快照。 */
+export function applySoundSettings(patch) {
+  if (patch && typeof patch === 'object') {
+    if (Number.isFinite(patch.total)) settings.total = clampVolume(patch.total)
+    if (Number.isFinite(patch.voice)) settings.voice = clampVolume(patch.voice)
+    if (Number.isFinite(patch.sfx)) settings.sfx = clampVolume(patch.sfx)
+    if (Number.isFinite(patch.celebrate)) settings.celebrate = clampVolume(patch.celebrate)
+    if (typeof patch.muted === 'boolean') settings.muted = patch.muted
+    if (patch.alerts && typeof patch.alerts === 'object') {
+      settings.alerts = { ...settings.alerts, ...patch.alerts }
+    }
+    persist()
+  }
+  return soundSettingsSnapshot()
 }
 
 let audioCtx = null

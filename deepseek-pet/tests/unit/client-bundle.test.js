@@ -45,6 +45,7 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
     throw new Error(`unexpected client external: ${specifier}`)
   })
 
+  const registrations = []
   const ctx = {
     effect(callback) {
       const cleanup = callback()
@@ -54,19 +55,22 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
     sessions: { binding() { return undefined }, open() {} },
     slots: {
       inject(name, callback) {
-        assert.equal(name, 'shell.overlay')
+        assert.ok(['shell.overlay', 'settings.plugin.item'].includes(name), `unexpected slot: ${name}`)
         return callback()
       },
       register(options, Component) {
-        registered = { options, Component, business: options.inject() }
+        registrations.push({ options, Component, business: options.inject?.() ?? {} })
         return () => {}
       },
     },
   }
 
   plugin.apply(ctx)
-  assert.equal(registered.options.id, 'deepseek-pet')
-  assert.equal(styles.length, 1)
+  const pet = registrations.find(entry => entry.options.id === 'deepseek-pet')
+  const settingsCard = registrations.find(entry => entry.options.name === 'settings.plugin.item')
+  assert.ok(pet, 'shell.overlay 桌宠未注册')
+  assert.ok(settingsCard, 'settings.plugin.item 设置卡片未注册')
+  assert.equal(styles.length, 2)
 
   const listSnapshot = {
     current: 'focus',
@@ -90,9 +94,9 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
       projections: { faceOf() { return undefined } },
     },
   })
-  const html = renderToStaticMarkup(React.createElement(registered.Component, {
+  const html = renderToStaticMarkup(React.createElement(pet.Component, {
     useSessions: selector => selector(listSnapshot),
-    ...registered.business,
+    ...pet.business,
   }))
   assert.match(html, /DeepSeek 任务状态助手/)
   assert.match(html, /data-current="true"/)
@@ -104,6 +108,12 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   assert.doesNotMatch(html, /dsh-live2d-rig|dsh-live2d-part/)
   assert.match(html, /等待你的回答/)
   assert.doesNotMatch(html, /dsh-live2d-pending|<fieldset|请选择下一步|>提交</)
+
+  const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, settingsCard.business))
+  assert.match(cardHtml, /DeepSeek 桌宠/)
+  assert.match(cardHtml, /任务完成提醒/)
+  assert.match(cardHtml, /提问/)
+  assert.match(cardHtml, /保存/)
 
   for (const cleanup of cleanups.reverse()) cleanup()
   delete globalThis.window

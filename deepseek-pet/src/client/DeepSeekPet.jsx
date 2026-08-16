@@ -6,7 +6,7 @@ import {
   stateFromSnapshot, streamFromSnapshot,
 } from './pet-state.js'
 import {
-  alertEnabled, alertToggles, armAutoplayUnlock, audioError, audioState, beep, getVolume,
+  ALERT_LABELS, alertEnabled, alertToggles, armAutoplayUnlock, audioError, audioState, beep, getVolume,
   isMuted, playCelebrate, playPoke, playPrompt, playSad, setAlertEnabled,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.js'
@@ -48,14 +48,6 @@ const COMFORT_LINES = Object.freeze([
   '别担心，我收拾一下残局',
   '这个工具不听话，我换个方式',
 ])
-/** 音效提醒开关的显示标签（诊断面板）。 */
-const ALERT_LABELS = Object.freeze({
-  celebrate: '任务完成提醒',
-  error: '出错安慰',
-  prompt: '提问/审批提示',
-  poke: '戳一戳音效',
-  headpat: '摸头音效',
-})
 /**
  * 语音台词 key 候选（voice.generated.js）。
  * 分两套，避免同一事件被播两次：
@@ -65,15 +57,15 @@ const ALERT_LABELS = Object.freeze({
  * 事件函数和状态 effect 各播一次，语音叠加。
  */
 const VOICE_FOR_EVENT = Object.freeze({
-  success: ['done1', 'done2', 'done3', 'done4'],
-  error: ['error1', 'error2', 'error3'],
-  'tool-error': ['error1', 'error2', 'error3'],
+  success: ['done1', 'done2', 'done3', 'done4', 'done5', 'done6'],
+  error: ['error1', 'error2', 'error3', 'error4', 'error5'],
+  'tool-error': ['error1', 'error2', 'error3', 'error4', 'error5'],
 })
 const VOICE_FOR_STATE = Object.freeze({
-  approval: ['approval1', 'approval2'],
-  question: ['question1', 'question2'],
-  busy: ['busy1', 'busy2'],
-  thinking: ['thinking'],
+  approval: ['approval1', 'approval2', 'approval3'],
+  question: ['question1', 'question2', 'question3'],
+  busy: ['busy1', 'busy2', 'busy3'],
+  thinking: ['thinking', 'thinking2', 'thinking3'],
 })
 let lastWhipReaction = ''
 
@@ -543,7 +535,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     unlockAudio()
     if (alertEnabled('poke')) {
       playPoke()
-      speakVoice(pickVoiceKey(['poke1', 'poke2', 'poke3']))
+      speakVoice(pickVoiceKey(['poke1', 'poke2', 'poke3', 'poke4', 'poke5']))
     }
     const words = tapTextFor(effectiveVisual.kind)
     speak(words[Math.floor(Math.random() * words.length)], '')
@@ -602,7 +594,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       unlockAudio()
       if (alertEnabled('headpat')) {
         playCelebrate()
-        speakVoice(pickVoiceKey(['headpat1', 'headpat2']))
+        speakVoice(pickVoiceKey(['headpat1', 'headpat2', 'headpat3']))
       }
       setCelebrating(true)
       setCollapsed(false)

@@ -24,30 +24,39 @@ OUT = os.path.join(ROOT, "src", "client", "voice.generated.js")
 VOICE = os.environ.get("PET_VOICE", "zh-CN-XiaoyiNeural")
 RATE = os.environ.get("PET_RATE", "+0%")
 
-# 台词表（key → 文本）。全部为 DeepSeek 桌宠原创台词。
+# 台词表（key → 文本）。全部为 DeepSeek 桌宠原创台词，每类多条便于随机。
 LINES = {
     # 任务完成
     "done1": "任务完成啦！",
     "done2": "搞定，真棒！",
     "done3": "耶，又完成一个！",
     "done4": "收工，干得漂亮！",
+    "done5": "搞定啦，快夸夸我！",
+    "done6": "完成，效率超高！",
     # 出错安慰
     "error1": "出错了，别担心。",
     "error2": "我重新试一次。",
     "error3": "工具不听话，我换个办法。",
+    "error4": "哎呀，这次没弄好。",
+    "error5": "别急，我再想想办法。",
     # 戳一戳
     "poke1": "别戳我啦！",
     "poke2": "嘿嘿，好痒呀。",
     "poke3": "我在认真干活呢。",
+    "poke4": "再戳我就罢工啦！",
+    "poke5": "好啦好啦，我在的。",
     # 摸头
     "headpat1": "被摸头了，好开心。",
     "headpat2": "嘿嘿，最喜欢主人了。",
+    "headpat3": "摸头摸够了，继续干活！",
     # 等待批准
     "approval1": "需要主人同意一下。",
     "approval2": "我在等你的批准哦。",
+    "approval3": "主人确认一下，我就继续。",
     # 提问 / 反问
     "question1": "主人，请回答我的问题。",
     "question2": "主人，需要你做个选择。",
+    "question3": "这题需要主人拿主意。",
     # 问候
     "morning": "早上好，新的一天。",
     "noon": "中午好，别忘了吃饭。",
@@ -59,8 +68,11 @@ LINES = {
     # 忙碌
     "busy1": "好多任务，我有点忙。",
     "busy2": "正在处理多个会话。",
+    "busy3": "忙完这个就来陪你。",
     # 思考中
     "thinking": "让我想一想。",
+    "thinking2": "嗯，我在琢磨呢。",
+    "thinking3": "这个问题有点意思。",
 }
 
 async def synth_one(key: str, text: str) -> dict:

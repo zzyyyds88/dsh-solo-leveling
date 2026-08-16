@@ -1,5 +1,6 @@
 import { DeepSeekPet } from './DeepSeekPet.jsx'
 import { installStyles } from './styles.js'
+import { registerSettingsCard } from './settings-card.jsx'
 
 export const inject = ['slots', 'sessions']
 
@@ -16,4 +17,7 @@ export function apply(ctx) {
     label: 'DeepSeek Pet 插件',
     inject: () => ({ resolveSession, openSession }),
   }, DeepSeekPet))
+
+  // 设置 → 插件 → 插件配置 →「DeepSeek 桌宠」卡片（开发规范 §2.5）
+  registerSettingsCard(ctx)
 }
