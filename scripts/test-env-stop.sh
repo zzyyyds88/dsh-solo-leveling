@@ -5,7 +5,8 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ENV="$WS_ROOT/test-env"
+source "$WS_ROOT/scripts/test-env-common.sh"
+resolve_test_env
 PID_FILE="$TEST_ENV/dsh-web.pid"
 
 if [ ! -f "$PID_FILE" ]; then

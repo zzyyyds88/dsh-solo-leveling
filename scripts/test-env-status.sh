@@ -4,11 +4,14 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ENV="$WS_ROOT/test-env"
+source "$WS_ROOT/scripts/test-env-common.sh"
+resolve_test_env
 PID_FILE="$TEST_ENV/dsh-web.pid"
-PORT="${DSH_TEST_PORT:-3090}"
+PORT="${DSH_TEST_PORT:-$PORT}"
 
-echo "== 测试环境：$TEST_ENV =="
+echo "== 测试环境：$TEST_ENV（TEST_ENV_INDEX=${ENV_INDEX:-1}，端口 $PORT）=="
+echo "-- 使用声明 --"
+echo "  $(usage_status)"
 echo "-- 实例 --"
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   PID="$(cat "$PID_FILE")"

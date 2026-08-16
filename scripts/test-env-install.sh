@@ -8,7 +8,8 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ENV="$WS_ROOT/test-env"
+source "$WS_ROOT/scripts/test-env-common.sh"
+resolve_test_env
 PROFILE="$TEST_ENV/profiles/web"
 DST_ROOT="$PROFILE/node_modules/@deepseek-ai"
 

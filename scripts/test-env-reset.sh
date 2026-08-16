@@ -18,7 +18,8 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ENV="$WS_ROOT/test-env"
+source "$WS_ROOT/scripts/test-env-common.sh"
+resolve_test_env
 PROFILE="$TEST_ENV/profiles/web"
 
 CHECK=0
@@ -39,6 +40,12 @@ if [ "$CHECK" -eq 1 ]; then
   fi
   [ -f "$TEST_ENV/settings.yaml" ] && grep -qE "web-auth:|llm-pi-ai:|dsh-defaults:" "$TEST_ENV/settings.yaml" 2>/dev/null \
     && { echo "  ✗ settings.yaml 含定制段"; ISSUES=1; }
+  if [ -f "$TEST_ENV/USAGE.md" ]; then
+    project="$(grep -E '^项目[:：]' "$TEST_ENV/USAGE.md" | head -1 | sed 's/^项目[:：] *//')"
+    if [ -n "$project" ] && ! echo "$project" | grep -q "哪个项目在用它"; then
+      echo "  ✗ USAGE.md 仍有使用声明（项目：$project）"; ISSUES=1
+    fi
+  fi
   [ "$ISSUES" -eq 0 ] && echo "  ✓ 已是官方基线" || echo "  ✗ 存在 $ISSUES 处残留（运行 scripts/test-env-reset.sh）"
   exit "$ISSUES"
 fi
@@ -90,10 +97,21 @@ cat > "$TEST_ENV/settings.yaml" <<'EOF'
 # 测试环境用户设置（官方基线：空）
 EOF
 
-# 3. 清理运行态与残留
+# 3. 清理运行态与残留，并重置使用声明
 rm -f "$TEST_ENV/dsh-web.log" "$TEST_ENV/dsh-web.pid" "$TEST_ENV/pet.json"
 rm -rf "$TEST_ENV/storages" "$TEST_ENV/sessions"
 mkdir -p "$TEST_ENV/storages" "$TEST_ENV/sessions"
+cat > "$TEST_ENV/USAGE.md" <<'USAGE_EOF'
+# 测试环境使用声明
+
+> 使用本环境前必须填写（强制，见 AGENTS.md）；使用完毕后运行
+> scripts/test-env-reset.sh 恢复官方基线，本声明会被自动清空。
+
+项目：（哪个项目在用它）
+用途：（要测试什么）
+开始时间：
+结束时间：
+USAGE_EOF
 
 echo
 echo "== 完成。当前为官方基线（无 fork / 无本地插件 / 无 patch 配置 / 无测试设置）=="

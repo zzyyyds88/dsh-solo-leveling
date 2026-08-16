@@ -9,7 +9,8 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ENV="$WS_ROOT/test-env"
+source "$WS_ROOT/scripts/test-env-common.sh"
+resolve_test_env
 PROFILE="$TEST_ENV/profiles/web"
 FORMAL_HOME="${DSH_FORMAL_HOME:-$HOME/.dsh}"
 FORMAL_PROFILE="$FORMAL_HOME/profiles/web"
@@ -65,3 +66,4 @@ echo "== 完成。测试环境：$TEST_ENV =="
 echo "  启动：scripts/test-env-start.sh"
 echo "  状态：scripts/test-env-status.sh"
 echo "  装包：scripts/test-env-install.sh <已构建包目录>…"
+echo "  使用前：填写 $TEST_ENV/USAGE.md 声明项目与用途"

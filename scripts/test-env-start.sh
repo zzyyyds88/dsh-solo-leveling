@@ -5,8 +5,10 @@
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_ENV="$WS_ROOT/test-env"
-PORT=3090
+source "$WS_ROOT/scripts/test-env-common.sh"
+resolve_test_env
+echo "== 测试环境：$TEST_ENV（TEST_ENV_INDEX=${ENV_INDEX:-1}，端口 $PORT）=="
+echo "  声明状态：$(usage_status)"
 if [ "${1:-}" = "--port" ]; then PORT="$2"; fi
 
 [ -d "$TEST_ENV/profiles/web/node_modules" ] || { echo "✗ 测试环境未初始化，先跑 scripts/test-env-init.sh"; exit 1; }
