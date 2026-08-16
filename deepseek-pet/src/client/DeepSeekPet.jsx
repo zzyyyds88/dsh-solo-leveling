@@ -525,14 +525,25 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
         setConfetti([])
       }, CELEBRATE_DURATION_MS)
     }, 700)
+    // 松手 / 移动即取消未触发的摸头（单击只触发戳一戳，不会叠加摸头）
+    const cancel = () => {
+      window.clearTimeout(longPressTimer.current)
+      window.removeEventListener('pointermove', cancelOnMove)
+      window.removeEventListener('pointerup', cancel)
+      window.removeEventListener('pointercancel', cancel)
+    }
     const cancelOnMove = event => {
-      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 5) {
-        window.clearTimeout(longPressTimer.current)
-        window.removeEventListener('pointermove', cancelOnMove)
-      }
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 5) cancel()
     }
     window.addEventListener('pointermove', cancelOnMove)
-    window.setTimeout(() => window.removeEventListener('pointermove', cancelOnMove), 800)
+    window.addEventListener('pointerup', cancel)
+    window.addEventListener('pointercancel', cancel)
+    // 兜底：监听不泄漏
+    window.setTimeout(() => {
+      window.removeEventListener('pointermove', cancelOnMove)
+      window.removeEventListener('pointerup', cancel)
+      window.removeEventListener('pointercancel', cancel)
+    }, 1500)
   }, [speak])
 
   /** 双击：折叠态展开，否则切换静音。 */
