@@ -105,6 +105,7 @@ window.__ModuleLoader__.load({
 			const [kind, setKind] = react.useState("ok");
 			const [saving, setSaving] = react.useState(false);
 			const [restarting, setRestarting] = react.useState(false);
+			const [restartHelp, setRestartHelp] = react.useState("");
 			const disabled = !state.available || !state.writable;
 			const storedLan = state.available ? state.lanHost : void 0;
 			const storedPort = state.available ? state.httpsPort : void 0;
@@ -134,6 +135,20 @@ window.__ModuleLoader__.load({
 				const lan = lanDraft.trim();
 				const port = Number.parseInt(portDraft.trim(), 10);
 				return proxyOn && lan.length > 0 && Number.isInteger(port) ? `https://${lan}:${port}/` : "";
+			};
+			/** 重启后提示：systemd 自动重启说明 + 可复制给 AI 的配置提示词。 */
+			const buildRestartHelp = (lan, url) => {
+				const cmd = `node /usr/bin/dsh web${lan ? ` --trusted-host ${lan}` : ""}`;
+				return [
+					t("restartHelpIntro"),
+					"",
+					`【请为我的 DeepSeek Harness（DSH）配置 systemd 自动重启】`,
+					`- 服务名：dsh-web`,
+					`- 启动命令：${cmd}`,
+					`- 要求：进程退出（包括被 kill）后自动重启（Restart=always）、开机自启`,
+					`- DSH_HOME：/root/.dsh`,
+					`请生成 /etc/systemd/system/dsh-web.service 单元文件，并给出 systemctl enable --now 命令。`,
+				].join("\n");
 			};
 			const checkPortInUse = async (port) => {
 				try {
@@ -205,13 +220,19 @@ window.__ModuleLoader__.load({
 						setKind("ok");
 						const url = accessUrl();
 						setMessage(url !== "" ? `${t("restartSent")}${t("restartVisit")} ${url}` : t("restartSent"));
+						// 提示：配置 systemd 自动重启 / 手动拉起；附可复制给 AI 的提示词
+						const lan = lanDraft.trim();
+						const port = Number.parseInt(portDraft.trim(), 10);
+						setRestartHelp(buildRestartHelp(lan, port, url));
 					} else {
 						setKind("err");
 						setMessage(t("restartFailed"));
+						setRestartHelp("");
 					}
 				} catch {
 					setKind("err");
 					setMessage(t("restartFailed"));
+					setRestartHelp("");
 				}
 				setRestarting(false);
 			};
@@ -222,6 +243,7 @@ window.__ModuleLoader__.load({
 				setPassword("");
 				setConfirm("");
 				setMessage("");
+				setRestartHelp("");
 			};
 			// Card chrome: collapsible header + body + footer (styled after the
 			// official web-search PluginCard, inline styles + theme variables).
@@ -244,6 +266,8 @@ window.__ModuleLoader__.load({
 			const readOnlyStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "12px", margin: "8px 0 0" };
 			// 突出 HTTPS 访问地址（反代启用时常显）
 			const accessUrlStyle = { margin: "8px 0 0", fontSize: "13px", fontWeight: 600, lineHeight: "1.6", color: "var(--dsw-alias-label-success, #4ade80)" };
+			// 重启后 systemd 提示词块（可选中复制）
+			const restartHelpStyle = { margin: "10px 0 0", padding: "10px 12px", background: "var(--dsw-alias-bg-layer-1)", border: "1px dashed var(--dsw-alias-border-l2)", borderRadius: "8px", fontSize: "12px", lineHeight: "1.7", color: "var(--dsw-alias-label-secondary)", whiteSpace: "pre-wrap", wordBreak: "break-all", userSelect: "text", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 			return (0, react_jsx_runtime.jsxs)("li", {
 				style: cardStyle,
 				children: [
@@ -346,7 +370,8 @@ window.__ModuleLoader__.load({
 									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: restart, disabled: disabled || saving || restarting, style: dangerButtonStyle, children: t("restart") })
 								]
 							}),
-							message === "" ? null : (0, react_jsx_runtime.jsx)("p", { role: "status", style: messageStyle, children: message })
+							message === "" ? null : (0, react_jsx_runtime.jsx)("p", { role: "status", style: messageStyle, children: message.split("\n").map((line, i) => (0, react_jsx_runtime.jsxs)("span", { children: [line, i < message.split("\n").length - 1 ? (0, react_jsx_runtime.jsx)("br", {}) : null] }, i)) }),
+							restartHelp === "" ? null : (0, react_jsx_runtime.jsx)("pre", { style: restartHelpStyle, children: restartHelp })
 						]
 					}) : null
 				]
@@ -378,6 +403,7 @@ window.__ModuleLoader__.load({
 			restart: "重启",
 			restartConfirm: "将立即退出 dsh 与本实例 caddy（不做重启），由系统按各自配置拉起；确定继续？",
 			restartSent: "已发出重启请求：dsh 与本实例 caddy 正在退出，系统拉起后生效。",
+			restartHelpIntro: "提示：本实例已退出，需要有人把它重新拉起来。推荐配置 systemd 自动重启（进程退出自动拉起 + 开机自启）；或将下面整段复制给你的 AI 助手，让它代为配置：",
 			restartFailed: "重启请求失败：可能未登录或权限不足。",
 			unsaved: "未保存",
 			readOnly: "当前设置不可写。",
@@ -416,6 +442,7 @@ window.__ModuleLoader__.load({
 			restart: "Restart",
 			restartConfirm: "This exits dsh and this instance's caddy immediately (no restart orchestration); the system brings dsh back up per its own setup. Continue?",
 			restartSent: "Restart requested: dsh and this instance's caddy are exiting; the system will bring dsh back up.",
+			restartHelpIntro: "Note: this instance has exited and needs to be brought back up. Recommended: configure a systemd service with automatic restart (Restart=always + enable), or copy the whole block below to your AI assistant to configure it for you:",
 			restartFailed: "Restart request failed: maybe not signed in or not permitted.",
 			unsaved: "Unsaved",
 			readOnly: "Settings are not writable.",
