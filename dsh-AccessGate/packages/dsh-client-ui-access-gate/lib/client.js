@@ -55,6 +55,7 @@ window.__ModuleLoader__.load({
 				return {
 					available: ready,
 					writable: snapshot.writable,
+					proxyEnabled: ready ? snapshot.value?.proxyEnabled === true : false,
 					lanHost: ready ? (snapshot.value?.lanHost ?? "") : "",
 					httpsPort: ready ? (snapshot.value?.httpsPort ?? "") : ""
 				};
@@ -63,20 +64,22 @@ window.__ModuleLoader__.load({
 			* Write the editable fields. `password` may be empty to leave the current
 			* password untouched. Resolves true only when the store confirms the
 			* proxy fields landed.
-			* @param fields - { password, lanHost, httpsPort }
+			* @param fields - { password, proxyEnabled, lanHost, httpsPort }
 			*/
 			async save(fields) {
 				try {
 					if (typeof fields.password === "string" && fields.password.length > 0) {
 						await this.scope.set("password", fields.password);
 					}
-					await this.scope.set("lanHost", fields.lanHost);
-					await this.scope.set("httpsPort", fields.httpsPort);
+					await this.scope.set("proxyEnabled", fields.proxyEnabled === true);
+					await this.scope.set("lanHost", fields.lanHost ?? "");
+					await this.scope.set("httpsPort", fields.httpsPort ?? "");
 				} catch {
 					return false;
 				}
 				const snapshot = this.scope.getSnapshot();
 				return snapshot.status === "ready"
+					&& snapshot.value?.proxyEnabled === (fields.proxyEnabled === true)
 					&& snapshot.value?.lanHost === fields.lanHost
 					&& snapshot.value?.httpsPort === fields.httpsPort;
 			}
@@ -105,7 +108,13 @@ window.__ModuleLoader__.load({
 			const disabled = !state.available || !state.writable;
 			const storedLan = state.available ? state.lanHost : void 0;
 			const storedPort = state.available ? state.httpsPort : void 0;
+			const storedProxyOn = state.available ? state.proxyEnabled : false;
+			// 反代独立开关（默认关）；开时才显示/校验 lanHost/httpsPort
+			const [proxyOn, setProxyOn] = react.useState(false);
 			// Drafts follow the stored values; typing wins until a store update lands.
+			react.useEffect(() => {
+				setProxyOn(storedProxyOn);
+			}, [storedProxyOn]);
 			react.useEffect(() => {
 				if (storedLan !== void 0) setLanDraft(storedLan);
 			}, [storedLan]);
@@ -116,8 +125,9 @@ window.__ModuleLoader__.load({
 			// any typed password counts as an unsaved draft.
 			const dirty = state.available
 				&& (password.length > 0 || confirm.length > 0
-					|| lanDraft.trim() !== String(state.lanHost ?? "")
-					|| portDraft.trim() !== String(state.httpsPort ?? ""));
+					|| proxyOn !== storedProxyOn
+					|| (proxyOn && (lanDraft.trim() !== String(state.lanHost ?? "")
+						|| portDraft.trim() !== String(state.httpsPort ?? ""))));
 			if (!state.available) return null;
 			const checkPortInUse = async (port) => {
 				try {
@@ -134,15 +144,22 @@ window.__ModuleLoader__.load({
 			const save = async () => {
 				const lanHost = lanDraft.trim();
 				const httpsPort = Number.parseInt(portDraft.trim(), 10);
-				if (lanHost.length > 0 && (!Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535)) {
-					setKind("err");
-					setMessage(t("portInvalid"));
-					return;
-				}
-				if (lanHost.length > 0 && await checkPortInUse(httpsPort)) {
-					setKind("err");
-					setMessage(t("portInUse"));
-					return;
+				if (proxyOn) {
+					if (lanHost.length === 0) {
+						setKind("err");
+						setMessage(t("hostEmpty"));
+						return;
+					}
+					if (!Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535) {
+						setKind("err");
+						setMessage(t("portInvalid"));
+						return;
+					}
+					if (await checkPortInUse(httpsPort)) {
+						setKind("err");
+						setMessage(t("portInUse"));
+						return;
+					}
 				}
 				if (password.length > 0) {
 					if (password.length < MIN_PASSWORD_LENGTH) {
@@ -156,11 +173,12 @@ window.__ModuleLoader__.load({
 						return;
 					}
 				}
-				// lanHost 空 = 未启用反代（保存空值清除配置）；非空才保存端口
-				const proxyLan = lanHost.length > 0 ? lanHost : "";
-				const proxyPort = lanHost.length > 0 ? httpsPort : "";
+				// 开关关 = 关闭反代（清空参数）；开且参数非空才启用
+				const on = proxyOn && lanHost.length > 0;
+				const proxyLan = on ? lanHost : "";
+				const proxyPort = on ? httpsPort : "";
 				setSaving(true);
-				const ok = await props.save({ password, lanHost: proxyLan, httpsPort: proxyPort });
+				const ok = await props.save({ password, proxyEnabled: on, lanHost: proxyLan, httpsPort: proxyPort });
 				setSaving(false);
 				if (ok) {
 					setKind("ok");
@@ -191,6 +209,7 @@ window.__ModuleLoader__.load({
 				setRestarting(false);
 			};
 			const discard = () => {
+				setProxyOn(storedProxyOn);
 				if (storedLan !== void 0) setLanDraft(storedLan);
 				if (storedPort !== void 0) setPortDraft(String(storedPort));
 				setPassword("");
@@ -273,11 +292,20 @@ window.__ModuleLoader__.load({
 								style: sectionStyle,
 								children: [
 									(0, react_jsx_runtime.jsx)("p", { style: sectionTitleStyle, children: t("proxySection") }),
+									// 反代独立开关（默认关）；关 = 不启用，参数不可编辑
+									(0, react_jsx_runtime.jsxs)("div", {
+										style: { display: "flex", alignItems: "center", gap: "8px", padding: "8px 0" },
+										children: [
+											(0, react_jsx_runtime.jsx)("input", { type: "checkbox", checked: proxyOn, disabled, style: { width: "16px", height: "16px", accentColor: "var(--dsw-alias-brand-primary)" }, onChange: (event) => setProxyOn(event.target.checked) }),
+											(0, react_jsx_runtime.jsx)("label", { style: labelStyle, children: t("proxyToggleLabel") })
+										]
+									}),
+									(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("proxyToggleHint") }),
 									(0, react_jsx_runtime.jsxs)("div", {
 										style: fieldStyle,
 										children: [
 											(0, react_jsx_runtime.jsx)("label", { style: labelStyle, children: t("lanHostLabel") }),
-											(0, react_jsx_runtime.jsx)("input", { type: "text", value: lanDraft, disabled, style: inputStyle, placeholder: t("lanHostPlaceholder"), onChange: (event) => setLanDraft(event.target.value) }),
+											(0, react_jsx_runtime.jsx)("input", { type: "text", value: lanDraft, disabled: disabled || !proxyOn, style: inputStyle, placeholder: t("lanHostPlaceholder"), onChange: (event) => setLanDraft(event.target.value) }),
 											(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("lanHostHint") })
 										]
 									}),
@@ -285,7 +313,7 @@ window.__ModuleLoader__.load({
 										style: fieldStyle,
 										children: [
 											(0, react_jsx_runtime.jsx)("label", { style: labelStyle, children: t("httpsPortLabel") }),
-											(0, react_jsx_runtime.jsx)("input", { type: "number", inputMode: "numeric", min: 1, max: 65535, step: 1, value: portDraft, disabled, style: inputStyle, onChange: (event) => setPortDraft(event.target.value) }),
+											(0, react_jsx_runtime.jsx)("input", { type: "number", inputMode: "numeric", min: 1, max: 65535, step: 1, value: portDraft, disabled: disabled || !proxyOn, style: inputStyle, onChange: (event) => setPortDraft(event.target.value) }),
 											(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("httpsPortHint") })
 										]
 									})
@@ -316,25 +344,28 @@ window.__ModuleLoader__.load({
 			confirmPlaceholder: "再次输入新口令",
 			confirmHint: "两次输入需保持一致。",
 			proxySection: "HTTPS 反向代理",
+			proxyToggleLabel: "启用 HTTPS 反向代理",
+			proxyToggleHint: "默认关闭。开启后填写下方地址与端口，保存并点「重启」，dsh 启动时自动用内置 caddy 提供 HTTPS 反代（无需安装 caddy / 无需手动跑脚本）。",
 			lanHostLabel: "局域网地址 / 域名",
-			lanHostPlaceholder: "例如 192.168.1.100（留空 = 不启用）",
-			lanHostHint: "HTTPS 反代（caddy）绑定的地址，也是浏览器访问地址；留空不启用反代。填写并保存后，启动 dsh 即自动确保 caddy 反代运行，无需手动跑脚本。",
+			lanHostPlaceholder: "例如 192.168.1.100",
+			lanHostHint: "HTTPS 反代（caddy）绑定的地址，也是浏览器访问地址。",
 			httpsPortLabel: "HTTPS 端口",
 			httpsPortPlaceholder: "例如 5700",
 			httpsPortHint: "caddy 对外 HTTPS 端口（1-65535）。改动后保存并点「重启」生效。",
 			saveLabel: "保存",
 			discard: "放弃",
 			restart: "重启",
-			restartConfirm: "将立即退出 dsh 与 caddy（不做重启），由系统按各自配置拉起；确定继续？",
-			restartSent: "已发出重启请求：dsh 与 caddy 正在退出，系统拉起后生效。",
+			restartConfirm: "将立即退出 dsh 与本实例 caddy（不做重启），由系统按各自配置拉起；确定继续？",
+			restartSent: "已发出重启请求：dsh 与本实例 caddy 正在退出，系统拉起后生效。",
 			restartFailed: "重启请求失败：可能未登录或权限不足。",
 			unsaved: "未保存",
 			readOnly: "当前设置不可写。",
 			tooShort: "口令至少需要 6 位。",
 			mismatch: "两次输入的口令不一致。",
-			saved: "已保存：反代参数已更新（启用或关闭），点「重启」后生效。",
-			savedWithPassword: "已保存：口令已更新，旧会话已失效，请重新登录；反代参数点「重启」后生效。",
+			saved: "已保存：反代开关与参数已更新，点「重启」后生效。",
+			savedWithPassword: "已保存：口令已更新，旧会话已失效，请重新登录；反代开关与参数点「重启」后生效。",
 			saveFailed: "保存失败：可能已被其它修改覆盖或权限不足，请重试。",
+			hostEmpty: "启用反代时「局域网地址 / 域名」不能为空。",
 			portInvalid: "HTTPS 端口必须是 1-65535 的整数。",
 			portInUse: "该 HTTPS 端口已被占用（可能是其它服务或另一实例的反代），请换一个端口。"
 		};
@@ -349,25 +380,28 @@ window.__ModuleLoader__.load({
 			confirmPlaceholder: "Enter it again",
 			confirmHint: "Both entries must match.",
 			proxySection: "HTTPS reverse proxy",
+			proxyToggleLabel: "Enable HTTPS reverse proxy",
+			proxyToggleHint: "Disabled by default. Turn it on, fill in the address and port below, save and press Restart — dsh starts its embedded caddy automatically (no caddy install, no script).",
 			lanHostLabel: "LAN host / domain",
-			lanHostPlaceholder: "e.g. 192.168.1.100 (empty = disabled)",
-			lanHostHint: "The address the HTTPS reverse proxy (caddy) binds and the browser visits; empty disables the proxy. Once saved, starting dsh automatically ensures caddy runs — no script needed.",
+			lanHostPlaceholder: "e.g. 192.168.1.100",
+			lanHostHint: "The address the HTTPS reverse proxy (caddy) binds and the browser visits.",
 			httpsPortLabel: "HTTPS port",
 			httpsPortPlaceholder: "e.g. 5700",
 			httpsPortHint: "The caddy external HTTPS port (1-65535). Save and press Restart after changing.",
 			saveLabel: "Save",
 			discard: "Discard",
 			restart: "Restart",
-			restartConfirm: "This exits dsh and caddy immediately (no restart orchestration); the system brings dsh back up per its own setup. Continue?",
-			restartSent: "Restart requested: dsh and caddy are exiting; the system will bring dsh back up.",
+			restartConfirm: "This exits dsh and this instance's caddy immediately (no restart orchestration); the system brings dsh back up per its own setup. Continue?",
+			restartSent: "Restart requested: dsh and this instance's caddy are exiting; the system will bring dsh back up.",
 			restartFailed: "Restart request failed: maybe not signed in or not permitted.",
 			unsaved: "Unsaved",
 			readOnly: "Settings are not writable.",
 			tooShort: "The password needs at least 6 characters.",
 			mismatch: "The two entries do not match.",
-			saved: "Saved: proxy parameters updated (enabled or disabled); press Restart to apply.",
-			savedWithPassword: "Saved: password changed and all old sessions are invalid — please sign in again; proxy parameters apply after Restart.",
+			saved: "Saved: proxy toggle and parameters updated; press Restart to apply.",
+			savedWithPassword: "Saved: password changed and all old sessions are invalid — please sign in again; proxy toggle and parameters apply after Restart.",
 			saveFailed: "Save failed: possibly overwritten concurrently or not permitted. Retry.",
+			hostEmpty: "The LAN host must not be empty when the proxy is enabled.",
 			portInvalid: "The HTTPS port must be an integer between 1 and 65535.",
 			portInUse: "This HTTPS port is already in use (another service or another instance's proxy). Pick a different port."
 		};

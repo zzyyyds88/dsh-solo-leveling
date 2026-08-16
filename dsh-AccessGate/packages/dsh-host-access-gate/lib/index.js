@@ -626,21 +626,22 @@ function certBaseName(lanHost) {
 	return `dsh-${String(lanHost).replace(/[^A-Za-z0-9.-]/g, "_")}`;
 }
 
-/** 启动时调用：读反代参数，非空 → 确保本实例 caddy 运行；空 → 停掉本实例 caddy。 */
+/** 启动时调用：proxyEnabled 开关开启且反代参数非空 → 确保本实例 caddy 运行；否则停掉。 */
 function ensureReverseProxy(ctx, state) {
 	try {
 		const s = state.readSettings?.() ?? {};
 		const lanHost = typeof s.lanHost === "string" ? s.lanHost.trim() : "";
 		const httpsPort = Number(s.httpsPort);
 		const targetPort = Number(process.env.DSH_WEB_PORT ?? "") || ctx.webServer?.port || 3080;
-		const configured = lanHost.length > 0 && Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort < 65536;
+		const enabled = s.proxyEnabled === true;
+		const configured = enabled && lanHost.length > 0 && Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort < 65536;
 		if (!configured) {
 			const pid = readCaddyPid();
 			if (pid > 0 && isAlive(pid)) {
 				stopCaddy();
-				console.log("[dsh-host-access-gate] 反向代理已关闭（未配置反代参数）");
+				console.log(`[dsh-host-access-gate] 反向代理已关闭（proxyEnabled=${enabled}，未配置反代参数）`);
 			}
-			return; // 未配置反代（默认不开启）
+			return; // 开关未开 / 未配置反代（默认不开启）
 		}
 		if (!existsSync(caddyBin())) {
 			console.error("[dsh-host-access-gate] 未找到内置 caddy 二进制（bin/caddy）。请重新打包安装（打包前放入 caddy 二进制），反代未启动。");
@@ -793,10 +794,14 @@ function apply(ctx, config) {
 	// 确保 caddy 反代运行（无需手动跑 switch-to-https.sh）。
 	installSettingsSection(ctx, SETTINGS_NS, z.object({
 		password: z.string().role("secret"),
+		// 反代独立开关：proxyEnabled=false（默认）不启用反代；true 且 lanHost/httpsPort
+		// 非空才启动内置 caddy。避免旧版「预填默认参数即视为启用」的误开。
+		proxyEnabled: z.boolean().default(false),
 		lanHost: z.string().default(""),
 		httpsPort: z.union([z.const(""), z.natural().min(1).max(65535)]).default("")
 	}), {
 		password: fallbackPassword ?? "",
+		proxyEnabled: false,
 		lanHost: "",
 		httpsPort: ""
 	}, {
