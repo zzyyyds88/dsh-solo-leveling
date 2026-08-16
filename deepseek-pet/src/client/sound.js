@@ -165,6 +165,28 @@ export function unlockAudio() {
   ensureAudio()
 }
 
+let unlockArmed = false
+
+/**
+ * 全局手势解锁：页面任意一次用户交互（pointerdown/keydown/touchstart）即
+ * 创建并 resume AudioContext。浏览器要求音频上下文必须在用户手势中解锁，
+ * 而任务完成庆祝发生在后台（非手势上下文）——若用户只发消息、没点过桌宠，
+ * 完成音效/语音会静默。挂载时调用一次，幂等。
+ */
+export function armAutoplayUnlock() {
+  if (unlockArmed) return
+  unlockArmed = true
+  const unlock = () => {
+    ensureAudio()
+    window.removeEventListener('pointerdown', unlock)
+    window.removeEventListener('keydown', unlock)
+    window.removeEventListener('touchstart', unlock)
+  }
+  window.addEventListener('pointerdown', unlock)
+  window.addEventListener('keydown', unlock)
+  window.addEventListener('touchstart', unlock)
+}
+
 /* ---------------- 离线语音（edge-tts 预合成，base64 内嵌） ---------------- */
 
 import { VOICES } from './voice.generated.js'

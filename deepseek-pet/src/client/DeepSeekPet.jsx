@@ -6,7 +6,7 @@ import {
   stateFromSnapshot, streamFromSnapshot,
 } from './pet-state.js'
 import {
-  beep, getVolume, isMuted, playCelebrate, playPoke, playSad,
+  armAutoplayUnlock, beep, getVolume, isMuted, playCelebrate, playPoke, playSad,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.js'
 
@@ -241,6 +241,9 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       if (Number.isFinite(savedScale) && savedScale >= .65 && savedScale <= 1.4) setScale(savedScale)
     } catch {}
   }, [])
+
+  // 页面任意一次用户交互即解锁音频（自动播放策略；完成庆祝在后台触发，不能依赖点桌宠）
+  useEffect(() => { armAutoplayUnlock() }, [])
 
   const stream = streamFromSnapshot(snapshot)
   const streamText = stream.reply || stream.reasoning
