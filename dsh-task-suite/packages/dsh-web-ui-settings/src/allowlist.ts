@@ -17,6 +17,7 @@
 export const FAMILY_NAMESPACES = [
   'task-board',
   'live-stats',
+  'describe-image',
   'skin-background',
 ] as const
 
@@ -31,6 +32,8 @@ const NAMESPACE_ALIASES: Readonly<Record<string, string | null>> = {
   'task-board': 'task-board',
   'dsh-live-stats': 'live-stats',
   'live-stats': 'live-stats',
+  'describe-image': 'describe-image',
+  'dsh-tool-describe-image': 'describe-image',
   'dsh-skins': 'skin-background',
   'dsh-client-ui-skin-center': 'skin-background',
   'skin-center': 'skin-background',

@@ -57,6 +57,7 @@ const PACKAGE_SOURCES = [
   'packages/dsh-git-graph',
   'packages/dsh-aionui-panel',
   'packages/dsh-web-ui-settings',
+  'packages/dsh-tool-describe-image',
   'packages/dsh-skins',          // 皮肤聚合载体（含 skins/ 资产），skin-center 宿主解析需要
   'packages/skins/skin-center',
 ]

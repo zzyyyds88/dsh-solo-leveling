@@ -38,6 +38,7 @@
     "@zzyyyds88/dsh-client-ui-git-graph": "workspace:*",
     "@zzyyyds88/dsh-live-stats": "workspace:*",
     "@zzyyyds88/dsh-client-ui-web-ui-settings": "workspace:*",
+    "@zzyyyds88/dsh-tool-describe-image": "workspace:*",
     "@zzyyyds88/dsh-skins": "workspace:*",
     "@zzyyyds88/dsh-client-ui-skin-center": "workspace:*"
   }

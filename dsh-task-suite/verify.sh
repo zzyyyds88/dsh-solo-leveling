@@ -16,8 +16,8 @@ LIVE=0
 [ "${1:-}" = "--live" ] && LIVE=1
 FAIL=0
 
-PACKAGES="dsh-task-suite-all dsh-client-ui-task-board dsh-live-stats dsh-client-ui-git-graph dsh-client-ui-aionui-panel dsh-client-ui-web-ui-settings dsh-skins dsh-client-ui-skin-center"
-PATCH_ROWS="ui-web-ui-compat ui-web-ui-settings ui-dsh-aionui-panel ui-task-board ui-git-graph live-stats ui-skin-center"
+PACKAGES="dsh-task-suite-all dsh-client-ui-task-board dsh-live-stats dsh-client-ui-git-graph dsh-client-ui-aionui-panel dsh-client-ui-web-ui-settings dsh-tool-describe-image dsh-skins dsh-client-ui-skin-center"
+PATCH_ROWS="ui-web-ui-compat ui-web-ui-settings ui-dsh-aionui-panel ui-task-board ui-git-graph live-stats describe-image ui-skin-center"
 
 echo "== 1) 套件包已装入测试 profile（node_modules/@zzyyyds88/）=="
 for pkg in $PACKAGES; do
@@ -72,7 +72,7 @@ for row in $PATCH_ROWS; do
     echo "  [FAIL] patch 缺行：$row"; MISSING=1
   fi
 done
-[ "$MISSING" -eq 0 ] && echo "  [PASS] 聚合包 7 行全部挂载" || FAIL=1
+[ "$MISSING" -eq 0 ] && echo "  [PASS] 聚合包 8 行全部挂载（含 describe-image）" || FAIL=1
 if grep -q "name: '@zzyyyds88/" "$PATCH"; then
   echo "  [PASS] patch 行引用 @zzyyyds88 包名"
 else
@@ -96,7 +96,7 @@ if [ "$LIVE" -eq 1 ]; then
     HTML="$(curl -s --max-time 8 "$BASE/")"
     # 每个套件插件的 bundle URL 都应出现在 __DSH_BOOT__ 中
     BOOT_MISSING=0
-    for pkg in dsh-task-suite-all dsh-client-ui-task-board dsh-live-stats dsh-client-ui-git-graph dsh-client-ui-aionui-panel dsh-client-ui-web-ui-settings dsh-client-ui-skin-center; do
+    for pkg in dsh-task-suite-all dsh-client-ui-task-board dsh-live-stats dsh-client-ui-git-graph dsh-client-ui-aionui-panel dsh-client-ui-web-ui-settings dsh-tool-describe-image dsh-client-ui-skin-center; do
       if echo "$HTML" | grep -q "/plugins/@zzyyyds88/$pkg/client.js"; then
         echo "  [PASS] boot 含 $pkg"
       else

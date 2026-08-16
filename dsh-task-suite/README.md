@@ -7,7 +7,8 @@
 > 的「深海女仆工坊」（maid-atelier）皮肤。
 >
 > 覆盖用户点名要的功能：**任务看板 · 实时令牌统计 · 实时吞吐统计 · Git 图谱 ·
-> 右侧面板（预览 + 文件/变更）· 皮肤设置（皮肤中心）+ 皮肤全家桶（11 款）**。
+> 右侧面板（预览 + 文件/变更）· 图像理解（describe_image 工具 + 配置卡）·
+> 皮肤设置（皮肤中心）+ 皮肤全家桶（11 款）**。
 
 ---
 
@@ -31,12 +32,13 @@
 | 实时吞吐统计 | `@zzyyyds88/dsh-live-stats` | 会话状态行流式 token 估算（~ 启发式），provider 用量到达自动换真实值 |
 | Git 图谱 | `@zzyyyds88/dsh-client-ui-git-graph` | 分支选择器 + 提交历史 + 分支泳道图谱（host 端 git 服务 + 前端图谱） |
 | 右侧面板 | `@zzyyyds88/dsh-client-ui-aionui-panel` | 文件树 + 多标签预览（md/html/code/diff/csv/pdf/office/图片）+ SCM stage/unstage/discard，宽度拖拽与折叠持久化 |
+| 图像理解 | `@zzyyyds88/dsh-tool-describe-image` | 纯文本模型获得视觉：`describe_image` 工具把图片（本地路径 / http(s) URL / 附件引用）交给配置的 OpenAI 兼容视觉端点（Qwen-VL / GLM-4V / GPT-4o / 本地 Ollama 等），**只有返回文本进会话**；输入框加图片按钮；端点/模型/密钥/默认指令在「设置 → 插件 → 插件配置 → Image understanding」卡配置，即时生效 |
 | 设置中心 | `@zzyyyds88/dsh-client-ui-web-ui-settings` | 「设置 → 插件 → 插件配置」Web UI 插件组卡片 + 社区插件索引 |
 | 皮肤中心 | `@zzyyyds88/dsh-client-ui-skin-center` | 皮肤列表 / 试穿 / 一键应用（host `/api/skin-center/*`，热切换不重启） |
 | 皮肤聚合 | `@zzyyyds88/dsh-skins` | 11 款皮肤资产内置（blue-fantasy / dragon-heir / harbor / miku / minecraft / qq98 / ths / trading / whale-song / xp / **maid-atelier**） |
 | 聚合插件 | `@zzyyyds88/dsh-task-suite-all` | 一个包装齐上面全部（cordis.patch.yml 汇总各行 + compat shim 内嵌） |
 
-未抽取：pet（桌宠，工作区另有 `deepseek-pet/`）、ssh、remote-web-ui、liangshen、describe-image。
+未抽取：pet（桌宠，工作区另有 `deepseek-pet/`）、ssh、remote-web-ui、liangshen。
 
 ## 3. 关键设计决策
 
@@ -106,12 +108,13 @@ scripts/test-env-stop.sh && scripts/test-env-reset.sh
 
 ## 6. 验证结论（2026-08-16，test-env 3090）
 
-- 构建：21 个包全部 `tsdown` 构建成功；`aggregate.mjs --check` 与
+- 构建：22 个包全部 `tsdown` 构建成功；`aggregate.mjs --check` 与
   `skin-center-bundles --check` 通过。
 - 测试：全仓 vitest 通过（task-board 153 / live-stats 30 / web-ui-settings 35 /
-  git-graph 77 / aionui-panel 160 / 皮肤各包 + skin-center 85 / maid-atelier 83 等，
-  合计 690+ 断言）；typecheck 通过。
-- 运行：boot 清单含全部 7 个插件 + maid-atelier 皮肤；8 个 client bundle 语法
-  通过、路由 200；服务日志无错误关键字（无 TDZ / 无 duplicate entry id）。
+  git-graph 77 / aionui-panel 160 / describe-image 140 / 皮肤各包 + skin-center 85 /
+  maid-atelier 83 等，合计 830+ 断言）；typecheck 通过。
+- 运行：boot 清单含全部 8 个插件 + maid-atelier 皮肤；9 个 client bundle 语法
+  通过、路由 200；`/describe-image/attach|raw` 路由已注册（400/404 语义正确）；
+  服务日志无错误关键字（无 TDZ / 无 duplicate entry id）。
 - 皮肤热切换闭环：`/api/skin-center/apply` whale-song → maid-atelier → official
   → maid-atelier，boot 清单每次都正确跟随（配置 watcher 秒级生效）。

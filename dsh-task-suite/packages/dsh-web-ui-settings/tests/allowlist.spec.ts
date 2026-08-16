@@ -53,12 +53,14 @@ describe('resolveNamespaceEntry', () => {
     expect(resolveNamespaceEntry('dsh-client-ui-task-board')).toBe('task-board')
     expect(resolveNamespaceEntry('dsh-skins')).toBe('skin-background')
     expect(resolveNamespaceEntry('dsh-live-stats')).toBe('live-stats')
+    expect(resolveNamespaceEntry('dsh-tool-describe-image')).toBe('describe-image')
   })
 
   it('passes bare family namespaces through', () => {
     expect(resolveNamespaceEntry('live-stats')).toBe('live-stats')
     expect(resolveNamespaceEntry('task-board')).toBe('task-board')
     expect(resolveNamespaceEntry('skin-background')).toBe('skin-background')
+    expect(resolveNamespaceEntry('describe-image')).toBe('describe-image')
   })
 
   it('ignores packages without a settings namespace and unknown names', () => {
@@ -74,12 +76,14 @@ describe('composeAllowlist', () => {
   const registered = [
     'task-board',
     'live-stats',
+    'describe-image',
     'skin-background',
     'web-search-deepseek',
   ]
 
   it('falls back to the family list when the user configured none', () => {
     expect(composeAllowlist([], registered)).toEqual([
+      'describe-image',
       'live-stats',
       'skin-background',
       'task-board',
