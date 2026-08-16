@@ -202,8 +202,11 @@ if (!apiproxyHit || !connectionHit) {
 }
 console.log(`[1b/5] 门闸基础校验就位（webserver: ${gateHit}）`);
 
-// 2) 标准安装插件包（dsh plugin add：装 node_modules + 进 profile bundles，不再手工拷目录/写 insert 行）
-//    检测 profile 是否已装（bundles 含包名）；未装则 npm pack 后 dsh plugin --profile web add。
+// 2) 标准安装/升级插件包（dsh plugin add：装 node_modules + 进 profile bundles，不再手工拷目录/写 insert 行）
+//    - 未装（bundles 缺包名）→ npm pack → dsh plugin add（全新安装）
+//    - 已装但 lib 内容与项目不一致（源码改过/大版本变更）→ remove + add（升级，
+//      解决 pnpm 对同路径同版本 tgz 不刷新的问题）
+//    - 已装且为最新 → 跳过
 const hasBundleEntry = (name) => {
   try {
     const manifest = JSON.parse(readFileSync(join(profileDir, "package.json"), "utf8"));
@@ -211,10 +214,24 @@ const hasBundleEntry = (name) => {
   } catch { return false; }
 };
 const stdInstalled = hasBundleEntry("dsh-host-access-gate") && hasBundleEntry("dsh-client-ui-access-gate");
-if (stdInstalled) {
-  console.log("[2/5] 插件已标准安装（bundles 含 dsh-host-access-gate / dsh-client-ui-access-gate，跳过）");
+/** 已装包的 lib/index.js 与项目源码内容是否不一致（不一致 = 需要升级）。 */
+const installedDiffers = (name, projectDir) => {
+  try {
+    const installed = readFileSync(join(profileDir, "node_modules", name, "lib", "index.js"), "utf8");
+    const source = readFileSync(join(projectDir, "lib", "index.js"), "utf8");
+    return installed !== source;
+  } catch {
+    return !existsSync(join(projectDir, "lib", "index.js")) ? false : true;
+  }
+};
+const hostDiffers = installedDiffers("dsh-host-access-gate", PLUGIN_SRC);
+const clientDiffers = installedDiffers("dsh-client-ui-access-gate", CLIENT_PLUGIN_SRC);
+const needUpgrade = stdInstalled && (hostDiffers || clientDiffers);
+
+if (stdInstalled && !needUpgrade) {
+  console.log("[2/5] 插件已标准安装且为最新（bundles 含两包，跳过）");
 } else if (dryRun) {
-  console.log("  （--dry-run，将 npm pack 两个插件包 → dsh plugin --profile web add）");
+  console.log(`  （--dry-run，将 npm pack 两个插件包 → dsh plugin --profile web ${needUpgrade ? "remove + " : ""}add）`);
 } else {
   for (const rel of PLUGIN_FILES) {
     const src = join(PLUGIN_SRC, rel);
@@ -234,15 +251,21 @@ if (stdInstalled) {
     tgzs.push(join(packTmp, name));
   }
   const profileName = basename(profileDir);
+  const env = { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") };
+  if (needUpgrade) {
+    const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "dsh-host-access-gate", "dsh-client-ui-access-gate"], {
+      cwd: profileDir, env, encoding: "utf8",
+    });
+    if (rm.status !== 0) fail(`dsh plugin remove 失败（exit ${rm.status}）：${rm.stderr ?? rm.stdout}`);
+    console.log("  （已移除旧版，重新安装最新构建）");
+  }
   const add = spawnSync("dsh", ["plugin", "--profile", profileName, "add", ...tgzs], {
-    cwd: profileDir,
-    env: { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
-    encoding: "utf8",
+    cwd: profileDir, env, encoding: "utf8",
   });
   if (add.status !== 0) {
     fail(`dsh plugin add 失败（exit ${add.status}）：${add.stderr ?? add.stdout}`);
   }
-  console.log("[2/5] 标准安装插件包 → bundles 已加入 dsh-host-access-gate / dsh-client-ui-access-gate ✓");
+  console.log(`[2/5] ${needUpgrade ? "升级" : "标准安装"}插件包 → bundles 已更新 dsh-host-access-gate / dsh-client-ui-access-gate ✓`);
 }
 
 // 3) 合并 cordis.patch.yml（含旧行 web-auth/ui-web-auth 迁移）
