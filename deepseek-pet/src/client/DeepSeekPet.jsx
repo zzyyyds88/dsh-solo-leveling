@@ -6,7 +6,8 @@ import {
   stateFromSnapshot, streamFromSnapshot,
 } from './pet-state.js'
 import {
-  armAutoplayUnlock, audioError, audioState, beep, getVolume, isMuted, playCelebrate, playPoke, playSad,
+  alertEnabled, alertToggles, armAutoplayUnlock, audioError, audioState, beep, getVolume,
+  isMuted, playCelebrate, playPoke, playPrompt, playSad, setAlertEnabled,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.js'
 
@@ -47,6 +48,14 @@ const COMFORT_LINES = Object.freeze([
   '别担心，我收拾一下残局',
   '这个工具不听话，我换个方式',
 ])
+/** 音效提醒开关的显示标签（诊断面板）。 */
+const ALERT_LABELS = Object.freeze({
+  celebrate: '任务完成提醒',
+  error: '出错安慰',
+  prompt: '提问/审批提示',
+  poke: '戳一戳音效',
+  headpat: '摸头音效',
+})
 /**
  * 语音台词 key 候选（voice.generated.js）。
  * 分两套，避免同一事件被播两次：
@@ -141,6 +150,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const [confetti, setConfetti] = useState([])
   const [muted, setMuted] = useState(() => isMuted())
   const [diagOpen, setDiagOpen] = useState(false)
+  const [alertVer, setAlertVer] = useState(0)
   const [activeReaction, setActiveReaction] = useState(() => presentationForState(initialEffective, 0, {
     idleMs: initialIdleMsRef.current, visualMs: 0, waitingMs: 0,
   }).reaction)
@@ -425,8 +435,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   /** 任务完成庆祝：琶音 + 跳跃 + 纸屑 + 台词 + 语音。 */
   const celebrateCompletion = useCallback(() => {
     unlockAudio()
-    playCelebrate()
-    speakVoice(pickVoiceKey(VOICE_FOR_EVENT.success))
+    if (alertEnabled('celebrate')) {
+      playCelebrate()
+      speakVoice(pickVoiceKey(VOICE_FOR_EVENT.success))
+    }
     setCollapsed(false)
     setCelebrating(true)
     setConfetti(Array.from({ length: CONFETTI_COUNT }, (_, index) => ({
@@ -481,6 +493,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
   const comfortError = useCallback(() => {
     unlockAudio()
+    if (!alertEnabled('error')) return
     playSad()
     speakVoice(pickVoiceKey(VOICE_FOR_EVENT.error))
     speak(COMFORT_LINES[Math.floor(Math.random() * COMFORT_LINES.length)], '')
@@ -496,15 +509,15 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     }
   }, [effectiveVisual.kind, comfortError])
 
-  // 进入等待批准/忙碌/思考等状态时播一句语音（30 秒冷却，避免话痨）
-  const stateVoiceAtRef = useRef(0)
+  // 进入等待批准/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）
   useEffect(() => {
-    const keys = VOICE_FOR_STATE[effectiveVisual.kind]
+    const kind = effectiveVisual.kind
+    if (kind !== 'waiting' && kind !== 'approval' && kind !== 'busy' && kind !== 'thinking') return
+    const keys = VOICE_FOR_STATE[kind]
     if (!keys?.length) return
-    const now = Date.now()
-    if (now - stateVoiceAtRef.current < 30_000) return
-    stateVoiceAtRef.current = now
+    if (!alertEnabled('prompt')) return
     unlockAudio()
+    playPrompt()
     speakVoice(pickVoiceKey(keys))
   }, [effectiveVisual.kind])
 
@@ -524,13 +537,28 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const tap = useCallback(() => {
     if (dragged.current) { dragged.current = false; return }
     unlockAudio()
-    playPoke()
-    speakVoice(pickVoiceKey(['poke1', 'poke2', 'poke3']))
+    if (alertEnabled('poke')) {
+      playPoke()
+      speakVoice(pickVoiceKey(['poke1', 'poke2', 'poke3']))
+    }
     const words = tapTextFor(effectiveVisual.kind)
     speak(words[Math.floor(Math.random() * words.length)], '')
   }, [effectiveVisual.kind, speak])
 
-  /** 单击计数：三连击触发诊断，否则 280ms 后正常反应。 */
+  /** 切换静音（双击 / 工具条按钮共用）。折叠态双击仍是展开。 */
+  const handleToggleMute = useCallback(() => {
+    if (collapsed) {
+      setCollapsed(false)
+      return
+    }
+    unlockAudio()
+    const nextMuted = toggleMuted()
+    setMuted(nextMuted)
+    if (alertEnabled('prompt')) speakVoice(nextMuted ? 'muted' : 'unmuted')
+    speak(nextMuted ? '声音已关闭 🔇（双击恢复）' : '声音已开启 🔊（双击静音）', '')
+  }, [collapsed, speak])
+
+  /** 单击计数：三连击触发诊断；两连击（且不再来第三下）切静音；单点戳一戳。 */
   const handleClick = useCallback(() => {
     if (dragged.current) { dragged.current = false; return }
     const now = Date.now()
@@ -538,15 +566,23 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     lastClickAtRef.current = now
     window.clearTimeout(clickTimerRef.current)
     if (clickCountRef.current >= 3) {
+      // 三连击：清掉可能排队的双击静音，直接开诊断
       clickCountRef.current = 0
       setDiagOpen(current => !current)
       return
     }
     clickTimerRef.current = window.setTimeout(() => {
       if (longPressFired.current) { longPressFired.current = false; return }
+      if (clickCountRef.current >= 2) {
+        // 两次点击后 450ms 内没有第三下 → 判定为双击 → 切静音
+        clickCountRef.current = 0
+        handleToggleMute()
+        return
+      }
+      clickCountRef.current = 0
       tap()
-    }, 280)
-  }, [tap])
+    }, 450)
+  }, [tap, handleToggleMute])
 
   /** 长按摸头（700ms）：跳跃庆祝 + 台词 + 音效。 */
   const handlePointerDownForInteraction = useCallback((event) => {
@@ -560,8 +596,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       longPressFired.current = true
       window.clearTimeout(clickTimerRef.current)
       unlockAudio()
-      playCelebrate()
-      speakVoice(pickVoiceKey(['headpat1', 'headpat2']))
+      if (alertEnabled('headpat')) {
+        playCelebrate()
+        speakVoice(pickVoiceKey(['headpat1', 'headpat2']))
+      }
       setCelebrating(true)
       setCollapsed(false)
       speak('嘿嘿，被主人摸头啦～好开心！', '')
@@ -591,20 +629,6 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       window.removeEventListener('pointercancel', cancel)
     }, 1500)
   }, [speak])
-
-  /** 双击：折叠态展开，否则切换静音。 */
-  const handleDoubleClick = useCallback(() => {
-    window.clearTimeout(clickTimerRef.current)
-    if (collapsed) {
-      setCollapsed(false)
-      return
-    }
-    unlockAudio()
-    const nextMuted = toggleMuted()
-    setMuted(nextMuted)
-    speakVoice(nextMuted ? 'muted' : 'unmuted')
-    speak(nextMuted ? '声音已关闭 🔇（双击恢复）' : '声音已开启 🔊（双击静音）', '')
-  }, [collapsed, speak])
 
   /** 诊断面板内容。 */
   const diagLines = useMemo(() => {
@@ -642,7 +666,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       </div>}
       <div className="dsh-live2d-stage">
         <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动/单击/长按/双击/三击 DeepSeek 状态助手'}
-          onClick={handleClick} onDoubleClick={handleDoubleClick} onPointerDown={event => { pointerDown(event); handlePointerDownForInteraction(event) }}
+          onClick={handleClick} onPointerDown={event => { pointerDown(event); handlePointerDownForInteraction(event) }}
           onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={wheelScale}>
           <span className="dsh-live2d-sprites" aria-hidden="true">
             {Object.entries(REACTIONS).map(([name, src]) => <img key={name} src={src} alt="" draggable="false" data-active={name === (collapsed ? 'idle' : activeReaction) ? 'true' : 'false'} />)}
@@ -654,6 +678,12 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       {diagOpen && <section className="dsh-live2d-diag" aria-label="桌宠诊断">
         <header><b>DeepSeek 桌宠诊断</b><button type="button" onClick={() => setDiagOpen(false)} aria-label="关闭诊断">✕</button></header>
         <dl>{diagLines.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        <div className="dsh-live2d-diag-alerts" role="group" aria-label="音效提醒设置">
+          <p>音效提醒</p>
+          {Object.entries(ALERT_LABELS).map(([key, label]) => (
+            <label key={key}><input type="checkbox" checked={alertToggles()[key] !== false} onChange={event => { setAlertEnabled(key, event.target.checked); setAlertVer(version => version + 1) }} />{label}</label>
+          ))}
+        </div>
         <footer>
           <label>音量 <input type="range" min="0" max="100" value={Math.round((getVolume() ?? 1) * 100)} onChange={event => setVolume(Number(event.target.value) / 100)} aria-label="桌宠音量" /></label>
           <button type="button" onClick={() => { unlockAudio(); beep() }}>试音</button>
@@ -662,7 +692,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
         </footer>
       </section>}
       <nav className="dsh-live2d-tools" aria-label="Pet 快捷操作">
-        <button type="button" title={muted ? '声音已关闭（点击开启）' : '声音已开启（点击静音）'} aria-label={muted ? '开启声音' : '静音'} onClick={() => { unlockAudio(); const next = toggleMuted(); setMuted(next); speakVoice(next ? 'muted' : 'unmuted') }}><b>{muted ? '🔇' : '🔊'}</b><span>{muted ? '静音中' : '有声'}</span></button>
+        <button type="button" title={muted ? '声音已关闭（点击开启）' : '声音已开启（点击静音）'} aria-label={muted ? '开启声音' : '静音'} onClick={handleToggleMute}><b>{muted ? '🔇' : '🔊'}</b><span>{muted ? '静音中' : '有声'}</span></button>
         <button type="button" title="最小化 Pet" aria-label="最小化 Pet" onClick={() => setCollapsed(true)}><b>−</b><span>最小化</span></button>
       </nav>
       <section className="dsh-live2d-sessions" data-visible={focusedSession || runningSessions.length ? 'true' : 'false'} aria-label="活跃会话">

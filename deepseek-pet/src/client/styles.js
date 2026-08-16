@@ -39,6 +39,10 @@ export const STYLES = `
 .dsh-live2d-diag footer button:hover{border-color:var(--pet-cyan);color:#fff}
 .dsh-live2d-diag footer label{display:flex;align-items:center;gap:5px;margin-right:auto}
 .dsh-live2d-diag footer input[type=range]{width:76px;height:3px;accent-color:var(--pet-cyan);cursor:pointer}
+.dsh-live2d-diag-alerts{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--pet-line)}
+.dsh-live2d-diag-alerts p{grid-column:1/-1;margin:0 0 2px;font-size:10px;color:var(--dsw-alias-text-tertiary,#8194b6)}
+.dsh-live2d-diag-alerts label{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--dsw-alias-text-secondary,#b8c7df);cursor:pointer;white-space:nowrap}
+.dsh-live2d-diag-alerts input{accent-color:var(--pet-cyan);cursor:pointer}
 @keyframes dsh-pop{from{opacity:0;transform:translateY(5px) scale(.94)}}@keyframes dsh-caret{50%{opacity:0}}
 @keyframes dsh-pet-jump{0%,100%{transform:translateY(0)}35%{transform:translateY(-22px) scale(1.04)}60%{transform:translateY(0) scale(.98)}}
 @keyframes dsh-confetti-fall{0%{opacity:0;transform:translateY(-8px) rotate(var(--cf-rot,0deg))}12%{opacity:1}100%{opacity:0;transform:translateY(230px) translateX(var(--cf-drift,0px)) rotate(calc(var(--cf-rot,0deg) + 320deg))}}

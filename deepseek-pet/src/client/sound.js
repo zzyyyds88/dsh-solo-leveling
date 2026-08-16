@@ -9,7 +9,16 @@
 
 const VOLUME_KEY = 'deepseek-pet:sound'
 
-/** 音量配置（总音量 + 分动作），localStorage 持久化。 */
+/** 各类提醒音效的开关（true = 开启）。用户可在诊断面板配置。 */
+const ALERT_TOGGLES = Object.freeze({
+  celebrate: true, // 任务完成庆祝（琶音+语音+纸屑）
+  error: true,     // 出错安慰（低音+语音）
+  prompt: true,    // 提问/审批提示（等待批准时）
+  poke: true,      // 戳一戳音效
+  headpat: true,   // 摸头庆祝
+})
+
+/** 音量配置（总音量 + 分动作 + 提醒开关），localStorage 持久化。 */
 function loadSettings() {
   try {
     const raw = window.localStorage?.getItem(VOLUME_KEY)
@@ -21,10 +30,11 @@ function loadSettings() {
         voice: clampVolume(parsed.voice),
         sfx: clampVolume(parsed.sfx),
         celebrate: clampVolume(parsed.celebrate),
+        alerts: { ...ALERT_TOGGLES, ...(parsed.alerts && typeof parsed.alerts === 'object' ? parsed.alerts : {}) },
       }
     }
   } catch {}
-  return { muted: false, total: 1, voice: 1, sfx: 1, celebrate: 1 }
+  return { muted: false, total: 1, voice: 1, sfx: 1, celebrate: 1, alerts: { ...ALERT_TOGGLES } }
 }
 
 function clampVolume(value) {
@@ -36,6 +46,22 @@ const settings = loadSettings()
 
 function persist() {
   try { window.localStorage?.setItem(VOLUME_KEY, JSON.stringify(settings)) } catch {}
+}
+
+/** 某类提醒音效是否开启（celebrate/error/prompt/poke/headpat）。 */
+export function alertEnabled(name) {
+  return settings.alerts?.[name] !== false
+}
+
+/** 设置某类提醒音效开关。 */
+export function setAlertEnabled(name, enabled) {
+  settings.alerts = { ...settings.alerts, [name]: enabled === true }
+  persist()
+}
+
+/** 读取全部提醒开关（诊断面板用）。 */
+export function alertToggles() {
+  return { ...settings.alerts }
 }
 
 /** 是否静音（双击桌宠切换）。 */
@@ -185,6 +211,12 @@ export function playSad() {
 /** 提示音（取消静音 / 通用反馈）。 */
 export function beep() {
   bell(880, 0.12, 0.1, 0, null, 'sfx')
+}
+
+/** 提问/审批提示音：两声轻快上行提示（区别于戳音）。 */
+export function playPrompt() {
+  bell(660, 0.18, 0.12, 0, 740, 'sfx')
+  bell(880, 0.22, 0.12, 0.16, 990, 'sfx')
 }
 
 /** 需要用户手势解锁 AudioContext（浏览器自动播放策略）。 */
