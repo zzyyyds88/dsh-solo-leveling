@@ -1,10 +1,11 @@
-# DSH 用户体验升级工作区
+# DSH 我独自升级（dsh-solo-leveling）
 
-> GitHub 开源仓库：**`zzyyyds88/dsh-solo-leveling`**（SSH 远端已配置，建库后推送）
-
-> 本文件夹是**专门用于升级 DeepSeek / DeepSeek Harness（DSH）用户体验**的地方。
-> 凡是「让 DSH 用起来更顺手」的定制、补丁、改进，都放在这里，并留下完整记录，
-> 保证升级后能一键恢复、思路可复用。
+> **个人 DSH 插件集：自研 + 收录。**
+> 这里存放我自己开发的 DeepSeek Harness（DSH）插件，也收录我挑选的好用插件——
+> 它们都围绕同一个目标：**把 DSH 部署在 Linux 服务器上，然后从浏览器、手机、
+> 局域网/公网的其他端随时调用**。
+>
+> 插件总览（正在使用 / 使用方法 / 更新情况 / 维护）见 **[PLUGINS.md](PLUGINS.md)**。
 
 **规矩文件（开工前必读）**：人类贡献指南 [CONTRIBUTING.md](CONTRIBUTING.md) ·
 AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.md](docs/开发规范.md)
