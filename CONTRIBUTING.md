@@ -132,7 +132,7 @@ DSH我独自升级/
 - **命名**：新插件一律 `dsh-` 前缀；客户端 UI 类插件按惯例
   `dsh-client-ui-*`、后端 `dsh-host-*`。
 - **构建工具链**：tsdown（`build/tsdown.client.ts` 预设 vendored 自
-  dsh-web-ui-main）+ lightningcss + typescript；client bundle 有纯度门
+  dsh-task-suite/shared/，同源上游 client 预设）+ lightningcss + typescript；client bundle 有纯度门
   （只能 require 平台表 + INLINE_SAFE 白名单里的包）。
 - **打包产物必须可验证**：每个插件包目录含 `lib/`（构建产物）与 `package.json`；
   验证点写入项目 `verify.sh` 并在测试环境实测。
@@ -140,7 +140,7 @@ DSH我独自升级/
   能上游化（PR / issue）就上游化；第三方生态已有同类时优先复用。
 - **发布（可选，对生态贡献时）**：npm 包 + GitHub 仓库打 `dsh-plugin` 主题标签，
   即会被 Oh-My-DSH / 插件市场等聚合收录；发布节奏与提交规范参考
-  `dsh-web-ui-main/CONTRIBUTING.md`（tag 触发、包版本与 tag 一致）。
+  上游 `dsh-web-ui` 仓库的 CONTRIBUTING.md（tag 触发、包版本与 tag 一致）。
 
 ## 7. 开发规范（强制）
 
@@ -203,7 +203,7 @@ git pull --rebase && git push                                   # 有远端后
 - **插件总览**：仓库的插件清单（正在使用 / 使用方法 / 更新情况 / 维护）维护在
   [PLUGINS.md](PLUGINS.md)，改动插件后同步更新。
 - **禁止入库**（.gitignore 已覆盖）：`node_modules/`、测试环境运行态
-  （`test-envs/` 下 test-env-1 保留 README.md）、第三方参考快照 `dsh-web-ui-main/`
+  （`test-envs/` 下 test-env-1 保留 README.md）、第三方参考快照（`dsh-web-ui-main/` 已删除，可按 `开发备忘.md` 重下）
   （88M，可随时按 `开发备忘.md` 的加速下载命令重新获取）、日志与密钥。
 - **发布到 GitHub 开源检查清单**（仓库名已定：`dsh-solo-leveling`，远端已配）：
   1. 全库自查无敏感信息（口令/密钥/token；`git grep -i password` 复查）；
@@ -249,6 +249,6 @@ git pull --rebase && git push                                   # 有远端后
 - awesome-dsh-plugin：<https://github.com/beancookie/awesome-dsh-plugin>
 - Oh-My-DSH 聚合目录：<https://github.com/like-study1/Oh-My-DSH>
 - dsh-plugin-marketplace：<https://github.com/AwesomeHou/dsh-plugin-marketplace>
-- dsh-web-ui 全家桶（本工作区内的参考实现）：`dsh-web-ui-main/` 的
-  [CONTRIBUTING.md](dsh-web-ui-main/CONTRIBUTING.md) 与 [AGENTS.md](dsh-web-ui-main/AGENTS.md)
+- dsh-web-ui 全家桶（上游参考）：[zhu1090093659/dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)
+  （本地快照已删除，按 `开发备忘.md` 加速命令可重下）
 - 插件开发备忘（GitHub 加速下载等）：[开发备忘.md](开发备忘.md)

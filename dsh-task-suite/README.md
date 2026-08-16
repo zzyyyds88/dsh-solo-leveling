@@ -19,7 +19,7 @@
 | 上游仓库 | <https://github.com/zhu1090093659/dsh-web-ui> |
 | 抽取基线 | `v0.1.17`（2026-08-16，commit `986845a`，"chore(release): bump to 0.1.17"） |
 | 上游许可 | Apache-2.0（各包内 LICENSE） |
-| 本地参考快照 | 工作区 `dsh-web-ui-main/`（v0.1.16，已过时，仅作对照；git 忽略） |
+| 上游仓库 | [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（本地快照已删除，按 `开发备忘.md` 加速命令可重下） |
 | 新增皮肤 | <https://github.com/Small-tailqwq/dsh-deep-whale> → `maid-atelier`（CC BY-NC-SA 4.0，见其 LICENSE/NOTICE） |
 | 本套件 scope | `@zzyyyds88`（原上游 `@linxin666` 全局改名，含 package.json / tsdown / cordis.patch.yml / skin.json / skin-switch / 生成物） |
 

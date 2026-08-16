@@ -41,7 +41,7 @@ npm login                      # 需要 npmjs.com 账号（当前本机尚未登
 - **发布前必须先构建出 `lib/`**（`dsh plugin add` 装的是 npm 包里的预构建产物，
   不会替你跑 build；git 安装才需要 prepare 脚本——见 §4）。
 - 客户端插件（`dsh-client-ui-*`）bundle 构建用 tsdown，参照
-  `dsh-web-ui-main/shared/tsdown.client.ts`。
+  `dsh-task-suite/shared/tsdown.client.ts`（或各项目 `build/tsdown.client.ts`，同源 vendored 副本）。
 
 ## 4. 发布与安装
 
