@@ -5,7 +5,8 @@
 > 它们都围绕同一个目标：**把 DSH 部署在 Linux 服务器上，然后从浏览器、手机、
 > 局域网/公网的其他端随时调用**。
 >
-> 插件总览（正在使用 / 使用方法 / 更新情况 / 维护）见 **[PLUGINS.md](PLUGINS.md)**。
+> **插件源码整理完善中，暂未上传**；当前仓库先公开规范、文档与插件总览
+> （[PLUGINS.md](PLUGINS.md)），插件完善后将随仓库发布。
 
 **规矩文件（开工前必读）**：人类贡献指南 [CONTRIBUTING.md](CONTRIBUTING.md) ·
 AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.md](docs/开发规范.md)
