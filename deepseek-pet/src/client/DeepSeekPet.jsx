@@ -10,6 +10,7 @@ import {
   isMuted, playCelebrate, playPoke, playPrompt, playSad, setAlertEnabled,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.js'
+import { isPetEnabled, subscribeAppSettings } from './app-settings.js'
 
 const EMPTY_SNAPSHOT = Object.freeze({
   openState: 'open', running: false, runningCalls: [], partial: null,
@@ -111,6 +112,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const subscribePressure = useCallback(listener => pressureFace?.subscribe(listener) ?? (() => {}), [pressureFace])
   const getPressure = useCallback(() => pressureFace?.getSnapshot() ?? EMPTY_PRESSURE, [pressureFace])
   const pressure = useSyncExternalStore(subscribePressure, getPressure, getPressure)
+  const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
   const immediate = stateFromSnapshot(session ? snapshot : null)
   const taskActive = Boolean(snapshot.running || snapshot.runningCalls?.length || snapshot.partial || snapshot.pending?.length || snapshot.queue?.length)
   const contextRatio = Number.isFinite(pressure?.projectedTokens) && Number.isFinite(pressure?.contextWindow)
@@ -182,12 +184,12 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       if (immediate.kind !== 'idle') commit(immediate)
       else {
         commit(completionState())
-        fireCompletionCelebration()
+        if (petEnabled) fireCompletionCelebration()
         completionTimer = window.setTimeout(() => commit(immediate), 8000)
       }
     } else transitionTimer = window.setTimeout(() => commit(immediate), immediate.kind === 'error' ? 100 : 720)
     return () => { window.clearTimeout(transitionTimer); window.clearTimeout(completionTimer) }
-  }, [immediate.kind, immediate.label, immediate.detail, snapshot.running])
+  }, [immediate.kind, immediate.label, immediate.detail, snapshot.running, petEnabled])
 
   useEffect(() => {
     setPhase(0)
@@ -471,6 +473,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   // 普通对话里 snapshot.running 恒为 false（那是 agent 任务循环的标志），完成时只有
   // partial 清空这一信号；agent 任务的 running→idle 已由上面 effect 处理（3 秒去重兜底）。
   useEffect(() => {
+    if (!petEnabled) return
     const hasStreamContent = partialHasText(snapshot.partial)
     const wasStreamContent = wasPartialRef.current
     wasPartialRef.current = hasStreamContent
@@ -480,7 +483,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     const kind = effectiveVisual.kind
     if (kind === 'error' || kind === 'tool-error') return // 出错走安慰
     fireCompletionCelebration()
-  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration, updateCompletionDiag])
+  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration, updateCompletionDiag, petEnabled])
 
   /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
   const comfortError = useCallback(() => {
@@ -494,16 +497,18 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   // 出错 / 工具失败时播放安慰音（仅状态真实切换时，不重复打扰）
   const prevKindRef = useRef(effectiveVisual.kind)
   useEffect(() => {
+    if (!petEnabled) return
     const prev = prevKindRef.current
     prevKindRef.current = effectiveVisual.kind
     if (prev !== effectiveVisual.kind && (effectiveVisual.kind === 'error' || effectiveVisual.kind === 'tool-error')) {
       comfortError()
     }
-  }, [effectiveVisual.kind, comfortError])
+  }, [effectiveVisual.kind, comfortError, petEnabled])
 
   // 进入等待批准/提问/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）。
   // waiting 用 effectiveVisual.promptKind 区分「审批」与「提问」，播不同台词。
   useEffect(() => {
+    if (!petEnabled) return
     const kind = effectiveVisual.kind
     if (kind !== 'waiting' && kind !== 'approval' && kind !== 'busy' && kind !== 'thinking') return
     if (!alertEnabled('prompt')) return
@@ -515,7 +520,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     unlockAudio()
     playPrompt()
     speakVoice(pickVoiceKey(keys))
-  }, [effectiveVisual.kind, effectiveVisual.promptKind])
+  }, [effectiveVisual.kind, effectiveVisual.promptKind, petEnabled])
 
   useEffect(() => () => {
     window.clearTimeout(celebrateTimer.current)
@@ -649,6 +654,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const bubbleTitle = tapText || (showStream ? activityLabel : effectiveVisual.label)
   const bubbleDetail = tapDetail || (showStream ? typedStream : effectiveVisual.detail)
   const visibleFrame = !collapsed && FRAME_FOR_REACTION[activeReaction] === activeFrame ? activeFrame : ''
+  if (!petEnabled) return null
   return (
     <aside data-dsh-live2d-root data-collapsed={collapsed ? 'true' : 'false'} data-pet-state={effectiveVisual.kind}
       data-reaction-pending={reactionPending ? 'true' : 'false'} data-tapped={tapText ? 'true' : 'false'}

@@ -109,13 +109,76 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   assert.match(html, /等待你的回答/)
   assert.doesNotMatch(html, /dsh-live2d-pending|<fieldset|请选择下一步|>提交</)
 
-  const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, settingsCard.business))
+  const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, { ...settingsCard.business, defaultOpen: true }))
+  // 官方 PluginCard 版式：li 卡片 → 头部按钮（名称+描述+箭头）→ 底部 放弃/保存
+  assert.match(cardHtml, /<li[^>]*dshp-card/)
+  assert.match(cardHtml, /dshp-head/)
   assert.match(cardHtml, /DeepSeek 桌宠/)
+  assert.match(cardHtml, /dshp-description/)
+  assert.match(cardHtml, /dshp-chevron/)
+  assert.match(cardHtml, /role="switch"/)
+  assert.match(cardHtml, /桌宠开关/)
   assert.match(cardHtml, /任务完成提醒/)
   assert.match(cardHtml, /提问/)
-  assert.match(cardHtml, /保存/)
+  assert.match(cardHtml, /dshp-save/)
+  assert.match(cardHtml, />保存</)
+  assert.match(cardHtml, />放弃</)
 
   for (const cleanup of cleanups.reverse()) cleanup()
+  delete globalThis.window
+  delete globalThis.document
+})
+
+test('桌宠开关关闭时组件不渲染', async () => {
+  const storage = new Map([['deepseek-pet:app', JSON.stringify({ enabled: false })]])
+  let moduleRecord
+  globalThis.window = {
+    __ModuleLoader__: {
+      load(record) { moduleRecord = record },
+    },
+    localStorage: {
+      getItem(key) { return storage.get(key) ?? null },
+      setItem(key, value) { storage.set(key, String(value)) },
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {},
+  }
+  globalThis.document = {
+    querySelector() { return null },
+    createElement() { return { dataset: {}, textContent: '', remove() {} } },
+    head: { append() {} },
+  }
+
+  await import(`../../lib/client.js?disabled=${Date.now()}`)
+  const plugin = moduleRecord.factory((specifier) => {
+    if (specifier === 'react') return ReactModule
+    if (specifier === 'react/jsx-runtime') return JsxRuntime
+    throw new Error(`unexpected client external: ${specifier}`)
+  })
+  const registrations = []
+  const ctx = {
+    effect(callback) { const cleanup = callback(); return () => cleanup?.() },
+    sessions: {
+      binding() { return undefined },
+      open() {},
+    },
+    slots: {
+      inject(name, callback) { return callback() },
+      register(options, Component) {
+        registrations.push({ options, Component, business: options.inject?.() ?? {} })
+        return () => {}
+      },
+    },
+  }
+  plugin.apply(ctx)
+  const pet = registrations.find(entry => entry.options.id === 'deepseek-pet')
+  const listSnapshot = { current: 'focus', ids: [], byId: {} }
+  const html = renderToStaticMarkup(React.createElement(pet.Component, {
+    useSessions: selector => selector(listSnapshot),
+    ...pet.business,
+  }))
+  assert.equal(html, '')
   delete globalThis.window
   delete globalThis.document
 })
