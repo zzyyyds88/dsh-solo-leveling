@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   billedInput, cacheHitRate, detectTrend, estimateCost, formatTokens,
-  overBudget, pushCostSample, usageFromSnapshot,
+  ledgerRevisionOf, overBudget, pushCostSample, usageFromSnapshot,
 } from '../../src/client/ledger.js'
 
 test('usageFromSnapshot 从轨迹视图聚合累计用量', () => {
@@ -81,4 +81,11 @@ test('detectTrend 峰谷判定', () => {
   assert.equal(detectTrend(drop), 'valley')
   // 历史不足 3 点 → normal
   assert.equal(detectTrend([{ t: minutesAgo(1), cost: 1 }]), 'normal')
+})
+
+test('ledgerRevisionOf 稳定为数字（订阅用快照）', () => {
+  const rev = ledgerRevisionOf()
+  assert.equal(typeof rev, 'number')
+  assert.ok(Number.isSafeInteger(rev))
+  assert.equal(ledgerRevisionOf(), rev) // 无变更时稳定
 })

@@ -13,8 +13,8 @@ import {
 import { isPetEnabled, subscribeAppSettings } from './app-settings.js'
 import {
   billedInput, cacheHitRate, detectTrend, estimateCost, formatTokens, isLedgerEnabled,
-  ledgerBudget, overBudget, pushCostSample, subscribeLedgerSettings,
-  usageFromSnapshot,
+  ledgerBudget, ledgerRates, ledgerRevisionOf, overBudget, pushCostSample,
+  subscribeLedgerSettings, usageFromSnapshot,
 } from './ledger.js'
 
 const EMPTY_SNAPSHOT = Object.freeze({
@@ -119,6 +119,9 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const pressure = useSyncExternalStore(subscribePressure, getPressure, getPressure)
   const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
   const ledgerEnabled = useSyncExternalStore(subscribeLedgerSettings, isLedgerEnabled, isLedgerEnabled)
+  // 订阅修订号：费率/预算变化（即使 enabled 不变）也触发重渲染，账房数字即时刷新
+  const ledgerRevision = useSyncExternalStore(subscribeLedgerSettings, ledgerRevisionOf, ledgerRevisionOf)
+  void ledgerRevision
   const immediate = stateFromSnapshot(session ? snapshot : null)
   const taskActive = Boolean(snapshot.running || snapshot.runningCalls?.length || snapshot.partial || snapshot.pending?.length || snapshot.queue?.length)
   const contextRatio = Number.isFinite(pressure?.projectedTokens) && Number.isFinite(pressure?.contextWindow)
@@ -531,41 +534,49 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
 
   /* ---------- 账房：token 用量 / 缓存命中率 / 预估价格 / 预算封顶 ---------- */
   const usage = useMemo(() => (petEnabled && ledgerEnabled ? usageFromSnapshot(snapshot) : null), [snapshot, petEnabled, ledgerEnabled])
-  const ledgerCost = useMemo(() => usage ? estimateCost(usage) : 0, [usage])
-  const ledgerHit = useMemo(() => usage ? cacheHitRate(usage) : null, [usage])
-  const ledgerLeft = Math.max(0, ledgerBudget() - ledgerCost)
-  const ledgerOver = overBudget(ledgerCost, ledgerBudget())
+  // 费率/预算每次渲染直读（修订号订阅保证费率变化后重渲染，这里拿到新值）
+  const ledgerCost = usage ? estimateCost(usage, ledgerRates()) : 0
+  const ledgerHit = usage ? cacheHitRate(usage) : null
+  const ledgerBudgetNow = ledgerBudget()
+  const ledgerLeft = Math.max(0, ledgerBudgetNow - ledgerCost)
+  const ledgerOver = overBudget(ledgerCost, ledgerBudgetNow)
   const costHistoryRef = useRef([])
   const peakFlagRef = useRef(false)
   const valleyFlagRef = useRef(false)
   const capAlertedAtRef = useRef(0)
+  const lastSampledCostRef = useRef(null)
+  const [ledgerTrend, setLedgerTrend] = useState('normal')
 
-  // 峰谷/封顶提醒：用量有实质变化（成本比上次采样多 1 分以上）才采样一次，
-  // 避免每帧快照抖动触发误报；封顶提醒 30 分钟内只响一次。
+  // 峰谷/封顶提醒：成本相比上次采样有实质变化（≥1 分）才采样一次，避免流式快照
+  // 每帧重算时把相同成本重复入历史、稀释峰谷判定；封顶提醒 30 分钟内只响一次。
   useEffect(() => {
     if (!petEnabled || !ledgerEnabled || !ledgerOpen || !usage) return
+    if (lastSampledCostRef.current !== null && Math.abs(ledgerCost - lastSampledCostRef.current) < 0.01) return
+    lastSampledCostRef.current = ledgerCost
     const history = pushCostSample(costHistoryRef.current, ledgerCost)
     costHistoryRef.current = history
     const delta = history.length >= 2 ? history[history.length - 1].cost - history[history.length - 2].cost : 0
-    if (Math.abs(delta) < 0.01) return
     const trend = detectTrend(history)
     if (trend === 'peak' && !peakFlagRef.current) {
       peakFlagRef.current = true
       valleyFlagRef.current = false
+      setLedgerTrend('peak')
       speak(`💸 价格高峰！这一阵子烧得飞快（约 +¥${delta.toFixed(2)}），悠着点～`, '')
     } else if (trend === 'valley' && !valleyFlagRef.current) {
       valleyFlagRef.current = true
       peakFlagRef.current = false
+      setLedgerTrend('valley')
       speak('🕊️ 价格低谷！这会儿几乎没烧钱，安心摸鱼～', '')
     } else if (trend === 'normal') {
       peakFlagRef.current = false
       valleyFlagRef.current = false
+      setLedgerTrend('normal')
     }
     if (ledgerOver && Date.now() - capAlertedAtRef.current > 30 * 60_000) {
       capAlertedAtRef.current = Date.now()
-      speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudget()} 的封顶线！`, '')
+      speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudgetNow} 的封顶线！`, '')
     }
-  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, speak])
+  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, ledgerBudgetNow, speak])
 
   /** 账房面板行数据（供渲染）。 */
   const ledgerRows = useMemo(() => {
@@ -578,11 +589,11 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     rows.push(['输入', formatTokens(billedInput(usage))])
     if (usage.output) rows.push(['输出', formatTokens(usage.output)])
     if (usage.cacheRead) rows.push(['缓存命中', formatTokens(usage.cacheRead)])
-    rows.push(['预算剩', `¥${ledgerLeft.toFixed(2)} / ${ledgerBudget()}`])
-    const status = ledgerOver ? '🚨 已超封顶！' : (peakFlagRef.current ? '📈 高峰中' : (valleyFlagRef.current ? '📉 低谷中' : '峰谷正常'))
+    rows.push(['预算剩', `¥${ledgerLeft.toFixed(2)} / ${ledgerBudgetNow}`])
+    const status = ledgerOver ? '🚨 已超封顶！' : (ledgerTrend === 'peak' ? '📈 高峰中' : (ledgerTrend === 'valley' ? '📉 低谷中' : '峰谷正常'))
     rows.push(['状态', status])
     return rows
-  }, [usage, ledgerCost, ledgerHit, ledgerLeft, ledgerOver])
+  }, [usage, ledgerCost, ledgerHit, ledgerLeft, ledgerOver, ledgerBudgetNow, ledgerTrend])
 
   useEffect(() => () => {
     window.clearTimeout(celebrateTimer.current)

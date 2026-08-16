@@ -101,7 +101,7 @@ function PetField({ label, hint, control, badge }) {
 /** 设置卡片组件。props 由槽位注册注入（hooks 为空——直接读 localStorage）。 */
 export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen)
-  const [draft, setDraft] = useState(() => combinedSnapshot())
+  const [draft, setDraft] = useState(() => draftFromSnapshot(combinedSnapshot()))
   const [stored, setStored] = useState(() => combinedSnapshot())
   const [message, setMessage] = useState('')
 
@@ -110,7 +110,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
     const sync = () => {
       const next = combinedSnapshot()
       setStored(next)
-      setDraft(next)
+      setDraft(draftFromSnapshot(next))
     }
     window.addEventListener('storage', sync)
     window.addEventListener('deepseek-pet:sound-changed', sync)
@@ -124,7 +124,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
     }
   }, [])
 
-  const dirty = JSON.stringify(draft) !== JSON.stringify(stored)
+  const dirty = JSON.stringify(storedOf(draft)) !== JSON.stringify(stored)
 
   const setEnabled = useCallback(value => {
     setDraft(prev => ({ ...prev, enabled: value === true }))
@@ -142,33 +142,33 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
     setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, enabled: value === true } }))
   }, [])
   const setLedgerBudget = useCallback(value => {
-    const parsed = Number(value)
-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budget: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.budget } }))
+    // 数字输入以字符串暂存草稿（允许 "0." 等中间态），保存时再解析
+    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budgetText: value } }))
   }, [])
   const setLedgerRate = useCallback((key, value) => {
-    const parsed = Number(value)
-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rates: { ...prev.ledger.rates, [key]: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.rates[key] } } }))
+    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rateText: { ...prev.ledger.rateText, [key]: value } } }))
   }, [])
 
   const save = useCallback(() => {
-    applyAppSettings({ enabled: draft.enabled })
-    applySoundSettings(draft)
-    applyLedgerSettings(draft.ledger)
+    const normalized = storedOf(draft)
+    applyAppSettings({ enabled: normalized.enabled })
+    applySoundSettings(normalized)
+    applyLedgerSettings(normalized.ledger)
     setStored(combinedSnapshot())
-    window.dispatchEvent(new Event('deepseek-pet:sound-changed'))
-    window.dispatchEvent(new Event('deepseek-pet:app-changed'))
-    window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
+    // applyXxx 的 persist 已各自 dispatch 对应事件，无需重复广播
     setMessage('已保存')
     window.setTimeout(() => setMessage(''), 1600)
   }, [draft])
 
   const discard = useCallback(() => {
-    setDraft(combinedSnapshot())
+    setDraft(draftFromSnapshot(combinedSnapshot()))
     setMessage('')
   }, [])
 
   const alerts = draft.alerts ?? ALERT_LABELS
   const totalPercent = Math.round((draft.total ?? 1) * 100)
+  const budgetText = draft.ledger?.budgetText ?? String(draft.ledger?.budget ?? 30)
+  const rateTextOf = key => draft.ledger?.rateText?.[key] ?? String(draft.ledger?.rates?.[key] ?? 0)
 
   return (
     <li className={`dshp-card${open ? ' dshp-cardOpen' : ''}`} data-plugin-card={CARD_ID}>
@@ -200,12 +200,12 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
           <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒"
             control={<PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />} />
           <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
-            control={<input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
+            control={<input className="dshp-number" type="number" min="0" step="1" value={budgetText}
               onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />} />
           <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
           {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
             <PetField key={key} label={label}
-              control={<input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
+              control={<input className="dshp-number" type="number" min="0" step="0.1" value={rateTextOf(key)}
                 onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />} />
           ))}
           <div className="dshp-footer">
@@ -222,6 +222,39 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
 /** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 + 账房设置 合并快照。 */
 function combinedSnapshot() {
   return { ...appSettingsSnapshot(), ...soundSettingsSnapshot(), ledger: ledgerSettingsSnapshot() }
+}
+
+/** 草稿视图：账房数字字段以字符串暂存（允许 "0." 等中间态输入）。 */
+function draftFromSnapshot(snapshot) {
+  const ledger = snapshot.ledger ?? {}
+  const rates = ledger.rates ?? {}
+  return {
+    ...snapshot,
+    ledger: {
+      ...ledger,
+      budgetText: String(ledger.budget ?? 30),
+      rateText: Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, String(value)])),
+    },
+  }
+}
+
+/** 草稿归一化：字符串暂存解析回数值，供 dirty 比较与保存。非法输入回退原值。 */
+function storedOf(draft) {
+  const ledger = draft.ledger ?? {}
+  const parsedBudget = Number(ledger.budgetText)
+  const rates = { ...(ledger.rates ?? {}) }
+  for (const [key, text] of Object.entries(ledger.rateText ?? {})) {
+    const parsed = Number(text)
+    if (Number.isFinite(parsed) && parsed >= 0) rates[key] = parsed
+  }
+  return {
+    ...draft,
+    ledger: {
+      ...ledger,
+      budget: Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : (ledger.budget ?? 30),
+      rates,
+    },
+  }
 }
 
 /** 注册设置卡片到「设置 → 插件 → 插件配置」。 */

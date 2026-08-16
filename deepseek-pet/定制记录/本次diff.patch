@@ -1,133 +1,303 @@
-diff --git a/deepseek-pet/src/client/settings-card.jsx b/deepseek-pet/src/client/settings-card.jsx
-index d669deb..20cf81b 100644
---- a/deepseek-pet/src/client/settings-card.jsx
-+++ b/deepseek-pet/src/client/settings-card.jsx
-@@ -41,6 +41,7 @@ const CARD_CSS = `
- .dshp-field+.dshp-field{border-top:1px solid var(--dsw-alias-border-l2)}
- .dshp-head{align-items:center;gap:8px;display:flex}
- .dshp-label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}
-+.dshp-control{display:flex;align-items:center}
- .dshp-badges{align-items:center;gap:8px;display:inline-flex}
- .dshp-badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}
- .dshp-hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}
-@@ -51,11 +52,9 @@ const CARD_CSS = `
- .dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
- .dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
- .dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
--.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:96px}
-+.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:100%}
- .dshp-number:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
--.dshp-rateGrid{grid-template-columns:1fr 1fr;gap:0 14px;display:grid}
--.dshp-rateItem{flex-direction:column;gap:4px;min-width:0;display:flex}
--.dshp-rateLabel{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;white-space:nowrap}
-+.dshp-message{min-width:0;color:var(--dsw-alias-state-success-primary);flex:1;margin:0;font-size:12px;line-height:1.5}
+diff --git a/deepseek-pet/src/client/DeepSeekPet.jsx b/deepseek-pet/src/client/DeepSeekPet.jsx
+index fb2542d..c7d0557 100644
+--- a/deepseek-pet/src/client/DeepSeekPet.jsx
++++ b/deepseek-pet/src/client/DeepSeekPet.jsx
+@@ -13,8 +13,8 @@ import {
+ import { isPetEnabled, subscribeAppSettings } from './app-settings.js'
+ import {
+   billedInput, cacheHitRate, detectTrend, estimateCost, formatTokens, isLedgerEnabled,
+-  ledgerBudget, overBudget, pushCostSample, subscribeLedgerSettings,
+-  usageFromSnapshot,
++  ledgerBudget, ledgerRates, ledgerRevisionOf, overBudget, pushCostSample,
++  subscribeLedgerSettings, usageFromSnapshot,
+ } from './ledger.js'
  
- `
+ const EMPTY_SNAPSHOT = Object.freeze({
+@@ -119,6 +119,9 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
+   const pressure = useSyncExternalStore(subscribePressure, getPressure, getPressure)
+   const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
+   const ledgerEnabled = useSyncExternalStore(subscribeLedgerSettings, isLedgerEnabled, isLedgerEnabled)
++  // 订阅修订号：费率/预算变化（即使 enabled 不变）也触发重渲染，账房数字即时刷新
++  const ledgerRevision = useSyncExternalStore(subscribeLedgerSettings, ledgerRevisionOf, ledgerRevisionOf)
++  void ledgerRevision
+   const immediate = stateFromSnapshot(session ? snapshot : null)
+   const taskActive = Boolean(snapshot.running || snapshot.runningCalls?.length || snapshot.partial || snapshot.pending?.length || snapshot.queue?.length)
+   const contextRatio = Number.isFinite(pressure?.projectedTokens) && Number.isFinite(pressure?.contextWindow)
+@@ -531,41 +534,49 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
  
-@@ -82,14 +81,18 @@ function PetSwitch({ checked, onChange, label }) {
-   )
+   /* ---------- 账房：token 用量 / 缓存命中率 / 预估价格 / 预算封顶 ---------- */
+   const usage = useMemo(() => (petEnabled && ledgerEnabled ? usageFromSnapshot(snapshot) : null), [snapshot, petEnabled, ledgerEnabled])
+-  const ledgerCost = useMemo(() => usage ? estimateCost(usage) : 0, [usage])
+-  const ledgerHit = useMemo(() => usage ? cacheHitRate(usage) : null, [usage])
+-  const ledgerLeft = Math.max(0, ledgerBudget() - ledgerCost)
+-  const ledgerOver = overBudget(ledgerCost, ledgerBudget())
++  // 费率/预算每次渲染直读（修订号订阅保证费率变化后重渲染，这里拿到新值）
++  const ledgerCost = usage ? estimateCost(usage, ledgerRates()) : 0
++  const ledgerHit = usage ? cacheHitRate(usage) : null
++  const ledgerBudgetNow = ledgerBudget()
++  const ledgerLeft = Math.max(0, ledgerBudgetNow - ledgerCost)
++  const ledgerOver = overBudget(ledgerCost, ledgerBudgetNow)
+   const costHistoryRef = useRef([])
+   const peakFlagRef = useRef(false)
+   const valleyFlagRef = useRef(false)
+   const capAlertedAtRef = useRef(0)
++  const lastSampledCostRef = useRef(null)
++  const [ledgerTrend, setLedgerTrend] = useState('normal')
+ 
+-  // 峰谷/封顶提醒：用量有实质变化（成本比上次采样多 1 分以上）才采样一次，
+-  // 避免每帧快照抖动触发误报；封顶提醒 30 分钟内只响一次。
++  // 峰谷/封顶提醒：成本相比上次采样有实质变化（≥1 分）才采样一次，避免流式快照
++  // 每帧重算时把相同成本重复入历史、稀释峰谷判定；封顶提醒 30 分钟内只响一次。
+   useEffect(() => {
+     if (!petEnabled || !ledgerEnabled || !ledgerOpen || !usage) return
++    if (lastSampledCostRef.current !== null && Math.abs(ledgerCost - lastSampledCostRef.current) < 0.01) return
++    lastSampledCostRef.current = ledgerCost
+     const history = pushCostSample(costHistoryRef.current, ledgerCost)
+     costHistoryRef.current = history
+     const delta = history.length >= 2 ? history[history.length - 1].cost - history[history.length - 2].cost : 0
+-    if (Math.abs(delta) < 0.01) return
+     const trend = detectTrend(history)
+     if (trend === 'peak' && !peakFlagRef.current) {
+       peakFlagRef.current = true
+       valleyFlagRef.current = false
++      setLedgerTrend('peak')
+       speak(`💸 价格高峰！这一阵子烧得飞快（约 +¥${delta.toFixed(2)}），悠着点～`, '')
+     } else if (trend === 'valley' && !valleyFlagRef.current) {
+       valleyFlagRef.current = true
+       peakFlagRef.current = false
++      setLedgerTrend('valley')
+       speak('🕊️ 价格低谷！这会儿几乎没烧钱，安心摸鱼～', '')
+     } else if (trend === 'normal') {
+       peakFlagRef.current = false
+       valleyFlagRef.current = false
++      setLedgerTrend('normal')
+     }
+     if (ledgerOver && Date.now() - capAlertedAtRef.current > 30 * 60_000) {
+       capAlertedAtRef.current = Date.now()
+-      speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudget()} 的封顶线！`, '')
++      speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudgetNow} 的封顶线！`, '')
+     }
+-  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, speak])
++  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, ledgerBudgetNow, speak])
+ 
+   /** 账房面板行数据（供渲染）。 */
+   const ledgerRows = useMemo(() => {
+@@ -578,11 +589,11 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
+     rows.push(['输入', formatTokens(billedInput(usage))])
+     if (usage.output) rows.push(['输出', formatTokens(usage.output)])
+     if (usage.cacheRead) rows.push(['缓存命中', formatTokens(usage.cacheRead)])
+-    rows.push(['预算剩', `¥${ledgerLeft.toFixed(2)} / ${ledgerBudget()}`])
+-    const status = ledgerOver ? '🚨 已超封顶！' : (peakFlagRef.current ? '📈 高峰中' : (valleyFlagRef.current ? '📉 低谷中' : '峰谷正常'))
++    rows.push(['预算剩', `¥${ledgerLeft.toFixed(2)} / ${ledgerBudgetNow}`])
++    const status = ledgerOver ? '🚨 已超封顶！' : (ledgerTrend === 'peak' ? '📈 高峰中' : (ledgerTrend === 'valley' ? '📉 低谷中' : '峰谷正常'))
+     rows.push(['状态', status])
+     return rows
+-  }, [usage, ledgerCost, ledgerHit, ledgerLeft, ledgerOver])
++  }, [usage, ledgerCost, ledgerHit, ledgerLeft, ledgerOver, ledgerBudgetNow, ledgerTrend])
+ 
+   useEffect(() => () => {
+     window.clearTimeout(celebrateTimer.current)
+diff --git a/deepseek-pet/src/client/ledger.js b/deepseek-pet/src/client/ledger.js
+index 96f0285..4e9ff30 100644
+--- a/deepseek-pet/src/client/ledger.js
++++ b/deepseek-pet/src/client/ledger.js
+@@ -51,13 +51,22 @@ function loadLedger() {
+ /** 单例账房设置（模块级，避免多实例重复读盘）。 */
+ const ledger = loadLedger()
+ 
++/** 设置修订号：每次持久化自增，供 useSyncExternalStore 订阅（费率/预算变化触发重渲染）。 */
++let ledgerRevision = 0
++
+ function persist() {
+   try {
+     window.localStorage?.setItem(LEDGER_KEY, JSON.stringify(ledger))
++    ledgerRevision += 1
+     window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
+   } catch {}
  }
  
--/** 一条字段：head（标签 + 右侧控件）+ 提示。开关/滑块统一走这个版式。 */
--function PetField({ label, hint, children }) {
-+/**
-+ * 官方 ValueField 版式：head 行（label + badges）→ 控件独占一行 → hint。
-+ * 与官方 BashCard/WebSearchCard 字段形态一致（fields.module.css）。
-+ */
-+function PetField({ label, hint, control, badge }) {
-   return (
-     <div className="dshp-field">
-       <div className="dshp-head">
-         <span className="dshp-label">{label}</span>
--        {children}
-+        {badge && <span className="dshp-badge">{badge}</span>}
-       </div>
-+      {control && <div className="dshp-control">{control}</div>}
-       {hint && <p className="dshp-hint">{hint}</p>}
-     </div>
-   )
-@@ -183,47 +186,30 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
-       </button>
-       {open && (
-         <div className="dshp-body">
--          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声">
--            <PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />
--          </PetField>
--          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）">
--            <PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />
--          </PetField>
-+          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声"
-+            control={<PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />} />
-+          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）"
-+            control={<PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />} />
-           {Object.entries(ALERT_LABELS).map(([key, label]) => (
--            <PetField key={key} label={label}>
--              <PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />
--            </PetField>
-+            <PetField key={key} label={label}
-+              control={<PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />} />
-+          ))}
-+          <PetField label="总音量" badge={`${totalPercent}%`}
-+            control={<input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
-+              onChange={event => setTotal(event.target.value)} aria-label="总音量" />} />
-+          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒"
-+            control={<PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />} />
-+          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
-+            control={<input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
-+              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />} />
-+          <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
-+          {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
-+            <PetField key={key} label={label}
-+              control={<input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
-+                onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />} />
-           ))}
--          <PetField label="总音量" hint={`${totalPercent}%`}>
--            <span className="dshp-badge">{totalPercent}%</span>
--          </PetField>
--          <div className="dshp-field">
--            <input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
--              onChange={event => setTotal(event.target.value)} aria-label="总音量" />
--          </div>
--          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒">
--            <PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />
--          </PetField>
--          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒">
--            <input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
--              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />
--          </PetField>
--          <PetField label="费率（¥ / 百万 token）" hint="按 deepseek-chat 官方价估算，可自行覆盖">
--            <span className="dshp-badge">deepseek-chat</span>
--          </PetField>
--          <div className="dshp-field">
--            <div className="dshp-rateGrid">
--              {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
--                <label key={key} className="dshp-rateItem">
--                  <span className="dshp-rateLabel">{label}</span>
--                  <input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
--                    onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />
--                </label>
--              ))}
--            </div>
--          </div>
--          {message && <p className="dshp-failed">{message}</p>}
-           <div className="dshp-footer">
-+            {message && <p className="dshp-message">{message}</p>}
-             <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
-             <button type="button" className="dshp-save" disabled={!dirty} onClick={save}>保存</button>
-           </div>
-diff --git a/deepseek-pet/tests/unit/client-bundle.test.js b/deepseek-pet/tests/unit/client-bundle.test.js
-index 1b7da0d..b4a0943 100644
---- a/deepseek-pet/tests/unit/client-bundle.test.js
-+++ b/deepseek-pet/tests/unit/client-bundle.test.js
-@@ -148,6 +148,11 @@ test('built dsh.client bundle registers an embedded shell overlay', async () =>
-   assert.match(cardHtml, /缓存命中/)
-   assert.match(cardHtml, /缓存写入/)
-   assert.match(cardHtml, /输出/)
-+  // 官方 ValueField 版式：每个字段 label 行 → control 独占行
-+  const fieldCount = (cardHtml.match(/class="dshp-field"/g) ?? []).length
-+  assert.ok(fieldCount >= 12, `字段数不足: ${fieldCount}`)
-+  assert.match(cardHtml, /dshp-control/)
-+  assert.doesNotMatch(cardHtml, /rateGrid/)
++/** 账房设置修订号（费率/预算/enabled 变化时自增；订阅用，避免整快照比较）。 */
++export function ledgerRevisionOf() {
++  return ledgerRevision
++}
++
+ /** 账房面板是否开启。 */
+ export function isLedgerEnabled() {
+   return ledger.enabled
+diff --git a/deepseek-pet/src/client/settings-card.jsx b/deepseek-pet/src/client/settings-card.jsx
+index 20cf81b..026f7b3 100644
+--- a/deepseek-pet/src/client/settings-card.jsx
++++ b/deepseek-pet/src/client/settings-card.jsx
+@@ -101,7 +101,7 @@ function PetField({ label, hint, control, badge }) {
+ /** 设置卡片组件。props 由槽位注册注入（hooks 为空——直接读 localStorage）。 */
+ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+   const [open, setOpen] = useState(defaultOpen)
+-  const [draft, setDraft] = useState(() => combinedSnapshot())
++  const [draft, setDraft] = useState(() => draftFromSnapshot(combinedSnapshot()))
+   const [stored, setStored] = useState(() => combinedSnapshot())
+   const [message, setMessage] = useState('')
  
-   for (const cleanup of cleanups.reverse()) cleanup()
-   delete globalThis.window
+@@ -110,7 +110,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+     const sync = () => {
+       const next = combinedSnapshot()
+       setStored(next)
+-      setDraft(next)
++      setDraft(draftFromSnapshot(next))
+     }
+     window.addEventListener('storage', sync)
+     window.addEventListener('deepseek-pet:sound-changed', sync)
+@@ -124,7 +124,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+     }
+   }, [])
+ 
+-  const dirty = JSON.stringify(draft) !== JSON.stringify(stored)
++  const dirty = JSON.stringify(storedOf(draft)) !== JSON.stringify(stored)
+ 
+   const setEnabled = useCallback(value => {
+     setDraft(prev => ({ ...prev, enabled: value === true }))
+@@ -142,33 +142,33 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+     setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, enabled: value === true } }))
+   }, [])
+   const setLedgerBudget = useCallback(value => {
+-    const parsed = Number(value)
+-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budget: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.budget } }))
++    // 数字输入以字符串暂存草稿（允许 "0." 等中间态），保存时再解析
++    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budgetText: value } }))
+   }, [])
+   const setLedgerRate = useCallback((key, value) => {
+-    const parsed = Number(value)
+-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rates: { ...prev.ledger.rates, [key]: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.rates[key] } } }))
++    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rateText: { ...prev.ledger.rateText, [key]: value } } }))
+   }, [])
+ 
+   const save = useCallback(() => {
+-    applyAppSettings({ enabled: draft.enabled })
+-    applySoundSettings(draft)
+-    applyLedgerSettings(draft.ledger)
++    const normalized = storedOf(draft)
++    applyAppSettings({ enabled: normalized.enabled })
++    applySoundSettings(normalized)
++    applyLedgerSettings(normalized.ledger)
+     setStored(combinedSnapshot())
+-    window.dispatchEvent(new Event('deepseek-pet:sound-changed'))
+-    window.dispatchEvent(new Event('deepseek-pet:app-changed'))
+-    window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
++    // applyXxx 的 persist 已各自 dispatch 对应事件，无需重复广播
+     setMessage('已保存')
+     window.setTimeout(() => setMessage(''), 1600)
+   }, [draft])
+ 
+   const discard = useCallback(() => {
+-    setDraft(combinedSnapshot())
++    setDraft(draftFromSnapshot(combinedSnapshot()))
+     setMessage('')
+   }, [])
+ 
+   const alerts = draft.alerts ?? ALERT_LABELS
+   const totalPercent = Math.round((draft.total ?? 1) * 100)
++  const budgetText = draft.ledger?.budgetText ?? String(draft.ledger?.budget ?? 30)
++  const rateTextOf = key => draft.ledger?.rateText?.[key] ?? String(draft.ledger?.rates?.[key] ?? 0)
+ 
+   return (
+     <li className={`dshp-card${open ? ' dshp-cardOpen' : ''}`} data-plugin-card={CARD_ID}>
+@@ -200,12 +200,12 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+           <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒"
+             control={<PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />} />
+           <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
+-            control={<input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
++            control={<input className="dshp-number" type="number" min="0" step="1" value={budgetText}
+               onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />} />
+           <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
+           {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
+             <PetField key={key} label={label}
+-              control={<input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
++              control={<input className="dshp-number" type="number" min="0" step="0.1" value={rateTextOf(key)}
+                 onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />} />
+           ))}
+           <div className="dshp-footer">
+@@ -224,6 +224,39 @@ function combinedSnapshot() {
+   return { ...appSettingsSnapshot(), ...soundSettingsSnapshot(), ledger: ledgerSettingsSnapshot() }
+ }
+ 
++/** 草稿视图：账房数字字段以字符串暂存（允许 "0." 等中间态输入）。 */
++function draftFromSnapshot(snapshot) {
++  const ledger = snapshot.ledger ?? {}
++  const rates = ledger.rates ?? {}
++  return {
++    ...snapshot,
++    ledger: {
++      ...ledger,
++      budgetText: String(ledger.budget ?? 30),
++      rateText: Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, String(value)])),
++    },
++  }
++}
++
++/** 草稿归一化：字符串暂存解析回数值，供 dirty 比较与保存。非法输入回退原值。 */
++function storedOf(draft) {
++  const ledger = draft.ledger ?? {}
++  const parsedBudget = Number(ledger.budgetText)
++  const rates = { ...(ledger.rates ?? {}) }
++  for (const [key, text] of Object.entries(ledger.rateText ?? {})) {
++    const parsed = Number(text)
++    if (Number.isFinite(parsed) && parsed >= 0) rates[key] = parsed
++  }
++  return {
++    ...draft,
++    ledger: {
++      ...ledger,
++      budget: Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : (ledger.budget ?? 30),
++      rates,
++    },
++  }
++}
++
+ /** 注册设置卡片到「设置 → 插件 → 插件配置」。 */
+ export function registerSettingsCard(ctx) {
+   ctx.effect(installCardCss, 'deepseek-pet: settings card styles')
+diff --git a/deepseek-pet/src/client/styles.js b/deepseek-pet/src/client/styles.js
+index eaa299a..56ce2f0 100644
+--- a/deepseek-pet/src/client/styles.js
++++ b/deepseek-pet/src/client/styles.js
+@@ -19,7 +19,7 @@ export const STYLES = `
+ .dsh-live2d-tools{position:relative;z-index:12;display:flex;gap:7px;height:34px;margin-top:4px;opacity:0;pointer-events:none;transform:translateY(-3px) scale(.94);transition:opacity .2s ease,transform .3s cubic-bezier(.2,.8,.2,1)}.dsh-live2d-stage:hover+.dsh-live2d-tools,.dsh-live2d-stage:focus-within+.dsh-live2d-tools,.dsh-live2d-tools:hover,.dsh-live2d-tools:focus-within{opacity:1;pointer-events:auto;transform:none}.dsh-live2d-tools button{display:flex;height:30px;padding:0 11px;align-items:center;gap:5px;border:1px solid var(--pet-line);border-radius:999px;background:var(--pet-panel);box-shadow:0 7px 18px rgba(3,15,40,.22);color:var(--dsw-alias-text-secondary,#b8c7df);font:inherit;cursor:pointer;backdrop-filter:blur(15px);transition:.2s ease}.dsh-live2d-tools button b{font:700 16px/1 system-ui,sans-serif}.dsh-live2d-tools button span{font-size:8px}.dsh-live2d-tools button:hover,.dsh-live2d-tools button:focus-visible{border-color:var(--pet-cyan);color:#fff;box-shadow:0 0 0 2px color-mix(in srgb,var(--pet-cyan) 20%,transparent),0 7px 18px rgba(3,15,40,.22);outline:0;transform:translateY(-2px)}
+ .dsh-live2d-pending{display:grid;gap:6px;padding:7px}.dsh-live2d-pending article{padding:9px;border-radius:12px}.dsh-live2d-pending article>strong,.dsh-live2d-pending legend{display:block;font-size:10px}.dsh-live2d-pending article>small,.dsh-live2d-pending fieldset>small{display:block;color:var(--dsw-alias-text-tertiary,#8194b6);font-size:8px}.dsh-live2d-pending article>div,.dsh-live2d-pending fieldset>div{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}.dsh-live2d-pending button{padding:5px 8px;border:1px solid var(--pet-line);border-radius:7px;background:transparent;color:var(--dsw-alias-text-secondary,#b8c7df);font:inherit;cursor:pointer}.dsh-live2d-pending button[data-primary],.dsh-live2d-pending button[data-selected=true]{border-color:var(--pet-blue);background:color-mix(in srgb,var(--pet-blue) 25%,transparent);color:#fff}.dsh-live2d-pending fieldset{margin:0;padding:0;border:0}.dsh-live2d-pending input{width:100%;margin-top:6px;padding:6px 7px;border:1px solid var(--pet-line);border-radius:7px;background:rgba(0,0,0,.14);color:inherit;font:inherit}.dsh-live2d-pending>p{margin:0;color:#ff9eaa;font-size:9px}
+ .dsh-live2d-sessions{position:relative;display:grid;justify-items:center;width:270px;margin-top:7px;pointer-events:auto;transition:.35s ease}.dsh-live2d-sessions[data-visible=false]{display:none}.dsh-live2d-sessions button{position:relative;display:grid;grid-template-columns:7px minmax(0,1fr) auto;align-items:center;gap:7px;width:100%;height:34px;padding:7px 9px;border:1px solid var(--pet-line);border-radius:10px;background:var(--pet-panel);box-shadow:0 8px 20px rgba(3,15,40,.16);color:var(--dsw-alias-text-secondary,#b8c7df);font:inherit;text-align:left;cursor:pointer;backdrop-filter:blur(15px);transition:margin .28s ease,width .28s ease,transform .28s ease,opacity .2s ease,border-color .2s ease,box-shadow .2s ease,background .2s ease}.dsh-live2d-sessions button:hover{border-color:color-mix(in srgb,var(--pet-cyan) 68%,var(--pet-line));background:color-mix(in srgb,var(--pet-blue) 18%,var(--pet-panel))}.dsh-live2d-sessions button i{width:6px;height:6px;border-radius:50%;background:#f1bd5b}.dsh-live2d-sessions button i[data-running=true],.dsh-live2d-sessions button[data-current=true] i{background:var(--pet-cyan);box-shadow:0 0 8px var(--pet-cyan)}.dsh-live2d-sessions button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh-live2d-sessions button small{color:var(--dsw-alias-text-tertiary,#8194b6);font-size:8px;white-space:nowrap}.dsh-live2d-session-focus{z-index:9;height:42px!important;padding:9px 11px!important;border-color:var(--pet-cyan)!important;border-radius:14px!important;background:color-mix(in srgb,var(--pet-blue) 22%,var(--pet-panel))!important;box-shadow:0 0 0 1px color-mix(in srgb,var(--pet-cyan) 42%,transparent),0 0 16px color-mix(in srgb,var(--pet-cyan) 58%,transparent),0 8px 20px rgba(3,15,40,.2)!important}.dsh-live2d-session-focus span{font-size:10px;font-weight:650}.dsh-live2d-session-list{display:grid;justify-items:center;gap:5px;width:246px;margin-top:6px}.dsh-live2d-session-list[data-visible=false]{display:none}.dsh-live2d-session-list>button[data-stacked=true]{margin-top:-24px;opacity:.84}.dsh-live2d-session-list>button:nth-of-type(4){z-index:6;width:calc(100% - 8px)}.dsh-live2d-session-list>button:nth-of-type(5){z-index:5;width:calc(100% - 18px)}.dsh-live2d-session-list>button:nth-of-type(6){z-index:4;width:calc(100% - 28px)}.dsh-live2d-session-list>button:nth-of-type(7){z-index:3;width:calc(100% - 38px)}.dsh-live2d-session-list:hover>button[data-stacked=true],.dsh-live2d-session-list:focus-within>button[data-stacked=true]{width:100%;margin-top:0;opacity:1}.dsh-live2d-session-list footer{margin-top:-18px;padding:23px 8px 3px;color:var(--dsw-alias-text-tertiary,#8194b6);font-size:8px}
+-[data-dsh-live2d-root][data-collapsed=true]{--pet-scale:1!important;width:58px;justify-items:end}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-conversation,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-bubble,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-sessions,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-tools{display:none}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-stage,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-character{width:58px;height:68px}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-character{left:0}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-sprites{right:0;bottom:0;left:auto;top:auto;width:228px;height:244px;animation:none!important;transition:none!important;transform:scale(.28)!important;transform-origin:100% 100%}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-sprites img{transition:none!important}
++[data-dsh-live2d-root][data-collapsed=true]{--pet-scale:1!important;width:58px;justify-items:end}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-conversation,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-bubble,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-ledger,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-sessions,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-tools{display:none}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-stage,[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-character{width:58px;height:68px}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-character{left:0}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-sprites{right:0;bottom:0;left:auto;top:auto;width:228px;height:244px;animation:none!important;transition:none!important;transform:scale(.28)!important;transform-origin:100% 100%}[data-dsh-live2d-root][data-collapsed=true] .dsh-live2d-sprites img{transition:none!important}
+ [data-dsh-live2d-root][data-celebrating=true] .dsh-live2d-character{animation:dsh-pet-jump .6s cubic-bezier(.3,.9,.4,1.2) 2}
+ [data-dsh-live2d-root][data-celebrating=true] .dsh-live2d-sprites img[data-active=true]{filter:drop-shadow(0 12px 9px rgba(0,10,34,.2)) drop-shadow(0 0 14px var(--pet-cyan))}
+ .dsh-live2d-confetti{position:absolute;z-index:5;inset:0;pointer-events:none;overflow:visible}
+@@ -58,7 +58,7 @@ export const STYLES = `
+ @keyframes dsh-pop{from{opacity:0;transform:translateY(5px) scale(.94)}}@keyframes dsh-caret{50%{opacity:0}}
+ @keyframes dsh-pet-jump{0%,100%{transform:translateY(0)}35%{transform:translateY(-22px) scale(1.04)}60%{transform:translateY(0) scale(.98)}}
+ @keyframes dsh-confetti-fall{0%{opacity:0;transform:translateY(-8px) rotate(var(--cf-rot,0deg))}12%{opacity:1}100%{opacity:0;transform:translateY(230px) translateX(var(--cf-drift,0px)) rotate(calc(var(--cf-rot,0deg) + 320deg))}}
+-@media(max-width:760px){[data-dsh-live2d-root]{right:7px;bottom:74px;width:286px}.dsh-live2d-conversation{width:286px}.dsh-live2d-sessions{width:256px}.dsh-live2d-session-list{width:232px}}
++@media(max-width:760px){[data-dsh-live2d-root]{right:7px;bottom:74px;width:286px}.dsh-live2d-conversation{width:286px}.dsh-live2d-ledger{width:240px}.dsh-live2d-sessions{width:256px}.dsh-live2d-session-list{width:232px}}
+ @media(hover:none){.dsh-live2d-tools{opacity:.72;pointer-events:auto;transform:none}}
+ @media(prefers-reduced-motion:reduce){[data-dsh-live2d-root] *,[data-dsh-live2d-root] *:before{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+ `
+diff --git a/deepseek-pet/tests/unit/ledger.test.js b/deepseek-pet/tests/unit/ledger.test.js
+index b84e794..da146e9 100644
+--- a/deepseek-pet/tests/unit/ledger.test.js
++++ b/deepseek-pet/tests/unit/ledger.test.js
+@@ -2,7 +2,7 @@ import test from 'node:test'
+ import assert from 'node:assert/strict'
+ import {
+   billedInput, cacheHitRate, detectTrend, estimateCost, formatTokens,
+-  overBudget, pushCostSample, usageFromSnapshot,
++  ledgerRevisionOf, overBudget, pushCostSample, usageFromSnapshot,
+ } from '../../src/client/ledger.js'
+ 
+ test('usageFromSnapshot 从轨迹视图聚合累计用量', () => {
+@@ -82,3 +82,10 @@ test('detectTrend 峰谷判定', () => {
+   // 历史不足 3 点 → normal
+   assert.equal(detectTrend([{ t: minutesAgo(1), cost: 1 }]), 'normal')
+ })
++
++test('ledgerRevisionOf 稳定为数字（订阅用快照）', () => {
++  const rev = ledgerRevisionOf()
++  assert.equal(typeof rev, 'number')
++  assert.ok(Number.isSafeInteger(rev))
++  assert.equal(ledgerRevisionOf(), rev) // 无变更时稳定
++})

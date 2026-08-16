@@ -51,11 +51,20 @@ function loadLedger() {
 /** 单例账房设置（模块级，避免多实例重复读盘）。 */
 const ledger = loadLedger()
 
+/** 设置修订号：每次持久化自增，供 useSyncExternalStore 订阅（费率/预算变化触发重渲染）。 */
+let ledgerRevision = 0
+
 function persist() {
   try {
     window.localStorage?.setItem(LEDGER_KEY, JSON.stringify(ledger))
+    ledgerRevision += 1
     window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
   } catch {}
+}
+
+/** 账房设置修订号（费率/预算/enabled 变化时自增；订阅用，避免整快照比较）。 */
+export function ledgerRevisionOf() {
+  return ledgerRevision
 }
 
 /** 账房面板是否开启。 */
