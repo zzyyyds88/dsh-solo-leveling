@@ -199,9 +199,14 @@ export async function speakVoice(key) {
     source.buffer = buffer
     const gain = ctx.createGain()
     const scaled = actionVolume('voice') * settings.total
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(scaled, ctx.currentTime + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + buffer.duration)
+    const t0 = ctx.currentTime
+    const end = t0 + buffer.duration
+    // 包络：0.02s 淡入 → 整句恒定音量 → 末尾 0.08s 淡出。
+    // 注意不能对整句做指数衰减（会越说越小），只在末尾淡出防爆音。
+    gain.gain.setValueAtTime(0.0001, t0)
+    gain.gain.exponentialRampToValueAtTime(scaled, t0 + 0.02)
+    gain.gain.setValueAtTime(scaled, Math.max(t0 + 0.02, end - 0.08))
+    gain.gain.exponentialRampToValueAtTime(0.0001, end)
     source.connect(gain).connect(ctx.destination)
     source.start()
     return true
