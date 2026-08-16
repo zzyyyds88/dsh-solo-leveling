@@ -165,6 +165,8 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const lastClickAtRef = useRef(0)
   const clickTimerRef = useRef(null)
   const celebrateTimer = useRef(null)
+  const lastCelebrateAtRef = useRef(0)
+  const wasPartialRef = useRef(false)
 
   useEffect(() => {
     let transitionTimer
@@ -178,7 +180,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       if (immediate.kind !== 'idle') commit(immediate)
       else {
         commit(completionState())
-        celebrateCompletion()
+        fireCompletionCelebration()
         completionTimer = window.setTimeout(() => commit(immediate), 8000)
       }
     } else transitionTimer = window.setTimeout(() => commit(immediate), immediate.kind === 'error' ? 100 : 720)
@@ -443,6 +445,28 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       setConfetti([])
     }, CELEBRATE_DURATION_MS)
   }, [speak])
+
+  /** 完成庆祝去重：running→idle 与流式结束两条路径可能先后触发，3 秒内只庆祝一次。 */
+  const fireCompletionCelebration = useCallback(() => {
+    const now = Date.now()
+    if (now - lastCelebrateAtRef.current < 3000) return
+    lastCelebrateAtRef.current = now
+    celebrateCompletion()
+  }, [celebrateCompletion])
+
+  // 普通对话完成检测：流式回答（partial 有内容）从有到无，且非错误/非 agent 任务 → 庆祝。
+  // 普通对话里 snapshot.running 恒为 false（那是 agent 任务循环的标志），完成时只有
+  // partial 清空这一信号；agent 任务的 running→idle 已由上面 effect 处理（3 秒去重兜底）。
+  useEffect(() => {
+    const hasPartial = Boolean(snapshot.partial)
+    const wasPartial = wasPartialRef.current
+    wasPartialRef.current = hasPartial
+    if (!wasPartial || hasPartial) return
+    if (snapshot.running) return // agent 任务路径已处理
+    const kind = effectiveVisual.kind
+    if (kind === 'error' || kind === 'tool-error') return // 出错走安慰
+    fireCompletionCelebration()
+  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration])
 
   /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
   const comfortError = useCallback(() => {
