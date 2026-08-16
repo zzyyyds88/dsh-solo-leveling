@@ -1,0 +1,5 @@
+# dsh-client-ui-defaults 挂载清单（标准插件包：dsh.bundle.patch 声明本文件）
+# 前端卡片：「设置 → 插件 → 插件配置 → 默认值」卡
+- insert:
+    - id: ui-dsh-defaults
+      name: dsh-client-ui-defaults

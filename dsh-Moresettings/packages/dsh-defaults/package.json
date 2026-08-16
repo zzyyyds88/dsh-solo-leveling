@@ -1,7 +1,7 @@
 {
   "name": "dsh-defaults",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "默认值设置插件（宿主半）：注册 dsh-defaults 设置命名空间（默认工作目录 / 默认重试次数），持久化于 $DSH_HOME/settings.yaml，供目录选择器 fork 与 pi-ai 适配器 fork 运行时消费。",
   "type": "module",
   "main": "lib/index.js",
@@ -9,5 +9,14 @@
     ".": "./lib/index.js",
     "./package.json": "./package.json"
   },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
   "license": "MIT"
 }

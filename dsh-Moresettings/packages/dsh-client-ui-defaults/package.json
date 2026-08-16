@@ -2,7 +2,7 @@
   "name": "dsh-client-ui-defaults",
   "description": "Settings card to configure the default working directory and the default retry count (local customization)",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -11,6 +11,9 @@
     "./package.json": "./package.json"
   },
   "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "inject": [
@@ -23,5 +26,9 @@
       ]
     }
   },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
   "license": "MIT"
 }

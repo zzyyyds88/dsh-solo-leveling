@@ -1,0 +1,5 @@
+# dsh-defaults 挂载清单（标准插件包：dsh.bundle.patch 声明本文件）
+# 后端命名空间插件：「设置 → 插件 → 插件配置 → 默认值」的宿主
+- insert:
+    - id: dsh-defaults
+      name: dsh-defaults

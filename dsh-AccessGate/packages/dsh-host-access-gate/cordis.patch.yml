@@ -1,0 +1,12 @@
+# dsh-host-access-gate 挂载清单（标准插件包：dsh.bundle.patch 声明本文件）
+# 与正式 profile 的 access-gate 挂载行等价：门闸钩子注入 webServer，
+# 口令取 DSH_ACCESS_GATE_PASSWORD（兼容旧名 DSH_WEB_PASSWORD），未配置时
+# 进入首次设置模式（首次访问 /setup 由用户设置）。
+- insert:
+    - id: access-gate
+      name: dsh-host-access-gate
+      inject:
+        - webServer
+      config:
+        password: !!js process.env.DSH_ACCESS_GATE_PASSWORD ?? process.env.DSH_WEB_PASSWORD
+        mode: 'on'

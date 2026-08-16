@@ -2,11 +2,21 @@
   "name": "dsh-host-access-gate",
   "version": "0.1.0",
   "description": "访问门禁：DSH Web GUI 登录门闸（口令登录 / 首次设置 / 会话 Cookie / 限速）",
-  "private": true,
+  "private": false,
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js"
   },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "files": [
+    "lib",
+    "assets",
+    "cordis.patch.yml"
+  ],
   "license": "MIT"
 }
