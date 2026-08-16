@@ -102,6 +102,10 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
 - **插件配置入口规范**：一律用「设置 → 插件 → 插件配置」区独立卡片
   （`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页
   （见 [docs/开发规范.md §2.5](docs/开发规范.md)）。
+- **⚠ 客户端 bundle 里绝不能用 classList 操作 React 管理的 className**：
+  React 会重写 className，与 MutationObserver 形成死循环，实测直接把
+  renderer 搞崩（页面无声关闭、无报错）。改 DOM 标记一律用 `data-*`
+  属性（见 `dsh-mobile/` 踩坑记录）。
 - 当前安装：`/usr/lib/node_modules/@deepseek-ai/dsh`，版本 `0.1.0-rc.6`（升级后需更新此处）。
 
 ## 5. 项目清单
@@ -118,4 +122,5 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
 | `dsh-Moresettings/` | **统一默认值插件**（合并「修改默认工作目录」+「思考强度与重试默认值」，即原 `dsh-defaults`）：设置 → 插件 → 插件配置 →「默认值」卡片配置默认工作目录与默认重试次数（**对所有供应商生效**，含内置 DeepSeek），改设置即时生效无需重启 | 源码即产物 + 五个 fork（全部在本项目 `packages/` 内，自包含）；test-env 验证通过（`verify-defaults.mjs` 9 项断言）；正式安装待用户执行 `install-to-profile.sh` |
 | `dsh-deepseekpet/` | **收录上游桌宠插件**（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT，零改动）：嵌入网页的交互式桌宠，随任务/工具调用/上下文/活跃会话自动切换表情，支持拖动缩放折叠与批准/提问气泡 | test-env-2（3091）验证通过（boot 清单 + client bundle 可加载）；正式安装待用户执行 `dsh plugin --profile web add` |
 | `dsh-task-suite/` | **精选 Web UI 插件集（自 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) v0.1.17 抽取，scope 改 `@zzyyyds88`，一个聚合插件 `dsh-task-suite-all` 装齐）**：任务看板（cron 定时跑）、实时令牌/吞吐统计、Git 图谱、右侧面板（预览 + 文件/变更）、图像理解（describe_image 工具 + 配置卡）、设置中心、皮肤中心 + 11 款皮肤（含收录的 [maid-atelier](https://github.com/Small-tailqwq/dsh-deep-whale)，CC BY-NC-SA 4.0） | 构建 + 全量测试通过（830+ 断言）；test-env 验证通过（boot 全插件 + 皮肤热切换闭环）；正式安装待用户执行 |
+| `dsh-mobile/` | **手机端适配插件**（`dsh-mobile-adapt` v0.2.0）：窄屏（≤768px）聊天区占满全宽、aionui 文件树/预览变右侧抽屉（默认收起 + 用户可开）、设置面板字段纵向堆叠消除竖排坏字、输入框 16px 防 iOS 缩放 + 安全区、桌宠缩小/弹层让位；**小改原则**（全部限定窄屏媒体查询，不动皮肤变量与桌面布局） | test-env-1（3090）验证通过（390×844 实测 + 识图复核 + `verify.sh --live` 全绿）；正式旧版已部署，**v0.2.0 待用户执行 `dsh-mobile/install-to-profile.sh`** |
 | `test-envs/` | **工作区级专用 DSH 测试环境**：四个环境（`test-env-1~4`，端口 3090~3093），统一收纳于 `test-envs/`，打包测试唯一去处（脚本：`scripts/test-env-*.sh`） | 已部署（基线从正式 profile 克隆；独占使用 + 验收后清理纪律） |

@@ -1,0 +1,25 @@
+{
+  "name": "dsh-mobile-adapt",
+  "version": "0.2.0",
+  "description": "Mobile adaptation for the DSH Web GUI: narrow-screen CSS + drawer behavior for the aionui side panels (local customization)",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "bash build.sh"
+  },
+  "license": "MIT"
+}
