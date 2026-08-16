@@ -86,6 +86,16 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   const sessionSnapshot = {
     openState: 'open', running: false, runningCalls: [], partial: null, queue: [], nodes: [],
     pending: [{ kind: 'question', key: 'question-1', payload: { questions: [{ id: 'choice', question: '请选择下一步' }] } }],
+    views: {
+      get(target) {
+        if (target !== 'trajectory') return undefined
+        return {
+          requests: [
+            { usage: { inputTokens: 1000, outputTokens: 500, cacheReadTokens: 200, cacheWriteTokens: 100 } },
+          ],
+        }
+      },
+    },
   }
   ctx.sessions.binding = () => ({
     session: {
@@ -108,6 +118,13 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   assert.doesNotMatch(html, /dsh-live2d-rig|dsh-live2d-part/)
   assert.match(html, /等待你的回答/)
   assert.doesNotMatch(html, /dsh-live2d-pending|<fieldset|请选择下一步|>提交</)
+  // 账房面板默认显示（数据来自轨迹视图 usage）
+  assert.match(html, /dsh-live2d-ledger/)
+  assert.match(html, /账房 · 实时/)
+  assert.match(html, /缓存命中率/)
+  assert.match(html, /预算剩/)
+  assert.match(html, /状态/)
+  assert.match(html, /1,800/) // 1000+200+100 输入相关 + 500 输出 = 1800 总 token
 
   const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, { ...settingsCard.business, defaultOpen: true }))
   // 官方 PluginCard 版式：li 卡片 → 头部按钮（名称+描述+箭头）→ 底部 放弃/保存
@@ -123,6 +140,14 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   assert.match(cardHtml, /dshp-save/)
   assert.match(cardHtml, />保存</)
   assert.match(cardHtml, />放弃</)
+  // 账房字段：面板开关 / 预算封顶 / 费率
+  assert.match(cardHtml, /账房面板/)
+  assert.match(cardHtml, /预算封顶/)
+  assert.match(cardHtml, /费率/)
+  assert.match(cardHtml, /输入未命中/)
+  assert.match(cardHtml, /缓存命中/)
+  assert.match(cardHtml, /缓存写入/)
+  assert.match(cardHtml, /输出/)
 
   for (const cleanup of cleanups.reverse()) cleanup()
   delete globalThis.window

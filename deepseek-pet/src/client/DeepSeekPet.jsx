@@ -11,6 +11,11 @@ import {
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.js'
 import { isPetEnabled, subscribeAppSettings } from './app-settings.js'
+import {
+  billedInput, cacheHitRate, detectTrend, estimateCost, formatTokens, isLedgerEnabled,
+  ledgerBudget, overBudget, pushCostSample, subscribeLedgerSettings,
+  usageFromSnapshot,
+} from './ledger.js'
 
 const EMPTY_SNAPSHOT = Object.freeze({
   openState: 'open', running: false, runningCalls: [], partial: null,
@@ -113,6 +118,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const getPressure = useCallback(() => pressureFace?.getSnapshot() ?? EMPTY_PRESSURE, [pressureFace])
   const pressure = useSyncExternalStore(subscribePressure, getPressure, getPressure)
   const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
+  const ledgerEnabled = useSyncExternalStore(subscribeLedgerSettings, isLedgerEnabled, isLedgerEnabled)
   const immediate = stateFromSnapshot(session ? snapshot : null)
   const taskActive = Boolean(snapshot.running || snapshot.runningCalls?.length || snapshot.partial || snapshot.pending?.length || snapshot.queue?.length)
   const contextRatio = Number.isFinite(pressure?.projectedTokens) && Number.isFinite(pressure?.contextWindow)
@@ -144,6 +150,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const [confetti, setConfetti] = useState([])
   const [muted, setMuted] = useState(() => isMuted())
   const [diagOpen, setDiagOpen] = useState(false)
+  const [ledgerOpen, setLedgerOpen] = useState(true)
   const [alertVer, setAlertVer] = useState(0)
   const [activeReaction, setActiveReaction] = useState(() => presentationForState(initialEffective, 0, {
     idleMs: initialIdleMsRef.current, visualMs: 0, waitingMs: 0,
@@ -522,6 +529,61 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     speakVoice(pickVoiceKey(keys))
   }, [effectiveVisual.kind, effectiveVisual.promptKind, petEnabled])
 
+  /* ---------- 账房：token 用量 / 缓存命中率 / 预估价格 / 预算封顶 ---------- */
+  const usage = useMemo(() => (petEnabled && ledgerEnabled ? usageFromSnapshot(snapshot) : null), [snapshot, petEnabled, ledgerEnabled])
+  const ledgerCost = useMemo(() => usage ? estimateCost(usage) : 0, [usage])
+  const ledgerHit = useMemo(() => usage ? cacheHitRate(usage) : null, [usage])
+  const ledgerLeft = Math.max(0, ledgerBudget() - ledgerCost)
+  const ledgerOver = overBudget(ledgerCost, ledgerBudget())
+  const costHistoryRef = useRef([])
+  const peakFlagRef = useRef(false)
+  const valleyFlagRef = useRef(false)
+  const capAlertedAtRef = useRef(0)
+
+  // 峰谷/封顶提醒：用量有实质变化（成本比上次采样多 1 分以上）才采样一次，
+  // 避免每帧快照抖动触发误报；封顶提醒 30 分钟内只响一次。
+  useEffect(() => {
+    if (!petEnabled || !ledgerEnabled || !ledgerOpen || !usage) return
+    const history = pushCostSample(costHistoryRef.current, ledgerCost)
+    costHistoryRef.current = history
+    const delta = history.length >= 2 ? history[history.length - 1].cost - history[history.length - 2].cost : 0
+    if (Math.abs(delta) < 0.01) return
+    const trend = detectTrend(history)
+    if (trend === 'peak' && !peakFlagRef.current) {
+      peakFlagRef.current = true
+      valleyFlagRef.current = false
+      speak(`💸 价格高峰！这一阵子烧得飞快（约 +¥${delta.toFixed(2)}），悠着点～`, '')
+    } else if (trend === 'valley' && !valleyFlagRef.current) {
+      valleyFlagRef.current = true
+      peakFlagRef.current = false
+      speak('🕊️ 价格低谷！这会儿几乎没烧钱，安心摸鱼～', '')
+    } else if (trend === 'normal') {
+      peakFlagRef.current = false
+      valleyFlagRef.current = false
+    }
+    if (ledgerOver && Date.now() - capAlertedAtRef.current > 30 * 60_000) {
+      capAlertedAtRef.current = Date.now()
+      speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudget()} 的封顶线！`, '')
+    }
+  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, speak])
+
+  /** 账房面板行数据（供渲染）。 */
+  const ledgerRows = useMemo(() => {
+    if (!usage) return []
+    const rows = [
+      ['预计花费', `¥${ledgerCost.toFixed(2)}`],
+    ]
+    if (ledgerHit !== null) rows.push(['缓存命中率', `${ledgerHit}%`])
+    rows.push(['总 token', formatTokens((usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0) + (usage.output ?? 0))])
+    rows.push(['输入', formatTokens(billedInput(usage))])
+    if (usage.output) rows.push(['输出', formatTokens(usage.output)])
+    if (usage.cacheRead) rows.push(['缓存命中', formatTokens(usage.cacheRead)])
+    rows.push(['预算剩', `¥${ledgerLeft.toFixed(2)} / ${ledgerBudget()}`])
+    const status = ledgerOver ? '🚨 已超封顶！' : (peakFlagRef.current ? '📈 高峰中' : (valleyFlagRef.current ? '📉 低谷中' : '峰谷正常'))
+    rows.push(['状态', status])
+    return rows
+  }, [usage, ledgerCost, ledgerHit, ledgerLeft, ledgerOver])
+
   useEffect(() => () => {
     window.clearTimeout(celebrateTimer.current)
     window.clearTimeout(longPressTimer.current)
@@ -693,9 +755,19 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
           <button type="button" onClick={() => { unlockAudio(); speakVoice('done1') }}>语音</button>
         </footer>
       </section>}
+      {ledgerEnabled && ledgerOpen && <section className="dsh-live2d-ledger" aria-label="账房面板">
+        <header><b>💰 账房 · 实时</b><button type="button" onClick={() => setLedgerOpen(false)} aria-label="收起账房面板">✕</button></header>
+        {usage && ledgerRows.length > 0 ? <dl>
+          {ledgerRows.map(([label, value], index) => {
+            const isStatus = index === ledgerRows.length - 1
+            return <div key={label}><dt>{label}</dt><dd data-alert={isStatus && ledgerOver ? 'true' : undefined}>{value}</dd></div>
+          })}
+        </dl> : <p className="dsh-live2d-ledger-empty">⏳ 暂无用量：完成一次请求后自动统计（费率按 deepseek-chat 估算，设置可调）</p>}
+      </section>}
       <nav className="dsh-live2d-tools" aria-label="Pet 快捷操作">
         <button type="button" title={muted ? '声音已关闭（点击开启）' : '声音已开启（点击静音）'} aria-label={muted ? '开启声音' : '静音'} onClick={handleToggleMute}><b>{muted ? '🔇' : '🔊'}</b><span>{muted ? '静音中' : '有声'}</span></button>
         <button type="button" title="最小化 Pet" aria-label="最小化 Pet" onClick={() => setCollapsed(true)}><b>−</b><span>最小化</span></button>
+        {ledgerEnabled && <button type="button" title="账房面板" aria-label="账房面板" data-ledger={ledgerOpen ? 'true' : 'false'} onClick={() => setLedgerOpen(current => !current)}><b>💰</b><span>{ledgerOpen ? '账房中' : '账房'}</span></button>}
       </nav>
       <section className="dsh-live2d-sessions" data-visible={focusedSession || runningSessions.length ? 'true' : 'false'} aria-label="活跃会话">
         {focusedSession && <button className="dsh-live2d-session-focus" type="button" data-current="true" onClick={() => openSession?.(focusedSession.id)}>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ALERT_LABELS, applySoundSettings, soundSettingsSnapshot } from './sound.js'
 import { applyAppSettings, appSettingsSnapshot } from './app-settings.js'
+import { applyLedgerSettings, ledgerSettingsSnapshot } from './ledger.js'
 
 /**
  * 桌宠设置卡片 —— 挂载到「设置 → 插件 → 插件配置」区（settings.plugin.item）。
@@ -50,6 +51,12 @@ const CARD_CSS = `
 .dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
 .dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
 .dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
+.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:96px}
+.dshp-number:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
+.dshp-rateGrid{grid-template-columns:1fr 1fr;gap:0 14px;display:grid}
+.dshp-rateItem{flex-direction:column;gap:4px;min-width:0;display:flex}
+.dshp-rateLabel{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;white-space:nowrap}
+
 `
 
 function installCardCss() {
@@ -105,10 +112,12 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
     window.addEventListener('storage', sync)
     window.addEventListener('deepseek-pet:sound-changed', sync)
     window.addEventListener('deepseek-pet:app-changed', sync)
+    window.addEventListener('deepseek-pet:ledger-changed', sync)
     return () => {
       window.removeEventListener('storage', sync)
       window.removeEventListener('deepseek-pet:sound-changed', sync)
       window.removeEventListener('deepseek-pet:app-changed', sync)
+      window.removeEventListener('deepseek-pet:ledger-changed', sync)
     }
   }, [])
 
@@ -126,13 +135,26 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
   const setTotal = useCallback(value => {
     setDraft(prev => ({ ...prev, total: Number(value) / 100 }))
   }, [])
+  const setLedgerEnabled = useCallback(value => {
+    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, enabled: value === true } }))
+  }, [])
+  const setLedgerBudget = useCallback(value => {
+    const parsed = Number(value)
+    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budget: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.budget } }))
+  }, [])
+  const setLedgerRate = useCallback((key, value) => {
+    const parsed = Number(value)
+    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rates: { ...prev.ledger.rates, [key]: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.rates[key] } } }))
+  }, [])
 
   const save = useCallback(() => {
     applyAppSettings({ enabled: draft.enabled })
     applySoundSettings(draft)
+    applyLedgerSettings(draft.ledger)
     setStored(combinedSnapshot())
     window.dispatchEvent(new Event('deepseek-pet:sound-changed'))
     window.dispatchEvent(new Event('deepseek-pet:app-changed'))
+    window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
     setMessage('已保存')
     window.setTimeout(() => setMessage(''), 1600)
   }, [draft])
@@ -179,6 +201,27 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
             <input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
               onChange={event => setTotal(event.target.value)} aria-label="总音量" />
           </div>
+          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒">
+            <PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />
+          </PetField>
+          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒">
+            <input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
+              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />
+          </PetField>
+          <PetField label="费率（¥ / 百万 token）" hint="按 deepseek-chat 官方价估算，可自行覆盖">
+            <span className="dshp-badge">deepseek-chat</span>
+          </PetField>
+          <div className="dshp-field">
+            <div className="dshp-rateGrid">
+              {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
+                <label key={key} className="dshp-rateItem">
+                  <span className="dshp-rateLabel">{label}</span>
+                  <input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
+                    onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />
+                </label>
+              ))}
+            </div>
+          </div>
           {message && <p className="dshp-failed">{message}</p>}
           <div className="dshp-footer">
             <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
@@ -190,9 +233,9 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
   )
 }
 
-/** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 合并快照。 */
+/** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 + 账房设置 合并快照。 */
 function combinedSnapshot() {
-  return { ...appSettingsSnapshot(), ...soundSettingsSnapshot() }
+  return { ...appSettingsSnapshot(), ...soundSettingsSnapshot(), ledger: ledgerSettingsSnapshot() }
 }
 
 /** 注册设置卡片到「设置 → 插件 → 插件配置」。 */

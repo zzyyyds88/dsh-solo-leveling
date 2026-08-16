@@ -1,449 +1,292 @@
 diff --git a/deepseek-pet/src/client/DeepSeekPet.jsx b/deepseek-pet/src/client/DeepSeekPet.jsx
-index b137a93..faba374 100644
+index faba374..4f9da64 100644
 --- a/deepseek-pet/src/client/DeepSeekPet.jsx
 +++ b/deepseek-pet/src/client/DeepSeekPet.jsx
-@@ -10,6 +10,7 @@ import {
-   isMuted, playCelebrate, playPoke, playPrompt, playSad, setAlertEnabled,
+@@ -11,6 +11,11 @@ import {
    setVolume, speakVoice, toggleMuted, unlockAudio,
  } from './sound.js'
-+import { isPetEnabled, subscribeAppSettings } from './app-settings.js'
+ import { isPetEnabled, subscribeAppSettings } from './app-settings.js'
++import {
++  billedInput, cacheHitRate, detectTrend, estimateCost, formatTokens, isLedgerEnabled,
++  ledgerBudget, overBudget, pushCostSample, subscribeLedgerSettings,
++  usageFromSnapshot,
++} from './ledger.js'
  
  const EMPTY_SNAPSHOT = Object.freeze({
    openState: 'open', running: false, runningCalls: [], partial: null,
-@@ -111,6 +112,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-   const subscribePressure = useCallback(listener => pressureFace?.subscribe(listener) ?? (() => {}), [pressureFace])
+@@ -113,6 +118,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
    const getPressure = useCallback(() => pressureFace?.getSnapshot() ?? EMPTY_PRESSURE, [pressureFace])
    const pressure = useSyncExternalStore(subscribePressure, getPressure, getPressure)
-+  const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
+   const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
++  const ledgerEnabled = useSyncExternalStore(subscribeLedgerSettings, isLedgerEnabled, isLedgerEnabled)
    const immediate = stateFromSnapshot(session ? snapshot : null)
    const taskActive = Boolean(snapshot.running || snapshot.runningCalls?.length || snapshot.partial || snapshot.pending?.length || snapshot.queue?.length)
    const contextRatio = Number.isFinite(pressure?.projectedTokens) && Number.isFinite(pressure?.contextWindow)
-@@ -182,12 +184,12 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-       if (immediate.kind !== 'idle') commit(immediate)
-       else {
-         commit(completionState())
--        fireCompletionCelebration()
-+        if (petEnabled) fireCompletionCelebration()
-         completionTimer = window.setTimeout(() => commit(immediate), 8000)
-       }
-     } else transitionTimer = window.setTimeout(() => commit(immediate), immediate.kind === 'error' ? 100 : 720)
-     return () => { window.clearTimeout(transitionTimer); window.clearTimeout(completionTimer) }
--  }, [immediate.kind, immediate.label, immediate.detail, snapshot.running])
-+  }, [immediate.kind, immediate.label, immediate.detail, snapshot.running, petEnabled])
- 
-   useEffect(() => {
-     setPhase(0)
-@@ -471,6 +473,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-   // 普通对话里 snapshot.running 恒为 false（那是 agent 任务循环的标志），完成时只有
-   // partial 清空这一信号；agent 任务的 running→idle 已由上面 effect 处理（3 秒去重兜底）。
-   useEffect(() => {
-+    if (!petEnabled) return
-     const hasStreamContent = partialHasText(snapshot.partial)
-     const wasStreamContent = wasPartialRef.current
-     wasPartialRef.current = hasStreamContent
-@@ -480,7 +483,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-     const kind = effectiveVisual.kind
-     if (kind === 'error' || kind === 'tool-error') return // 出错走安慰
-     fireCompletionCelebration()
--  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration, updateCompletionDiag])
-+  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration, updateCompletionDiag, petEnabled])
- 
-   /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
-   const comfortError = useCallback(() => {
-@@ -494,16 +497,18 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-   // 出错 / 工具失败时播放安慰音（仅状态真实切换时，不重复打扰）
-   const prevKindRef = useRef(effectiveVisual.kind)
-   useEffect(() => {
-+    if (!petEnabled) return
-     const prev = prevKindRef.current
-     prevKindRef.current = effectiveVisual.kind
-     if (prev !== effectiveVisual.kind && (effectiveVisual.kind === 'error' || effectiveVisual.kind === 'tool-error')) {
-       comfortError()
-     }
--  }, [effectiveVisual.kind, comfortError])
-+  }, [effectiveVisual.kind, comfortError, petEnabled])
- 
-   // 进入等待批准/提问/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）。
-   // waiting 用 effectiveVisual.promptKind 区分「审批」与「提问」，播不同台词。
-   useEffect(() => {
-+    if (!petEnabled) return
-     const kind = effectiveVisual.kind
-     if (kind !== 'waiting' && kind !== 'approval' && kind !== 'busy' && kind !== 'thinking') return
-     if (!alertEnabled('prompt')) return
-@@ -515,7 +520,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-     unlockAudio()
-     playPrompt()
+@@ -144,6 +150,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
+   const [confetti, setConfetti] = useState([])
+   const [muted, setMuted] = useState(() => isMuted())
+   const [diagOpen, setDiagOpen] = useState(false)
++  const [ledgerOpen, setLedgerOpen] = useState(true)
+   const [alertVer, setAlertVer] = useState(0)
+   const [activeReaction, setActiveReaction] = useState(() => presentationForState(initialEffective, 0, {
+     idleMs: initialIdleMsRef.current, visualMs: 0, waitingMs: 0,
+@@ -522,6 +529,61 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
      speakVoice(pickVoiceKey(keys))
--  }, [effectiveVisual.kind, effectiveVisual.promptKind])
-+  }, [effectiveVisual.kind, effectiveVisual.promptKind, petEnabled])
+   }, [effectiveVisual.kind, effectiveVisual.promptKind, petEnabled])
  
++  /* ---------- 账房：token 用量 / 缓存命中率 / 预估价格 / 预算封顶 ---------- */
++  const usage = useMemo(() => (petEnabled && ledgerEnabled ? usageFromSnapshot(snapshot) : null), [snapshot, petEnabled, ledgerEnabled])
++  const ledgerCost = useMemo(() => usage ? estimateCost(usage) : 0, [usage])
++  const ledgerHit = useMemo(() => usage ? cacheHitRate(usage) : null, [usage])
++  const ledgerLeft = Math.max(0, ledgerBudget() - ledgerCost)
++  const ledgerOver = overBudget(ledgerCost, ledgerBudget())
++  const costHistoryRef = useRef([])
++  const peakFlagRef = useRef(false)
++  const valleyFlagRef = useRef(false)
++  const capAlertedAtRef = useRef(0)
++
++  // 峰谷/封顶提醒：用量有实质变化（成本比上次采样多 1 分以上）才采样一次，
++  // 避免每帧快照抖动触发误报；封顶提醒 30 分钟内只响一次。
++  useEffect(() => {
++    if (!petEnabled || !ledgerEnabled || !ledgerOpen || !usage) return
++    const history = pushCostSample(costHistoryRef.current, ledgerCost)
++    costHistoryRef.current = history
++    const delta = history.length >= 2 ? history[history.length - 1].cost - history[history.length - 2].cost : 0
++    if (Math.abs(delta) < 0.01) return
++    const trend = detectTrend(history)
++    if (trend === 'peak' && !peakFlagRef.current) {
++      peakFlagRef.current = true
++      valleyFlagRef.current = false
++      speak(`💸 价格高峰！这一阵子烧得飞快（约 +¥${delta.toFixed(2)}），悠着点～`, '')
++    } else if (trend === 'valley' && !valleyFlagRef.current) {
++      valleyFlagRef.current = true
++      peakFlagRef.current = false
++      speak('🕊️ 价格低谷！这会儿几乎没烧钱，安心摸鱼～', '')
++    } else if (trend === 'normal') {
++      peakFlagRef.current = false
++      valleyFlagRef.current = false
++    }
++    if (ledgerOver && Date.now() - capAlertedAtRef.current > 30 * 60_000) {
++      capAlertedAtRef.current = Date.now()
++      speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudget()} 的封顶线！`, '')
++    }
++  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, speak])
++
++  /** 账房面板行数据（供渲染）。 */
++  const ledgerRows = useMemo(() => {
++    if (!usage) return []
++    const rows = [
++      ['预计花费', `¥${ledgerCost.toFixed(2)}`],
++    ]
++    if (ledgerHit !== null) rows.push(['缓存命中率', `${ledgerHit}%`])
++    rows.push(['总 token', formatTokens((usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0) + (usage.output ?? 0))])
++    rows.push(['输入', formatTokens(billedInput(usage))])
++    if (usage.output) rows.push(['输出', formatTokens(usage.output)])
++    if (usage.cacheRead) rows.push(['缓存命中', formatTokens(usage.cacheRead)])
++    rows.push(['预算剩', `¥${ledgerLeft.toFixed(2)} / ${ledgerBudget()}`])
++    const status = ledgerOver ? '🚨 已超封顶！' : (peakFlagRef.current ? '📈 高峰中' : (valleyFlagRef.current ? '📉 低谷中' : '峰谷正常'))
++    rows.push(['状态', status])
++    return rows
++  }, [usage, ledgerCost, ledgerHit, ledgerLeft, ledgerOver])
++
    useEffect(() => () => {
      window.clearTimeout(celebrateTimer.current)
-@@ -649,6 +654,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
-   const bubbleTitle = tapText || (showStream ? activityLabel : effectiveVisual.label)
-   const bubbleDetail = tapDetail || (showStream ? typedStream : effectiveVisual.detail)
-   const visibleFrame = !collapsed && FRAME_FOR_REACTION[activeReaction] === activeFrame ? activeFrame : ''
-+  if (!petEnabled) return null
-   return (
-     <aside data-dsh-live2d-root data-collapsed={collapsed ? 'true' : 'false'} data-pet-state={effectiveVisual.kind}
-       data-reaction-pending={reactionPending ? 'true' : 'false'} data-tapped={tapText ? 'true' : 'false'}
+     window.clearTimeout(longPressTimer.current)
+@@ -693,9 +755,19 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
+           <button type="button" onClick={() => { unlockAudio(); speakVoice('done1') }}>语音</button>
+         </footer>
+       </section>}
++      {ledgerEnabled && ledgerOpen && <section className="dsh-live2d-ledger" aria-label="账房面板">
++        <header><b>💰 账房 · 实时</b><button type="button" onClick={() => setLedgerOpen(false)} aria-label="收起账房面板">✕</button></header>
++        {usage && ledgerRows.length > 0 ? <dl>
++          {ledgerRows.map(([label, value], index) => {
++            const isStatus = index === ledgerRows.length - 1
++            return <div key={label}><dt>{label}</dt><dd data-alert={isStatus && ledgerOver ? 'true' : undefined}>{value}</dd></div>
++          })}
++        </dl> : <p className="dsh-live2d-ledger-empty">⏳ 暂无用量：完成一次请求后自动统计（费率按 deepseek-chat 估算，设置可调）</p>}
++      </section>}
+       <nav className="dsh-live2d-tools" aria-label="Pet 快捷操作">
+         <button type="button" title={muted ? '声音已关闭（点击开启）' : '声音已开启（点击静音）'} aria-label={muted ? '开启声音' : '静音'} onClick={handleToggleMute}><b>{muted ? '🔇' : '🔊'}</b><span>{muted ? '静音中' : '有声'}</span></button>
+         <button type="button" title="最小化 Pet" aria-label="最小化 Pet" onClick={() => setCollapsed(true)}><b>−</b><span>最小化</span></button>
++        {ledgerEnabled && <button type="button" title="账房面板" aria-label="账房面板" data-ledger={ledgerOpen ? 'true' : 'false'} onClick={() => setLedgerOpen(current => !current)}><b>💰</b><span>{ledgerOpen ? '账房中' : '账房'}</span></button>}
+       </nav>
+       <section className="dsh-live2d-sessions" data-visible={focusedSession || runningSessions.length ? 'true' : 'false'} aria-label="活跃会话">
+         {focusedSession && <button className="dsh-live2d-session-focus" type="button" data-current="true" onClick={() => openSession?.(focusedSession.id)}>
 diff --git a/deepseek-pet/src/client/settings-card.jsx b/deepseek-pet/src/client/settings-card.jsx
-index de8053d..dae39e5 100644
+index dae39e5..20f050e 100644
 --- a/deepseek-pet/src/client/settings-card.jsx
 +++ b/deepseek-pet/src/client/settings-card.jsx
-@@ -1,38 +1,55 @@
+@@ -1,6 +1,7 @@
  import { useCallback, useEffect, useState } from 'react'
  import { ALERT_LABELS, applySoundSettings, soundSettingsSnapshot } from './sound.js'
-+import { applyAppSettings, appSettingsSnapshot } from './app-settings.js'
+ import { applyAppSettings, appSettingsSnapshot } from './app-settings.js'
++import { applyLedgerSettings, ledgerSettingsSnapshot } from './ledger.js'
  
  /**
   * 桌宠设置卡片 —— 挂载到「设置 → 插件 → 插件配置」区（settings.plugin.item）。
-  *
-- * 遵循开发规范 §2.5：可展开头部（标题+描述+未保存标记）、字段区（开关+音量）、
-- * 保存/放弃按钮。deepseek-pet 是纯前端插件（无 host 半、无 settings 命名空间），
-- * 卡片直接读写 localStorage（deepseek-pet:sound），不引入后端依赖。
-+ * 样式严格对齐官方插件卡片（PluginCard：li 圆角卡片 → 头部按钮（名称+描述+
-+ * 未保存药丸+箭头）→ 字段区 → 底部 放弃/保存），开关控件采用官方
-+ * role="switch" 轨道/滑块模式。deepseek-pet 是纯前端插件（无 host 半、
-+ * 无 settings 命名空间），卡片直接读写 localStorage（deepseek-pet:sound +
-+ * deepseek-pet:app），不引入后端依赖。
-  */
- 
- const CARD_ID = 'deepseek-pet'
- 
--/** 卡片样式（对齐官方「网页搜索」卡片观感，走 dsw 别名变量）。 */
-+/** 卡片样式：逐条复制官方 PluginCard / fields / trajectory switch 的样式值。 */
- const CARD_CSS = `
--.dshp-card{color:var(--dsw-alias-label-primary);font-size:13px;line-height:20px}
--.dshp-card[data-open=false] .dshp-body{display:none}
--.dshp-head{width:100%;display:flex;align-items:center;gap:8px;padding:0;border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
--.dshp-head b{font-weight:600}
--.dshp-head small{color:var(--dsw-alias-label-tertiary);font-size:12px}
--.dshp-dirty{color:var(--dsw-alias-state-warn-primary);font-size:11px;margin-left:auto}
--.dshp-chev{color:var(--dsw-alias-label-tertiary);transition:transform .18s ease}
--.dshp-card[data-open=true] .dshp-chev{transform:rotate(90deg)}
--.dshp-body{margin-top:10px;display:grid;gap:8px}
--.dshp-field{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
--.dshp-field>label{display:flex;align-items:center;gap:8px;cursor:pointer}
--.dshp-field input[type=checkbox]{accent-color:var(--dsw-alias-brand-primary);cursor:pointer}
--.dshp-field small{color:var(--dsw-alias-label-tertiary);font-size:11px;display:block;margin-left:22px}
--.dshp-field input[type=range]{width:120px;accent-color:var(--dsw-alias-brand-primary);cursor:pointer}
--.dshp-actions{display:flex;gap:8px;margin-top:4px}
--.dshp-actions button{padding:4px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:var(--dsw-alias-button-elevated-fill);color:var(--dsw-alias-label-primary);font:inherit;cursor:pointer}
--.dshp-actions button:hover{border-color:var(--dsw-alias-brand-primary)}
--.dshp-actions button[data-primary]{background:var(--dsw-alias-button-primary-fill);color:#fff;border-color:transparent}
--.dshp-hint{color:var(--dsw-alias-label-tertiary);font-size:11px}
--.dshp-hint b{color:var(--dsw-alias-label-secondary)}
-+.dshp-card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}
-+.dshp-card:hover{border-color:var(--dsw-alias-label-dimmed)}
-+.dshp-cardOpen{background:var(--dsw-alias-bg-layer-2);border-color:var(--dsw-alias-label-dimmed)}
-+.dshp-head{appearance:none;width:100%;font:inherit;color:inherit;text-align:left;cursor:pointer;background:0 0;border:0;border-radius:12px;align-items:center;gap:12px;padding:14px 16px;display:flex}
-+.dshp-head:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:-2px}
-+.dshp-headText{flex-direction:column;flex:1;gap:4px;min-width:0;display:flex}
-+.dshp-name{color:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;line-height:1.4}
-+.dshp-description{color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:1.5}
-+.dshp-chevron{color:var(--dsw-alias-label-tertiary);flex:none;transition:transform .16s}
-+.dshp-chevronOpen{transform:rotate(180deg)}
-+.dshp-pending{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;flex:none;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}
-+.dshp-body{border-top:1px solid var(--dsw-alias-border-l2);margin:0 16px;padding-bottom:8px}
-+.dshp-footer{border-top:1px solid var(--dsw-alias-border-l2);justify-content:flex-end;align-items:center;gap:8px;padding:12px 0 4px;display:flex}
-+.dshp-failed{min-width:0;color:var(--dsw-alias-label-error);flex:1;margin:0;font-size:12px;line-height:1.5}
-+.dshp-discard,.dshp-save{appearance:none;font:inherit;cursor:pointer;border:1px solid #0000;border-radius:8px;padding:5px 14px;font-size:13px;line-height:1.5}
-+.dshp-discard{border-color:var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary);background:0 0}
-+.dshp-discard:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}
-+.dshp-save{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}
-+.dshp-discard:disabled,.dshp-save:disabled{opacity:.4;cursor:default}
-+.dshp-discard:focus-visible,.dshp-save:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}
-+.dshp-field{flex-direction:column;gap:6px;padding:12px 0;display:flex}
-+.dshp-field+.dshp-field{border-top:1px solid var(--dsw-alias-border-l2)}
-+.dshp-head{align-items:center;gap:8px;display:flex}
-+.dshp-label{min-width:0;color:var(--dsw-alias-label-primary);flex:1;font-size:13px;font-weight:500;line-height:1.5}
-+.dshp-badges{align-items:center;gap:8px;display:inline-flex}
-+.dshp-badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}
-+.dshp-hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}
-+.dshp-range{width:100%;accent-color:var(--dsw-alias-brand-primary);cursor:pointer;margin:2px 0}
-+.dshp-switch{appearance:none;background:0 0;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;display:inline-flex}
-+.dshp-switchTrack{background:var(--dsw-alias-border-l2);width:20px;height:10px;transition:background-color .12s var(--ds-ease-in-out);border-radius:5px;flex:none;display:inline-block;position:relative}
-+.dshp-switchThumb{background:var(--dsw-alias-bg-layer-1);width:6px;height:6px;transition:transform .12s var(--ds-ease-in-out);border-radius:50%;position:absolute;top:2px;left:2px}
-+.dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
-+.dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
-+.dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
+@@ -50,6 +51,12 @@ const CARD_CSS = `
+ .dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
+ .dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
+ .dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
++.dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:96px}
++.dshp-number:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
++.dshp-rateGrid{grid-template-columns:1fr 1fr;gap:0 14px;display:grid}
++.dshp-rateItem{flex-direction:column;gap:4px;min-width:0;display:flex}
++.dshp-rateLabel{color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:1.5;white-space:nowrap}
++
  `
  
  function installCardCss() {
-@@ -46,102 +63,138 @@ function installCardCss() {
-   return () => tag.remove()
- }
- 
-+/** 官方 role="switch" 轨道/滑块开关（同 trajectory 工具栏样式）。 */
-+function PetSwitch({ checked, onChange, label }) {
-+  return (
-+    <button type="button" role="switch" aria-checked={checked} aria-label={label}
-+      className="dshp-switch" onClick={() => onChange(!checked)}>
-+      <span className="dshp-switchTrack" data-on={checked || undefined} aria-hidden="true">
-+        <span className="dshp-switchThumb" />
-+      </span>
-+    </button>
-+  )
-+}
-+
-+/** 一条字段：head（标签 + 右侧控件）+ 提示。开关/滑块统一走这个版式。 */
-+function PetField({ label, hint, children }) {
-+  return (
-+    <div className="dshp-field">
-+      <div className="dshp-head">
-+        <span className="dshp-label">{label}</span>
-+        {children}
-+      </div>
-+      {hint && <p className="dshp-hint">{hint}</p>}
-+    </div>
-+  )
-+}
-+
- /** 设置卡片组件。props 由槽位注册注入（hooks 为空——直接读 localStorage）。 */
--export function DeepSeekPetSettingsCard() {
--  const [open, setOpen] = useState(false)
--  const [draft, setDraft] = useState(() => soundSettingsSnapshot())
--  const [stored, setStored] = useState(() => soundSettingsSnapshot())
-+export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
-+  const [open, setOpen] = useState(defaultOpen)
-+  const [draft, setDraft] = useState(() => combinedSnapshot())
-+  const [stored, setStored] = useState(() => combinedSnapshot())
-   const [message, setMessage] = useState('')
- 
--  // 外部变化（诊断面板改开关）同步进 stored 与 draft
-+  // 外部变化（诊断面板改开关 / 其它标签页）同步进 stored 与 draft
-   useEffect(() => {
-     const sync = () => {
--      const next = soundSettingsSnapshot()
-+      const next = combinedSnapshot()
-       setStored(next)
-       setDraft(next)
-     }
+@@ -105,10 +112,12 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
      window.addEventListener('storage', sync)
      window.addEventListener('deepseek-pet:sound-changed', sync)
-+    window.addEventListener('deepseek-pet:app-changed', sync)
+     window.addEventListener('deepseek-pet:app-changed', sync)
++    window.addEventListener('deepseek-pet:ledger-changed', sync)
      return () => {
        window.removeEventListener('storage', sync)
        window.removeEventListener('deepseek-pet:sound-changed', sync)
-+      window.removeEventListener('deepseek-pet:app-changed', sync)
+       window.removeEventListener('deepseek-pet:app-changed', sync)
++      window.removeEventListener('deepseek-pet:ledger-changed', sync)
      }
    }, [])
  
-   const dirty = JSON.stringify(draft) !== JSON.stringify(stored)
- 
--  const toggleAlert = useCallback((key) => {
-+  const setEnabled = useCallback(value => {
-+    setDraft(prev => ({ ...prev, enabled: value === true }))
+@@ -126,13 +135,26 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+   const setTotal = useCallback(value => {
+     setDraft(prev => ({ ...prev, total: Number(value) / 100 }))
+   }, [])
++  const setLedgerEnabled = useCallback(value => {
++    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, enabled: value === true } }))
 +  }, [])
-+  const toggleAlert = useCallback(key => {
-     setDraft(prev => ({ ...prev, alerts: { ...prev.alerts, [key]: !(prev.alerts[key] !== false) } }))
-   }, [])
--  const setTotal = useCallback((value) => {
--    setDraft(prev => ({ ...prev, total: Number(value) / 100 }))
-+  const setMuted = useCallback(value => {
-+    setDraft(prev => ({ ...prev, muted: value === true }))
-   }, [])
--  const toggleMuted = useCallback(() => {
--    setDraft(prev => ({ ...prev, muted: !prev.muted }))
-+  const setTotal = useCallback(value => {
-+    setDraft(prev => ({ ...prev, total: Number(value) / 100 }))
-   }, [])
++  const setLedgerBudget = useCallback(value => {
++    const parsed = Number(value)
++    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budget: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.budget } }))
++  }, [])
++  const setLedgerRate = useCallback((key, value) => {
++    const parsed = Number(value)
++    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rates: { ...prev.ledger.rates, [key]: Number.isFinite(parsed) && parsed >= 0 ? parsed : prev.ledger.rates[key] } } }))
++  }, [])
  
    const save = useCallback(() => {
-+    applyAppSettings({ enabled: draft.enabled })
+     applyAppSettings({ enabled: draft.enabled })
      applySoundSettings(draft)
--    setStored(soundSettingsSnapshot())
-+    setStored(combinedSnapshot())
++    applyLedgerSettings(draft.ledger)
+     setStored(combinedSnapshot())
      window.dispatchEvent(new Event('deepseek-pet:sound-changed'))
-+    window.dispatchEvent(new Event('deepseek-pet:app-changed'))
+     window.dispatchEvent(new Event('deepseek-pet:app-changed'))
++    window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
      setMessage('已保存')
      window.setTimeout(() => setMessage(''), 1600)
    }, [draft])
- 
-   const discard = useCallback(() => {
--    setDraft(soundSettingsSnapshot())
-+    setDraft(combinedSnapshot())
-     setMessage('')
-   }, [])
- 
-   const alerts = draft.alerts ?? ALERT_LABELS
-+  const totalPercent = Math.round((draft.total ?? 1) * 100)
- 
-   return (
--    <div className="dshp-card" data-open={open ? 'true' : 'false'} data-plugin-card={CARD_ID}>
--      <button type="button" className="dshp-head" onClick={() => setOpen(current => !current)} aria-expanded={open}>
--        <b>🐋 DeepSeek 桌宠</b>
--        <small>音效与语音提醒设置</small>
--        {dirty && <span className="dshp-dirty">● 未保存</span>}
--        <span className="dshp-chev" aria-hidden="true">▶</span>
-+    <li className={`dshp-card${open ? ' dshp-cardOpen' : ''}`} data-plugin-card={CARD_ID}>
-+      <button type="button" className="dshp-head" onClick={() => setOpen(current => !current)}
-+        aria-expanded={open} aria-label={`${open ? '收起' : '展开'}: DeepSeek 桌宠`}>
-+        <span className="dshp-headText">
-+          <span className="dshp-name">DeepSeek 桌宠</span>
-+          <span className="dshp-description">显示、音效与语音提醒设置</span>
-+        </span>
-+        {dirty && <span className="dshp-pending">未保存</span>}
-+        <svg className={`dshp-chevron${open ? ' dshp-chevronOpen' : ''}`} width="14" height="14"
-+          viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-+          <path fill="currentColor" d="M11.8486 5.5L11.4238 5.92383L8.69727 8.65137C8.44157 8.90706 8.21562 9.13382 8.01172 9.29785C7.79912 9.46883 7.55595 9.61756 7.25 9.66602C7.08435 9.69222 6.91565 9.69222 6.75 9.66602C6.44405 9.61756 6.20088 9.46883 5.98828 9.29785C5.78438 9.13382 5.55843 8.90706 5.30273 8.65137L2.57617 5.92383L2.15137 5.5L3 4.65137L3.42383 5.07617L6.15137 7.80273C6.42595 8.07732 6.59876 8.24849 6.74023 8.3623C6.87291 8.46904 6.92272 8.47813 6.9375 8.48047C6.97895 8.48703 7.02105 8.48703 7.0625 8.48047C7.07728 8.47813 7.12709 8.46904 7.25977 8.3623C7.40124 8.24849 7.57405 8.07732 7.84863 7.80273L10.5762 5.07617L11 4.65137L11.8486 5.5Z" />
-+        </svg>
-       </button>
--      <div className="dshp-body">
--        <div className="dshp-field">
--          <label><input type="checkbox" checked={alerts.celebrate !== false} onChange={() => toggleAlert('celebrate')} />任务完成提醒</label>
--          <small className="dshp-hint">完成琶音 + 语音 + 纸屑</small>
--        </div>
--        <div className="dshp-field">
--          <label><input type="checkbox" checked={alerts.error !== false} onChange={() => toggleAlert('error')} />出错安慰</label>
--          <small className="dshp-hint">出错低音 + 安慰语音</small>
--        </div>
--        <div className="dshp-field">
--          <label><input type="checkbox" checked={alerts.prompt !== false} onChange={() => toggleAlert('prompt')} />提问 / 审批提示</label>
--          <small className="dshp-hint">反问 / 等批准时提示音 + 语音</small>
--        </div>
--        <div className="dshp-field">
--          <label><input type="checkbox" checked={alerts.poke !== false} onChange={() => toggleAlert('poke')} />戳一戳音效</label>
--          <small className="dshp-hint">单击桌宠的音效 + 语音</small>
--        </div>
--        <div className="dshp-field">
--          <label><input type="checkbox" checked={alerts.headpat !== false} onChange={() => toggleAlert('headpat')} />摸头音效</label>
--          <small className="dshp-hint">长按摸头的庆祝琶音 + 语音</small>
--        </div>
--        <div className="dshp-field">
--          <label><input type="checkbox" checked={!draft.muted} onChange={toggleMuted} />启用声音</label>
--          <small className="dshp-hint">总静音开关（与双击桌宠联动）</small>
-+      {open && (
-+        <div className="dshp-body">
-+          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声">
-+            <PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />
+@@ -179,6 +201,27 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+             <input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
+               onChange={event => setTotal(event.target.value)} aria-label="总音量" />
+           </div>
++          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒">
++            <PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />
 +          </PetField>
-+          <PetField label="启用声音" hint="总静音开关（与双击桌宠联动）">
-+            <PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />
++          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒">
++            <input className="dshp-number" type="number" min="0" step="1" value={draft.ledger?.budget ?? 30}
++              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />
 +          </PetField>
-+          {Object.entries(ALERT_LABELS).map(([key, label]) => (
-+            <PetField key={key} label={label}>
-+              <PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />
-+            </PetField>
-+          ))}
-+          <PetField label="总音量" hint={`${totalPercent}%`}>
-+            <span className="dshp-badge">{totalPercent}%</span>
++          <PetField label="费率（¥ / 百万 token）" hint="按 deepseek-chat 官方价估算，可自行覆盖">
++            <span className="dshp-badge">deepseek-chat</span>
 +          </PetField>
 +          <div className="dshp-field">
-+            <input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
-+              onChange={event => setTotal(event.target.value)} aria-label="总音量" />
++            <div className="dshp-rateGrid">
++              {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
++                <label key={key} className="dshp-rateItem">
++                  <span className="dshp-rateLabel">{label}</span>
++                  <input className="dshp-number" type="number" min="0" step="0.1" value={draft.ledger?.rates?.[key] ?? 0}
++                    onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />
++                </label>
++              ))}
++            </div>
 +          </div>
-+          {message && <p className="dshp-failed">{message}</p>}
-+          <div className="dshp-footer">
-+            <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
-+            <button type="button" className="dshp-save" disabled={!dirty} onClick={save}>保存</button>
-+          </div>
-         </div>
--        <div className="dshp-field">
--          <label>总音量 <input type="range" min="0" max="100" value={Math.round((draft.total ?? 1) * 100)} onChange={event => setTotal(event.target.value)} /></label>
--          <small className="dshp-hint">{Math.round((draft.total ?? 1) * 100)}%</small>
--        </div>
--        <div className="dshp-actions">
--          <button type="button" data-primary="true" onClick={save} disabled={!dirty}>保存</button>
--          <button type="button" onClick={discard} disabled={!dirty}>放弃</button>
--          {message && <span className="dshp-hint"><b>{message}</b></span>}
--        </div>
--      </div>
--    </div>
-+      )}
-+    </li>
+           {message && <p className="dshp-failed">{message}</p>}
+           <div className="dshp-footer">
+             <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
+@@ -190,9 +233,9 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
    )
  }
  
-+/** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 合并快照。 */
-+function combinedSnapshot() {
-+  return { ...appSettingsSnapshot(), ...soundSettingsSnapshot() }
-+}
-+
+-/** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 合并快照。 */
++/** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 + 账房设置 合并快照。 */
+ function combinedSnapshot() {
+-  return { ...appSettingsSnapshot(), ...soundSettingsSnapshot() }
++  return { ...appSettingsSnapshot(), ...soundSettingsSnapshot(), ledger: ledgerSettingsSnapshot() }
+ }
+ 
  /** 注册设置卡片到「设置 → 插件 → 插件配置」。 */
- export function registerSettingsCard(ctx) {
-   ctx.effect(installCardCss, 'deepseek-pet: settings card styles')
+diff --git a/deepseek-pet/src/client/styles.js b/deepseek-pet/src/client/styles.js
+index f595043..eaa299a 100644
+--- a/deepseek-pet/src/client/styles.js
++++ b/deepseek-pet/src/client/styles.js
+@@ -43,6 +43,18 @@ export const STYLES = `
+ .dsh-live2d-diag-alerts p{grid-column:1/-1;margin:0 0 2px;font-size:10px;color:var(--dsw-alias-text-tertiary,#8194b6)}
+ .dsh-live2d-diag-alerts label{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--dsw-alias-text-secondary,#b8c7df);cursor:pointer;white-space:nowrap}
+ .dsh-live2d-diag-alerts input{accent-color:var(--pet-cyan);cursor:pointer}
++.dsh-live2d-ledger{position:relative;z-index:14;width:250px;margin-bottom:7px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--pet-cyan) 42%,var(--pet-line));border-radius:13px;background:var(--pet-panel);box-shadow:0 12px 32px rgba(3,15,40,.22);backdrop-filter:blur(18px);pointer-events:auto}
++.dsh-live2d-ledger header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--dsw-alias-text-primary,#eff7ff)}
++.dsh-live2d-ledger header button{border:0;background:none;color:var(--dsw-alias-text-tertiary,#8194b6);cursor:pointer;font-size:11px;padding:2px}
++.dsh-live2d-ledger header button:hover{color:#fff}
++.dsh-live2d-ledger dl{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:8px 0 0;font-size:9px}
++.dsh-live2d-ledger dl>div{display:flex;justify-content:space-between;gap:6px}
++.dsh-live2d-ledger dt{color:var(--dsw-alias-text-tertiary,#8194b6)}
++.dsh-live2d-ledger dd{margin:0;color:var(--dsw-alias-text-primary,#eff7ff);text-align:right;font-variant-numeric:tabular-nums}
++.dsh-live2d-ledger dd[data-alert=true]{color:var(--dsw-alias-state-warn-primary,#f1bd5b);font-weight:700}
++.dsh-live2d-ledger-empty{margin:8px 0 0;color:var(--dsw-alias-text-tertiary,#8194b6);font-size:9px;line-height:1.6}
++.dsh-live2d-tools button[data-ledger=true]{border-color:var(--pet-cyan);color:#fff}
++
+ @keyframes dsh-pop{from{opacity:0;transform:translateY(5px) scale(.94)}}@keyframes dsh-caret{50%{opacity:0}}
+ @keyframes dsh-pet-jump{0%,100%{transform:translateY(0)}35%{transform:translateY(-22px) scale(1.04)}60%{transform:translateY(0) scale(.98)}}
+ @keyframes dsh-confetti-fall{0%{opacity:0;transform:translateY(-8px) rotate(var(--cf-rot,0deg))}12%{opacity:1}100%{opacity:0;transform:translateY(230px) translateX(var(--cf-drift,0px)) rotate(calc(var(--cf-rot,0deg) + 320deg))}}
 diff --git a/deepseek-pet/tests/unit/client-bundle.test.js b/deepseek-pet/tests/unit/client-bundle.test.js
-index 39e82ce..834e6f8 100644
+index 834e6f8..1b7da0d 100644
 --- a/deepseek-pet/tests/unit/client-bundle.test.js
 +++ b/deepseek-pet/tests/unit/client-bundle.test.js
-@@ -109,13 +109,76 @@ test('built dsh.client bundle registers an embedded shell overlay', async () =>
+@@ -86,6 +86,16 @@ test('built dsh.client bundle registers an embedded shell overlay', async () =>
+   const sessionSnapshot = {
+     openState: 'open', running: false, runningCalls: [], partial: null, queue: [], nodes: [],
+     pending: [{ kind: 'question', key: 'question-1', payload: { questions: [{ id: 'choice', question: '请选择下一步' }] } }],
++    views: {
++      get(target) {
++        if (target !== 'trajectory') return undefined
++        return {
++          requests: [
++            { usage: { inputTokens: 1000, outputTokens: 500, cacheReadTokens: 200, cacheWriteTokens: 100 } },
++          ],
++        }
++      },
++    },
+   }
+   ctx.sessions.binding = () => ({
+     session: {
+@@ -108,6 +118,13 @@ test('built dsh.client bundle registers an embedded shell overlay', async () =>
+   assert.doesNotMatch(html, /dsh-live2d-rig|dsh-live2d-part/)
    assert.match(html, /等待你的回答/)
    assert.doesNotMatch(html, /dsh-live2d-pending|<fieldset|请选择下一步|>提交</)
++  // 账房面板默认显示（数据来自轨迹视图 usage）
++  assert.match(html, /dsh-live2d-ledger/)
++  assert.match(html, /账房 · 实时/)
++  assert.match(html, /缓存命中率/)
++  assert.match(html, /预算剩/)
++  assert.match(html, /状态/)
++  assert.match(html, /1,800/) // 1000+200+100 输入相关 + 500 输出 = 1800 总 token
  
--  const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, settingsCard.business))
-+  const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, { ...settingsCard.business, defaultOpen: true }))
-+  // 官方 PluginCard 版式：li 卡片 → 头部按钮（名称+描述+箭头）→ 底部 放弃/保存
-+  assert.match(cardHtml, /<li[^>]*dshp-card/)
-+  assert.match(cardHtml, /dshp-head/)
-   assert.match(cardHtml, /DeepSeek 桌宠/)
-+  assert.match(cardHtml, /dshp-description/)
-+  assert.match(cardHtml, /dshp-chevron/)
-+  assert.match(cardHtml, /role="switch"/)
-+  assert.match(cardHtml, /桌宠开关/)
-   assert.match(cardHtml, /任务完成提醒/)
-   assert.match(cardHtml, /提问/)
--  assert.match(cardHtml, /保存/)
-+  assert.match(cardHtml, /dshp-save/)
-+  assert.match(cardHtml, />保存</)
-+  assert.match(cardHtml, />放弃</)
+   const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, { ...settingsCard.business, defaultOpen: true }))
+   // 官方 PluginCard 版式：li 卡片 → 头部按钮（名称+描述+箭头）→ 底部 放弃/保存
+@@ -123,6 +140,14 @@ test('built dsh.client bundle registers an embedded shell overlay', async () =>
+   assert.match(cardHtml, /dshp-save/)
+   assert.match(cardHtml, />保存</)
+   assert.match(cardHtml, />放弃</)
++  // 账房字段：面板开关 / 预算封顶 / 费率
++  assert.match(cardHtml, /账房面板/)
++  assert.match(cardHtml, /预算封顶/)
++  assert.match(cardHtml, /费率/)
++  assert.match(cardHtml, /输入未命中/)
++  assert.match(cardHtml, /缓存命中/)
++  assert.match(cardHtml, /缓存写入/)
++  assert.match(cardHtml, /输出/)
  
    for (const cleanup of cleanups.reverse()) cleanup()
    delete globalThis.window
-   delete globalThis.document
- })
-+
-+test('桌宠开关关闭时组件不渲染', async () => {
-+  const storage = new Map([['deepseek-pet:app', JSON.stringify({ enabled: false })]])
-+  let moduleRecord
-+  globalThis.window = {
-+    __ModuleLoader__: {
-+      load(record) { moduleRecord = record },
-+    },
-+    localStorage: {
-+      getItem(key) { return storage.get(key) ?? null },
-+      setItem(key, value) { storage.set(key, String(value)) },
-+    },
-+    addEventListener() {},
-+    removeEventListener() {},
-+    dispatchEvent() {},
-+  }
-+  globalThis.document = {
-+    querySelector() { return null },
-+    createElement() { return { dataset: {}, textContent: '', remove() {} } },
-+    head: { append() {} },
-+  }
-+
-+  await import(`../../lib/client.js?disabled=${Date.now()}`)
-+  const plugin = moduleRecord.factory((specifier) => {
-+    if (specifier === 'react') return ReactModule
-+    if (specifier === 'react/jsx-runtime') return JsxRuntime
-+    throw new Error(`unexpected client external: ${specifier}`)
-+  })
-+  const registrations = []
-+  const ctx = {
-+    effect(callback) { const cleanup = callback(); return () => cleanup?.() },
-+    sessions: {
-+      binding() { return undefined },
-+      open() {},
-+    },
-+    slots: {
-+      inject(name, callback) { return callback() },
-+      register(options, Component) {
-+        registrations.push({ options, Component, business: options.inject?.() ?? {} })
-+        return () => {}
-+      },
-+    },
-+  }
-+  plugin.apply(ctx)
-+  const pet = registrations.find(entry => entry.options.id === 'deepseek-pet')
-+  const listSnapshot = { current: 'focus', ids: [], byId: {} }
-+  const html = renderToStaticMarkup(React.createElement(pet.Component, {
-+    useSessions: selector => selector(listSnapshot),
-+    ...pet.business,
-+  }))
-+  assert.equal(html, '')
-+  delete globalThis.window
-+  delete globalThis.document
-+})
