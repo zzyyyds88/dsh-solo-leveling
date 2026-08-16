@@ -4,7 +4,7 @@
 #   1) 前置校验：测试环境已初始化（profiles/web/node_modules 存在）；
 #   2) 用 install-pet-plugin.mjs 把插件包 + cordis.patch.yml 写入测试 profile。
 # 用法：TEST_ENV_INDEX=2 bash install-to-test-env.sh
-# 之后：TEST_ENV_INDEX=2 scripts/test-env-start.sh
+# 之后：TEST_ENV_INDEX=2 scripts/test-env-start.sh（环境在 test-envs/ 下）
 #       TEST_ENV_INDEX=2 bash verify.sh
 set -euo pipefail
 

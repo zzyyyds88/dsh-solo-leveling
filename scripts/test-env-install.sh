@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# 把本地构建好的插件包装进测试环境 profile（只写 test-env/，不碰正式环境）。
+# 把本地构建好的插件包装进测试环境 profile（只写 test-envs/，不碰正式环境）。
 # 包需已构建（目录含 lib/ 与 package.json，package.json.name 为 @deepseek-ai/* 或 dsh-*）。
 # 覆盖前自动备份现有包为 .bak（回退：把 .bak 拷回）。
+# 独占纪律：安装前请确认该环境 USAGE.md 无其他项目声明（claim_test_env 在 start 时强制）。
 # 用法：
 #   scripts/test-env-install.sh dsh-AccessGate/packages/dsh-host-webserver ...
 #   scripts/test-env-install.sh --from-project dsh-AccessGate   # 自动装其 packages/* 下所有已构建包

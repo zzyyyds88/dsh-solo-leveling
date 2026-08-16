@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
-# 把测试环境恢复到「官方基线」：移除所有本地定制痕迹（fork 包、本地插件、
-# cordis.patch.yml 配置、测试设置、.bak 残留），重建为官方模板 profile。
-# 铁律：只动 test-env/，绝不触碰正式环境（$HOME/.dsh / 3080 / 全局安装）。
+# 把测试环境恢复到「正式克隆基线」：清掉测试期间叠加的改动（fork 覆盖、本地插件、
+# patch 配置、测试设置、.bak 残留），重建为从正式 profile 克隆的基线（含已装插件）。
 #
-# 官方基线构成（与 dsh 官方 web profile 模板一致）：
-#   - package.json  bundles: [@deepseek-ai/dsh-base, @deepseek-ai/dsh-web-app]
-#   - cordis.patch.yml: 官方空模板（[]）
-#   - node_modules: 空（bundle 由 Loader 从全局安装回退解析，官方行为）
-#   - settings.yaml: 空（无口令、无供应商、无任何自定义段）
+# ⚠ 验收门（强制）：必须带 --verified（用户验收通过后才允许清理）。
+#   不带参数直接拒绝，防止 Agent 误清未验收环境。
+#
+# 铁律：只动 test-envs/，绝不触碰正式环境（$HOME/.dsh / 3080 / 全局安装）。
 #
 # 用法：
-#   scripts/test-env-reset.sh                # 恢复官方基线（幂等，可重复执行）
-#   scripts/test-env-reset.sh --check        # 只检查当前是否已是官方基线
-#
-# 约定（重要）：每次在测试环境做完打包测试后，运行本脚本恢复官方基线，
-# 保证下一次测试从干净的官方行为开始。
+#   scripts/test-env-reset.sh --verified   # 用户验收后：重建为正式克隆基线（清测试改动 + 声明）
+#   scripts/test-env-reset.sh --check      # 检查当前是否已是基线（实例停、声明空、无残留）
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,97 +18,68 @@ resolve_test_env
 PROFILE="$TEST_ENV/profiles/web"
 
 CHECK=0
-[ "${1:-}" = "--check" ] && CHECK=1
+VERIFIED=0
+for arg in "$@"; do
+  case "$arg" in
+    --check) CHECK=1 ;;
+    --verified) VERIFIED=1 ;;
+    *) echo "✗ 未知参数: $arg（支持 --check / --verified）" >&2; exit 1 ;;
+  esac
+done
+
+# 验收门：清理动作必须 --verified（--check 豁免）
+if [ "$CHECK" -ne 1 ]; then
+  verified_gate "$@"
+fi
 
 if [ "$CHECK" -eq 1 ]; then
-  echo "== 检查测试环境是否为官方基线：$TEST_ENV =="
+  echo "== 检查测试环境是否为基线状态：$TEST_ENV =="
   ISSUES=0
   [ -f "$TEST_ENV/dsh-web.pid" ] && kill -0 "$(cat "$TEST_ENV/dsh-web.pid")" 2>/dev/null \
     && { echo "  ✗ 测试实例运行中（先 stop）"; ISSUES=1; }
-  [ -d "$PROFILE/node_modules/@deepseek-ai" ] && [ -n "$(ls -A "$PROFILE/node_modules/@deepseek-ai" 2>/dev/null)" ] \
-    && { echo "  ✗ @deepseek-ai 下有 fork 包残留"; ISSUES=1; }
-  for pkg in dsh-web-auth dsh-client-ui-web-auth dsh-mobile-adapt dsh-defaults dsh-client-ui-defaults; do
+  for stray in dsh-web.pid dsh-web.log pet.json; do
+    [ -e "$TEST_ENV/$stray" ] && { echo "  ✗ 测试残留: $stray"; ISSUES=1; }
+  done
+  # 测试期间备份的 fork 残留
+  if [ -d "$PROFILE/node_modules/@deepseek-ai" ]; then
+    local_pkgs="$(ls -d "$PROFILE/node_modules/@deepseek-ai"/*.bak 2>/dev/null | wc -l)"
+    [ "$local_pkgs" -gt 0 ] && { echo "  ✗ 有 .bak fork 备份残留"; ISSUES=1; }
+  fi
+  for pkg in dsh-host-access-gate dsh-client-ui-access-gate dsh-defaults dsh-client-ui-defaults dsh-deepseekpet; do
     [ -d "$PROFILE/node_modules/$pkg" ] && { echo "  ✗ 本地插件残留: $pkg"; ISSUES=1; }
   done
-  if [ -f "$PROFILE/cordis.patch.yml" ] && grep -qE "web-auth|dsh-defaults|webserver|mobile-adapt" "$PROFILE/cordis.patch.yml" 2>/dev/null; then
-    echo "  ✗ cordis.patch.yml 含定制配置"; ISSUES=1
+  if [ -f "$PROFILE/cordis.patch.yml" ]; then
+    if grep -qE "access-gate|dsh-defaults|deepseek-pet|ui-access-gate" "$PROFILE/cordis.patch.yml" 2>/dev/null; then
+      echo "  ✗ cordis.patch.yml 含测试期定制挂载（基线只保留正式环境已有的配置）"
+      ISSUES=1
+    fi
   fi
-  [ -f "$TEST_ENV/settings.yaml" ] && grep -qE "web-auth:|llm-pi-ai:|dsh-defaults:" "$TEST_ENV/settings.yaml" 2>/dev/null \
-    && { echo "  ✗ settings.yaml 含定制段"; ISSUES=1; }
   if [ -f "$TEST_ENV/USAGE.md" ]; then
     project="$(grep -E '^项目[:：]' "$TEST_ENV/USAGE.md" | head -1 | sed 's/^项目[:：] *//')"
     if [ -n "$project" ] && ! echo "$project" | grep -q "哪个项目在用它"; then
-      echo "  ✗ USAGE.md 仍有使用声明（项目：$project）"; ISSUES=1
+      echo "  ✗ USAGE.md 仍有使用声明（项目：$project）——验收后声明应已清空"; ISSUES=1
     fi
   fi
-  [ "$ISSUES" -eq 0 ] && echo "  ✓ 已是官方基线" || echo "  ✗ 存在 $ISSUES 处残留（运行 scripts/test-env-reset.sh）"
+  [ "$ISSUES" -eq 0 ] && echo "  ✓ 已是基线状态（正式克隆基线，无测试期改动）" || echo "  ✗ 存在 $ISSUES 处残留（运行 scripts/test-env-reset.sh --verified 重建）"
   exit "$ISSUES"
 fi
 
-echo "== 恢复测试环境为官方基线：$TEST_ENV =="
+# ---- 验收通过，重建基线 ----
+echo "== 用户已验收，重建测试环境为正式克隆基线：$TEST_ENV =="
+[ "$VERIFIED" -eq 1 ] || exit 1   # 防御：上面的 gate 已保证，但保持显式
 
-# 0. 停实例（若有）
+# 停实例（若有）
 if [ -f "$TEST_ENV/dsh-web.pid" ] && kill -0 "$(cat "$TEST_ENV/dsh-web.pid")" 2>/dev/null; then
   echo "  停止测试实例…"
   bash "$WS_ROOT/scripts/test-env-stop.sh"
 fi
 
-# 1. 重建 web profile 为官方模板
-rm -rf "$PROFILE"
-mkdir -p "$PROFILE/node_modules"
-cat > "$PROFILE/package.json" <<'EOF'
-{
-  "name": "dsh-profile-web",
-  "private": true,
-  "dsh": {
-    "profile": {
-      "bundles": [
-        "@deepseek-ai/dsh-base",
-        "@deepseek-ai/dsh-web-app"
-      ]
-    }
-  }
-}
-EOF
-cat > "$PROFILE/cordis.yml" <<'EOF'
-[]
-EOF
-cat > "$PROFILE/cordis.patch.yml" <<'EOF'
-# Your patch layer for this dsh profile, applied after every bundle layer:
-# a top-level YAML array of loader patch entries (id-targeted config
-# overrides, disables, and insert lists; `!!js` expressions allowed).
-[]
-EOF
-cat > "$PROFILE/pnpm-workspace.yaml" <<'EOF'
-packages:
-  - .
-
-nodeLinker: hoisted
-autoInstallPeers: false
-EOF
-
-# 2. settings.yaml → 官方空
-cat > "$TEST_ENV/settings.yaml" <<'EOF'
-# 测试环境用户设置（官方基线：空）
-EOF
-
-# 3. 清理运行态与残留，并重置使用声明
-rm -f "$TEST_ENV/dsh-web.log" "$TEST_ENV/dsh-web.pid" "$TEST_ENV/pet.json"
-rm -rf "$TEST_ENV/storages" "$TEST_ENV/sessions"
-mkdir -p "$TEST_ENV/storages" "$TEST_ENV/sessions"
-cat > "$TEST_ENV/USAGE.md" <<'USAGE_EOF'
-# 测试环境使用声明
-
-> 使用本环境前必须填写（强制，见 AGENTS.md）；使用完毕后运行
-> scripts/test-env-reset.sh 恢复官方基线，本声明会被自动清空。
-
-项目：（哪个项目在用它）
-用途：（要测试什么）
-开始时间：
-结束时间：
-USAGE_EOF
+# 重建：复用 init --force（删除旧环境 → 从正式 profile 克隆基线 + 最小测试设置 + USAGE 模板）
+bash "$WS_ROOT/scripts/test-env-init.sh" --force
 
 echo
-echo "== 完成。当前为官方基线（无 fork / 无本地插件 / 无 patch 配置 / 无测试设置）=="
-echo "  启动：scripts/test-env-start.sh   （官方行为：无鉴权门闸、目录选择器默认主目录、无第三方供应商）"
-echo "  装包：scripts/test-env-install.sh <已构建包目录>…  （测试完成后再次运行本脚本恢复）"
+echo "== 完成。测试环境已重建为正式克隆基线 =="
+echo "  - profile 从正式环境克隆（含已装插件/fork，贴近真实环境）"
+echo "  - settings.yaml 为最小测试设置（不复制正式口令/密钥）"
+echo "  - USAGE.md 使用声明已清空"
+echo "  - 启动：scripts/test-env-start.sh（TEST_ENV_INDEX=$ENV_INDEX，端口 $PORT）"

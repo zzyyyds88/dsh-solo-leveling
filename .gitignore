@@ -2,9 +2,7 @@
 # 原则：依赖、测试环境运行态、第三方参考快照、日志、密钥一律不入库。
 
 # ---- 插件/定制实现（整理完善中，暂不公开；完成后再取消注释并提交）----
-dsh-defaults/
-dsh-Moresettings/
-dsh-AccessGate/
+# dsh-AccessGate/ 与 dsh-Moresettings/ 已入库（各自项目级 .gitignore 管理依赖/产物）
 插件开发备份/
 修改默认工作目录/
 思考强度与重试默认值/
@@ -14,12 +12,19 @@ dsh-web-ui-main/
 
 # 官方源码参考快照（82M，从 deepseek-harness 公开仓库下载，可随时重新获取）
 
-# 测试环境（可随时删除重建；仅保留说明文件；test-env-2/3/4 为多环境扩展）
-test-env/*
-!test-env/README.md
-test-env-2/
-test-env-3/
-test-env-4/
+# 测试环境（可随时删除重建；仅保留说明文件；统一收纳在 test-envs/ 下）
+# 测试环境（可随时删除重建；统一收纳在 test-envs/ 下；仅 test-env-1 保留说明文件）
+test-envs/*
+!test-envs/README.md
+!test-envs/test-env-1/
+test-envs/test-env-1/USAGE.md
+test-envs/test-env-1/settings.yaml
+test-envs/test-env-1/cordis.*
+test-envs/test-env-1/profiles/
+test-envs/test-env-1/sessions/
+test-envs/test-env-1/storages/
+test-envs/test-env-1/dsh-web.*
+test-envs/test-env-1/pet.json
 
 # 依赖
 node_modules/
@@ -27,3 +32,4 @@ node_modules/
 # 日志 / 运行态 / 系统文件
 *.log
 .DS_Store
+test-envs/test-env-1/.agent-presets/

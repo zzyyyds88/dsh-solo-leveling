@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# 初始化 / 重建工作区级专用 DSH 测试环境（test-env/）。
+# 初始化 / 重建工作区级专用 DSH 测试环境（test-envs/test-env-N）。
 # 铁律：测试环境与正式环境完全隔离——正式 DSH_HOME（$HOME/.dsh）、全局安装
 #       （/usr/lib/node_modules/@deepseek-ai/dsh）、正式端口（3080）一律不碰。
+# 基线：从正式 profile 克隆（含已装插件/fork，贴近真实环境），不是官方空模板。
 # 用法：
 #   scripts/test-env-init.sh               # 已存在则跳过；不存在则从正式 profile 克隆基线
 #   scripts/test-env-init.sh --force       # 删除并重建（必须先停掉本脚本启动的实例）
-#   scripts/test-env-init.sh --from <种子> # 从指定已验证目录克隆（如 test-env-2）
+#   scripts/test-env-init.sh --from <种子> # 从指定已验证目录克隆（如 test-envs/test-env-2）
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -61,9 +62,26 @@ EOF
   mkdir -p "$TEST_ENV/storages" "$TEST_ENV/sessions"
 fi
 
+# 生成/重置使用声明模板（独占原则 + 验收纪律提示）
+cat > "$TEST_ENV/USAGE.md" <<'USAGE_EOF'
+# 测试环境使用声明
+
+> 使用本环境前必须填写（强制，见 AGENTS.md）：
+> ① **独占**：同一时刻一个测试环境只归一个项目使用；
+> ② **验收**：测试完成后等用户验收通过，才允许运行
+>    `scripts/test-env-reset.sh --verified` 清理本环境（禁止自行清理）。
+
+项目：（哪个项目在用它）
+用途：（要测试什么）
+开始时间：
+结束时间：
+验收状态：（待验收 / 已验收）
+USAGE_EOF
+
 echo
 echo "== 完成。测试环境：$TEST_ENV =="
 echo "  启动：scripts/test-env-start.sh"
 echo "  状态：scripts/test-env-status.sh"
 echo "  装包：scripts/test-env-install.sh <已构建包目录>…"
-echo "  使用前：填写 $TEST_ENV/USAGE.md 声明项目与用途"
+echo "  使用前：填写 $TEST_ENV/USAGE.md 声明项目与用途（独占原则）"
+echo "  验收后清理：scripts/test-env-reset.sh --verified"

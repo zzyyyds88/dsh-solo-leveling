@@ -125,7 +125,7 @@ if [ "$LIVE" -eq 1 ]; then
     echo "  [PASS] 全部 bundle 路由可加载"
     # 服务日志无启动错误
     if grep -qiE "error|failed|cannot find module|TDZ|is not defined" "$TEST_ENV/dsh-web.log" 2>/dev/null; then
-      echo "  [WARN] 服务日志出现错误关键字（见 test-env/dsh-web.log，人工复核）"
+      echo "  [WARN] 服务日志出现错误关键字（见 $TEST_ENV/dsh-web.log，人工复核）"
       grep -iE "error|failed|cannot find module|TDZ|is not defined" "$TEST_ENV/dsh-web.log" 2>/dev/null | tail -5 | sed 's/^/    /'
     else
       echo "  [PASS] 服务日志无错误关键字"

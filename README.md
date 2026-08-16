@@ -15,7 +15,7 @@ AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.
 
 **铁律（最高优先级）**：打包测试 / 安装 / 升级，**禁止在已经运行中的正式 DSH
 （端口 3080）强行替换**（会把正在运行的 DSH 换掉导致崩溃）——必须先在工作区级
-专用测试环境 `test-env/`（独立 DSH_HOME + 端口 3090）测试通过，之后才允许安装。
+专用测试环境 `test-envs/test-env-1/`（独立 DSH_HOME + 端口 3090）测试通过，之后才允许安装。
 ---
 
 ## 1. 这是什么地方
@@ -27,7 +27,7 @@ AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.
 - 对 DSH 安装包做本地定制补丁，并配套「升级后恢复」方案。
 
 **工作区根目录只允许出现**：`README.md`、`CONTRIBUTING.md`、`AGENTS.md`、
-`scripts/`（共享工具）、`test-env/`（专用测试环境）、`docs/`（开发规范与
+`scripts/`（共享工具）、`test-envs/`（专用测试环境）、`docs/`（开发规范与
 上游存档）和项目子文件夹，所有具体内容必须进各自项目文件夹。
 
 ## 2. 目录约定（铁律）
@@ -40,7 +40,7 @@ DSH我独自升级/
 ├── CONTRIBUTING.md              ← 贡献规矩（人类 + AI 通用，含发布到 GitHub）
 ├── AGENTS.md                    ← AI 代理强制红线
 ├── scripts/                     ← 共享工具：测试环境管理（test-env-*.sh）、上游文档抓取
-├── test-env/                    ← 工作区级专用 DSH 测试环境（独立 DSH_HOME + 端口 3090）
+├── test-envs/                    ← 工作区级专用 DSH 测试环境（test-env-1~4，端口 3090~3093）
 ├── docs/                        ← 开发规范（开发规范.md）+ 上游原文存档（上游开发规范/）
 └── <项目名>/                    ← 一个项目一个文件夹
     ├── README.md                ← 思路库：问题、原理链路、方案、备选思路
@@ -94,7 +94,7 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
 - **动手前先搜现成方案**：GitHub/npm/社区（awesome-deepseek-harness、上游 issue/讨论）里
   dsh-lan-access / dsh-web-auth / dsh-lan-gate / dsh-remote-access-web 等已存在，
   先调研再决定自研还是复用。
-- **⚠ 打包测试必须有专用测试环境**：测试实例用独立 `DSH_HOME`（`test-env/`）
+- **⚠ 打包测试必须有专用测试环境**：测试实例用独立 `DSH_HOME`（`test-envs/`）
   + 独立端口（**3090**），与正式实例（**3080**）完全隔离；测试实例由
   `scripts/test-env-*.sh` 管理（PID 文件精确启停，禁止 pkill -f 模糊匹配）。
 - **用户偏好（本次明确）**：首次启动**绝不自动生成/打印任何随机口令**，只提示用户自己设置；
@@ -118,4 +118,4 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
 | `dsh-Moresettings/` | **统一默认值插件**（合并「修改默认工作目录」+「思考强度与重试默认值」，即原 `dsh-defaults`）：设置 → 插件 → 插件配置 →「默认值」卡片配置默认工作目录与默认重试次数（**对所有供应商生效**，含内置 DeepSeek），改设置即时生效无需重启 | 源码即产物 + 五个 fork（全部在本项目 `packages/` 内，自包含）；test-env 验证通过（`verify-defaults.mjs` 9 项断言）；正式安装待用户执行 `install-to-profile.sh` |
 | `dsh-deepseekpet/` | **收录上游桌宠插件**（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT，零改动）：嵌入网页的交互式桌宠，随任务/工具调用/上下文/活跃会话自动切换表情，支持拖动缩放折叠与批准/提问气泡 | test-env-2（3091）验证通过（boot 清单 + client bundle 可加载）；正式安装待用户执行 `dsh plugin --profile web add` |
 | `dsh-task-suite/` | **精选 Web UI 插件集（自 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) v0.1.17 抽取，scope 改 `@zzyyyds88`，一个聚合插件 `dsh-task-suite-all` 装齐）**：任务看板（cron 定时跑）、实时令牌/吞吐统计、Git 图谱、右侧面板（预览 + 文件/变更）、图像理解（describe_image 工具 + 配置卡）、设置中心、皮肤中心 + 11 款皮肤（含收录的 [maid-atelier](https://github.com/Small-tailqwq/dsh-deep-whale)，CC BY-NC-SA 4.0） | 构建 + 全量测试通过（830+ 断言）；test-env 验证通过（boot 全插件 + 皮肤热切换闭环）；正式安装待用户执行 |
-| `test-env/` | **工作区级专用 DSH 测试环境**：独立 DSH_HOME + 端口 3090，打包测试唯一去处（脚本：`scripts/test-env-*.sh`） | 已部署（由已验证的项目级 test-env 复制，含六个 fork） |
+| `test-envs/` | **工作区级专用 DSH 测试环境**：四个环境（`test-env-1~4`，端口 3090~3093），统一收纳于 `test-envs/`，打包测试唯一去处（脚本：`scripts/test-env-*.sh`） | 已部署（基线从正式 profile 克隆；独占使用 + 验收后清理纪律） |

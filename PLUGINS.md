@@ -57,8 +57,8 @@
 
 ### 1.3 环境
 
-- 正式实例：端口 3080（`$HOME/.dsh`）；**专用测试环境：`test-env/`，端口 3090**
-  （打包测试唯一去处，见 [test-env/README.md](test-env/README.md)）。
+- 正式实例：端口 3080（`$HOME/.dsh`）；**专用测试环境：`test-envs/test-env-1/`，端口 3090**（共 4 个，端口 3090~3093）
+  （打包测试唯一去处，见 [test-envs/test-env-1/README.md](test-envs/test-env-1/README.md)）。
 
 ## 2. 公开插件的使用方法
 
@@ -114,7 +114,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 ## 4. 插件维护（DSH 破坏性更新应对）
 
 **维护原则**：优先插件化（profile 挂载、升级免疫）；补丁项目必须配幂等重打脚本；
-任何打包测试只在 `test-env/`（3090）进行，通过后才允许正式安装（用户手动执行）。
+任何打包测试只在 `test-envs/`（3090~3093）进行，通过后才允许正式安装（用户手动执行）。
 **插件配置入口规范**：一律用「设置 → 插件 → 插件配置」区独立卡片
 （`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页
 （见 [docs/开发规范.md §2.5](docs/开发规范.md)）。
@@ -126,7 +126,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 3. 重建测试环境基线：`scripts/test-env-init.sh --force`（从新正式 profile 克隆），
    再 `scripts/test-env-install.sh --from-project dsh-AccessGate`（或按需指定
    `dsh-Moresettings` / 显式 fork 路径）重装定制插件。
-4. 启动测试实例（`scripts/test-env-start.sh`，端口 3090）按 §2 验证要点逐条实测。
+4. 启动测试实例（`scripts/test-env-start.sh`，端口 3090~3093 按 TEST_ENV_INDEX 选择）按 §2 验证要点逐条实测。
 5. 全部通过后，由用户在 SSH 终端执行正式安装脚本；**回填本表 §3 的适配版本与日期**。
 
 **各插件维护动作速查**：

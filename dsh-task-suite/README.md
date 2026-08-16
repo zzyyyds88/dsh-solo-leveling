@@ -103,7 +103,7 @@ scripts/test-env-stop.sh && scripts/test-env-reset.sh
 #         注意正式环境 HOME 层已有旧 @linxin666 皮肤 managed 区段，应用前先备份）
 ```
 
-回退：`test-env/profiles/web/cordis.patch.yml.bak` 还原 patch；
+回退：`test-envs/test-env-1/profiles/web/cordis.patch.yml.bak` 还原 patch；
 `node_modules/@zzyyyds88/` 删除即卸载（皮肤符号链接一并删除）。
 
 ## 6. 验证结论（2026-08-16，test-env 3090）

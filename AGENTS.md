@@ -11,7 +11,7 @@
    - `$HOME/.dsh`（当前 `/root/.dsh`，含 `profiles/web`、`cordis.patch.yml`、settings.yaml）
    - 全局安装 `/usr/lib/node_modules/@deepseek-ai/dsh`
    - 正式实例（端口 3080 的 `dsh web` 进程）
-   所有打包测试只允许在 `test-env/`（独立 DSH_HOME + 端口 3090）进行。
+   所有打包测试只允许在 `test-envs/`（独立 DSH_HOME + 独立端口）进行。
 2. **绝不自杀式重启。** 你运行在 dsh web 进程里，**禁止 pkill/kill/重启任何
    `dsh web`**（包括自己进程树内的），执行中的工具调用会因此中断。
    需要「停→改→起」的操作一律封装成脚本（如 `install-to-profile.sh`、
@@ -22,7 +22,7 @@
 4. **profile 配置原子化。** 运行中的 dsh web 会热重载 `cordis.patch.yml`；
    服务存活时改写会搞崩进程。必须：停服务 → 写配置 → 再启动（启动由用户执行）。
 5. **不创建散落文件。** 工作区根目录只允许：`README.md`、`CONTRIBUTING.md`、
-   `AGENTS.md`、`scripts/`、`test-env/`、`docs/`、项目文件夹。所有内容进对应
+   `AGENTS.md`、`scripts/`、`test-envs/`、`docs/`、项目文件夹。所有内容进对应
    项目文件夹。
 6. **不把测试当正式。** 测试环境验证通过 ≠ 可以自行正式安装。正式安装脚本
    （会重启正式 dsh web 的）只能由用户在 SSH 终端执行。
@@ -31,31 +31,36 @@
 
 ```bash
 scripts/test-env-status.sh                      # 状态：实例/端口/已装插件/使用声明
-scripts/test-env-reset.sh                       # 恢复官方基线（幂等；--check 检查残留）
+scripts/test-env-reset.sh --verified            # 验收后恢复基线（正式克隆基线；必须 --verified）
+scripts/test-env-reset.sh --check               # 检查环境是否已是基线
 scripts/test-env-install.sh --from-project <项目>  # 装已构建插件进测试 profile
 scripts/test-env-stop.sh && scripts/test-env-start.sh   # 重启测试实例（端口 3090）
 scripts/test-env-init.sh --force                # 重建基线（DSH 升级后适配）
 ```
 
-**多测试环境**（`TEST_ENV_INDEX` 选择，默认 1；所有 `test-env-*.sh` 均支持）：
+**多测试环境**（`TEST_ENV_INDEX` 选择，默认 1；所有 `test-env-*.sh` 均支持），
+统一收纳在 `test-envs/` 下：
 
 | 索引 | 目录 | 端口 |
 |---|---|---|
-| 1 | `test-env/` | 3090 |
-| 2 | `test-env-2/` | 3091 |
-| 3 | `test-env-3/` | 3092 |
-| 4 | `test-env-4/` | 3093 |
+| 1 | `test-envs/test-env-1/` | 3090 |
+| 2 | `test-envs/test-env-2/` | 3091 |
+| 3 | `test-envs/test-env-3/` | 3092 |
+| 4 | `test-envs/test-env-4/` | 3093 |
 
-- **环境恢复纪律（强制）**：测试环境的默认状态是**官方基线**（`test-env-reset.sh`
-  重建：官方 bundles + 空 patch + 空 settings + 空 node_modules）。**每次打包测试
-  完成后（无论成败）必须运行 `test-env-stop.sh && test-env-reset.sh` 恢复官方
-  基线**，保证下一次测试从干净的官方行为开始；安装前也先 `--check` 确认基线。
-- **使用声明纪律（强制）**：使用某个测试环境前，先在该环境 `USAGE.md` 填写
-  「项目 / 用途 / 开始时间」声明正在哪个项目使用（多环境并存，避免互相污染）；
-  `test-env-status.sh` 会显示声明状态，`test-env-reset.sh --check` 会把未清空的
-  声明当作残留；恢复基线时声明自动清空。
-- 测试实例：端口见上表（默认 3090）；官方基线无鉴权，临时挂载 web-auth 后口令
-  `test123456`。正式实例端口 **3080**，永远别碰。
+**基线定义**：测试环境基线 = **从正式 profile 克隆**（含正式环境已装插件/fork，
+贴近真实环境），**不是**官方空模板。`test-env-reset.sh --verified` 重建基线时
+克隆正式 profile + 写最小测试设置（不复制正式口令/密钥），并清空使用声明。
+
+- **独占纪律（强制）**：**同一时刻一个测试环境只允许一个项目使用**（多 Agent
+  并行时防止互相污染）。使用前必须在该环境 `USAGE.md` 填写「项目 / 用途 /
+  开始时间」；`test-env-start.sh` 会检查声明——已被其他项目占用时拒绝启动。
+- **验收纪律（强制）**：**测试完成后必须等用户验收通过，才允许清理测试环境**。
+  `test-env-reset.sh` 恢复基线必须带 `--verified`（用户验收标记），不带参数
+  直接拒绝，防止 Agent 误清未验收环境。USAGE.md 中「验收状态」字段记录
+  待验收 / 已验收。
+- **测试实例**：端口见上表（默认 3090）；基线从正式克隆，临时挂载 web-auth 后
+  口令 `test123456`。正式实例端口 **3080**，永远别碰。
 - 用 `test-env-stop.sh` 停实例（按 PID 文件精确停止），不要 pkill -f 模糊匹配
   （模式含自身命令行会误杀自己）。
 

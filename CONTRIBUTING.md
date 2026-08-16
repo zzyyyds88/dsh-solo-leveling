@@ -57,7 +57,7 @@
 
 1. **禁止替换运行中的 DSH。** 打包测试 / 安装 / 升级，严禁在已运行的正式 DSH
    （`$HOME/.dsh`、全局安装、端口 3080 的进程）上强行替换——那会直接换掉自身正在
-   运行的 DSH，导致程序崩溃。**必须先在工作区级专用测试环境（`test-env/`，
+   运行的 DSH，导致程序崩溃。**必须先在工作区级专用测试环境（`test-envs/`，
    独立 DSH_HOME + 端口 3090）测试通过，之后才允许安装。**
 2. **agent 禁止自行重启 `dsh web`。** agent 运行在 dsh web 进程里，一旦
    pkill / 重启，执行中的工具调用即被中断（等于自杀）。凡需「停→改→起」的操作
@@ -70,7 +70,7 @@
    `cordis.patch.yml` 的改动，在服务存活时改写会触发配置热重载、把承载
    Web/agent 会话的进程搞崩。顺序：停服务 → 写配置 → 再启动。
 5. **工作区根目录只允许出现**：`README.md`、`CONTRIBUTING.md`、`AGENTS.md`、
-   `scripts/`、`test-env/`、`docs/` 和项目子文件夹；具体内容一律进各自项目文件夹。
+   `scripts/`、`test-envs/`、`docs/` 和项目子文件夹；具体内容一律进各自项目文件夹。
 6. **每个项目自带 `verify.sh` 与回退方案**；正式安装前必须在测试环境全量验证，
    并逐条记录到 `变更记录.md`。
 7. **开发必须遵从开发规范**：详见 [docs/开发规范.md](docs/开发规范.md)
@@ -106,7 +106,7 @@ DSH我独自升级/
    风险更高，一般不优先。
 4. **实施**：动手前确认目标文件位置与版本；改动后先做语法/格式校验
    （如 `node --check`）。
-5. **测试环境验证（必经）**：构建产物装进 `test-env/`（`scripts/test-env-install.sh`），
+5. **测试环境验证（必经）**：构建产物装进 `test-envs/`（`scripts/test-env-install.sh`），
    启动测试实例（`scripts/test-env-start.sh`，端口 3090），在浏览器实测；
    验证脚本 + 实测结果逐条写进 `变更记录.md`。**正式实例（3080）不做任何实验。**
 6. **留备份**：被覆盖的文件旁留 `.bak`，回退方法写进记录。
@@ -151,7 +151,7 @@ Config schema / 打包分发三方式 / Web UI 使用）+ 本工作区约定（G
 
 ## 8. 测试环境（打包测试唯一去处）
 
-工作区级专用测试环境：`test-env/`（独立 DSH_HOME、独立端口 3090、独立会话数据）。
+工作区级专用测试环境：`test-envs/`（四个环境 test-env-1~4，独立 DSH_HOME、端口 3090~3093、独立会话数据）。
 管理命令（`scripts/`）：
 
 | 命令 | 作用 |
@@ -167,7 +167,7 @@ Config schema / 打包分发三方式 / Web UI 使用）+ 本工作区约定（G
 ```bash
 cd dsh-AccessGate && ./build.sh && cd ..          # 1. 构建（或 dsh-Moresettings）
 scripts/test-env-install.sh --from-project dsh-AccessGate   # 2. 装进测试环境
-scripts/test-env-stop.sh && scripts/test-env-start.sh      # 3. 重启测试实例
+scripts/test-env-stop.sh && scripts/test-env-start.sh      # 3. 重启测试实例（TEST_ENV_INDEX 选择环境）
 # 浏览器 http://127.0.0.1:3090 验证（口令 test123456）
 # 4. 全部通过后，正式安装脚本才允许由用户在 SSH 终端手动执行
 ```
@@ -203,7 +203,7 @@ git pull --rebase && git push                                   # 有远端后
 - **插件总览**：仓库的插件清单（正在使用 / 使用方法 / 更新情况 / 维护）维护在
   [PLUGINS.md](PLUGINS.md)，改动插件后同步更新。
 - **禁止入库**（.gitignore 已覆盖）：`node_modules/`、测试环境运行态
-  （`test-env/` 仅保留 README.md）、第三方参考快照 `dsh-web-ui-main/`
+  （`test-envs/` 下 test-env-1 保留 README.md）、第三方参考快照 `dsh-web-ui-main/`
   （88M，可随时按 `开发备忘.md` 的加速下载命令重新获取）、日志与密钥。
 - **发布到 GitHub 开源检查清单**（仓库名已定：`dsh-solo-leveling`，远端已配）：
   1. 全库自查无敏感信息（口令/密钥/token；`git grep -i password` 复查）；

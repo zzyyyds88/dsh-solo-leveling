@@ -23,7 +23,7 @@ else
   echo " 未运行（PID 文件：$([ -f "$PID_FILE" ] && echo 存在但进程已退出 || echo 无)）"
 fi
 echo "-- 端口占用 --"
-ss -tln 2>/dev/null | grep -E ':(3080|3090)\b' || echo " 3080 / 3090 均无监听"
+ss -tln 2>/dev/null | grep -E ":(3080|$PORT)\b" || echo " 3080 / $PORT 均无监听"
 echo "-- 测试 profile 已装 @deepseek-ai 插件 --"
 if [ -d "$TEST_ENV/profiles/web/node_modules/@deepseek-ai" ]; then
   ls "$TEST_ENV/profiles/web/node_modules/@deepseek-ai/" | sed 's/^/  /'
@@ -31,4 +31,4 @@ else
   echo " （无）"
 fi
 echo "-- 提示 --"
-echo " 正式实例端口 3080 永远不允许被本测试环境触碰；打包测试一律在本环境（3090）进行。"
+echo " 正式实例端口 3080 永远不允许被本测试环境触碰；打包测试一律在本环境（$PORT）进行。"

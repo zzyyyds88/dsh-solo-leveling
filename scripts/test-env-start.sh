@@ -2,6 +2,7 @@
 # 启动工作区级专用 DSH 测试实例：隔离 DSH_HOME + 独立端口（默认 3090）。
 # 绝不触碰正式实例（端口 3080、$HOME/.dsh）。
 # 用法：scripts/test-env-start.sh [--port 3090]
+# 独占纪律：同一时刻一个测试环境只归一个项目；USAGE.md 声明过其他项目时拒绝启动。
 set -euo pipefail
 
 WS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,6 +11,9 @@ resolve_test_env
 echo "== 测试环境：$TEST_ENV（TEST_ENV_INDEX=${ENV_INDEX:-1}，端口 $PORT）=="
 echo "  声明状态：$(usage_status)"
 if [ "${1:-}" = "--port" ]; then PORT="$2"; fi
+
+# 独占检查：若 USAGE.md 已被其他项目声明占用，拒绝启动（避免多 Agent 撞环境）
+claim_test_env "${DSH_PROJECT:-}"
 
 [ -d "$TEST_ENV/profiles/web/node_modules" ] || { echo "✗ 测试环境未初始化，先跑 scripts/test-env-init.sh"; exit 1; }
 
@@ -24,7 +28,7 @@ if ss -tln 2>/dev/null | grep -qE "[:.]$PORT\b"; then
 fi
 
 echo "== 启动测试实例（DSH_HOME=$TEST_ENV，端口 $PORT）=="
-echo "  （日志：test-env/dsh-web.log，PID 文件：test-env/dsh-web.pid）"
+echo "  （日志：$TEST_ENV/dsh-web.log，PID 文件：$TEST_ENV/dsh-web.pid）"
 cd "$TEST_ENV"
 DSH_HOME="$TEST_ENV" nohup dsh web --port "$PORT" > "$TEST_ENV/dsh-web.log" 2>&1 &
 echo $! > "$TEST_ENV/dsh-web.pid"
@@ -32,9 +36,9 @@ echo $! > "$TEST_ENV/dsh-web.pid"
 for _ in $(seq 1 30); do
   if curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/"; then
     echo "✓ 已就绪：http://127.0.0.1:$PORT （PID $(cat "$TEST_ENV/dsh-web.pid")）"
-    echo "  测试口令：test123456（test-env/settings.yaml 中 web-auth.password）"
+    echo "  测试口令：test123456（$TEST_ENV/settings.yaml 中 web-auth.password）"
     exit 0
   fi
   sleep 1
 done
-echo "✗ 30 秒内未就绪。查看日志：tail -50 test-env/dsh-web.log"; exit 1
+echo "✗ 30 秒内未就绪。查看日志：tail -50 $TEST_ENV/dsh-web.log"; exit 1
