@@ -1,0 +1,98 @@
+/**
+ * Allowlist parsing and composition: the settings.yaml web_settings_namespaces
+ * key (list and map shapes), package-name aliasing, and the registered-set
+ * intersection that keeps the bridge from surfacing anything unknown.
+ */
+
+import { describe, expect, it } from 'vitest'
+import { composeAllowlist, extractWebSettingsNamespaces, resolveNamespaceEntry } from '../src/allowlist.ts'
+
+describe('extractWebSettingsNamespaces', () => {
+  it('reads a block list', () => {
+    const text = [
+      'web_settings_namespaces:',
+      '  - dsh-live-stats',
+      '  - dsh-client-ui-task-board',
+      '  - "dsh-skins"',
+    ].join('\n')
+    expect(extractWebSettingsNamespaces(text)).toEqual(['dsh-live-stats', 'dsh-client-ui-task-board', 'dsh-skins'])
+  })
+
+  it('reads a block map', () => {
+    const text = [
+      'web_settings_namespaces:',
+      '  dsh-live-stats: true',
+      '  dsh-pet: {}',
+    ].join('\n')
+    expect(extractWebSettingsNamespaces(text)).toEqual(['dsh-live-stats', 'dsh-pet'])
+  })
+
+  it('reads an inline flow list', () => {
+    expect(extractWebSettingsNamespaces('web_settings_namespaces: [dsh-live-stats, "dsh-skins"]')).toEqual(['dsh-live-stats', 'dsh-skins'])
+  })
+
+  it('skips comment lines and stops at the next top-level key', () => {
+    const text = [
+      'web_settings_namespaces:',
+      '  - dsh-live-stats',
+      '  # a comment',
+      'llm:',
+      '  provider: x',
+    ].join('\n')
+    expect(extractWebSettingsNamespaces(text)).toEqual(['dsh-live-stats'])
+  })
+
+  it('returns the empty list when the key is absent or the file is empty', () => {
+    expect(extractWebSettingsNamespaces('llm:\n  provider: x\n')).toEqual([])
+    expect(extractWebSettingsNamespaces('')).toEqual([])
+  })
+})
+
+describe('resolveNamespaceEntry', () => {
+  it('maps package names onto their settings namespaces', () => {
+    expect(resolveNamespaceEntry('dsh-client-ui-task-board')).toBe('task-board')
+    expect(resolveNamespaceEntry('dsh-skins')).toBe('skin-background')
+    expect(resolveNamespaceEntry('dsh-live-stats')).toBe('live-stats')
+  })
+
+  it('passes bare family namespaces through', () => {
+    expect(resolveNamespaceEntry('live-stats')).toBe('live-stats')
+    expect(resolveNamespaceEntry('task-board')).toBe('task-board')
+    expect(resolveNamespaceEntry('skin-background')).toBe('skin-background')
+  })
+
+  it('ignores packages without a settings namespace and unknown names', () => {
+    expect(resolveNamespaceEntry('dsh-web-ui')).toBeUndefined()
+    expect(resolveNamespaceEntry('dsh-client-ui-aionui-panel')).toBeUndefined()
+    expect(resolveNamespaceEntry('dsh-client-ui-web-ui-settings')).toBeUndefined()
+    expect(resolveNamespaceEntry('dsh-ssh')).toBeUndefined()
+    expect(resolveNamespaceEntry('something-else')).toBeUndefined()
+  })
+})
+
+describe('composeAllowlist', () => {
+  const registered = [
+    'task-board',
+    'live-stats',
+    'skin-background',
+    'web-search-deepseek',
+  ]
+
+  it('falls back to the family list when the user configured none', () => {
+    expect(composeAllowlist([], registered)).toEqual([
+      'live-stats',
+      'skin-background',
+      'task-board',
+    ])
+  })
+
+  it('honors user entries, deduplicates, and ignores unknown names', () => {
+    expect(composeAllowlist(['dsh-client-ui-task-board', 'dsh-skins', 'dsh-ssh', 'nope'], registered))
+      .toEqual(['skin-background', 'task-board'])
+  })
+
+  it('drops namespaces not registered in the settings seam', () => {
+    expect(composeAllowlist(['task-board'], ['web-search-deepseek'])).toEqual([])
+    expect(composeAllowlist([], [])).toEqual([])
+  })
+})

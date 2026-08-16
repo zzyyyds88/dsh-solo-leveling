@@ -1,0 +1,18 @@
+{
+  "name": "dsh-task-suite",
+  "version": "0.1.17",
+  "private": true,
+  "description": "从 dsh-web-ui（zhu1090093659/dsh-web-ui，Apache-2.0）抽取并自有的 DSH Web GUI 插件集：任务看板、实时令牌/吞吐统计、Git 图谱、右侧面板、皮肤中心与皮肤全家桶（含 maid-atelier），scope 统一为 @zzyyyds88。",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "aggregate:check": "node scripts/aggregate.mjs --check",
+    "skin-center:check": "node scripts/skin-center-bundles --check"
+  },
+  "devDependencies": {
+    "lightningcss": "^1.32.0",
+    "tsdown": "^0.22.2"
+  },
+  "license": "Apache-2.0"
+}
