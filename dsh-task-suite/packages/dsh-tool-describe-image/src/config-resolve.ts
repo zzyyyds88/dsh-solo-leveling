@@ -21,6 +21,10 @@ export const DEFAULT_API_KEY_ENV = 'VISION_API_KEY'
 export const DEFAULT_MAX_OUTPUT_TOKENS = 1024
 /** Per-call vision request timeout in milliseconds. */
 export const DEFAULT_TIMEOUT_MS = 60_000
+/** Transient-failure retries before the tool gives up (0 = single attempt). */
+export const DEFAULT_MAX_RETRIES = 2
+/** Upper bound for the configurable retry count. */
+export const MAX_RETRIES_LIMIT = 10
 /** Protocol styles the tool can speak to the configured endpoint. */
 export const API_STYLES = ['chat-completions', 'responses'] as const
 export type ApiStyle = typeof API_STYLES[number]
@@ -54,6 +58,13 @@ export interface Config {
   maxOutputTokens?: number
   /** Per-call request timeout; defaults to {@link DEFAULT_TIMEOUT_MS}. */
   timeoutMs?: number
+  /**
+   * Retries on transient vision-endpoint failures (network errors, timeouts,
+   * HTTP 429 / 5xx); defaults to {@link DEFAULT_MAX_RETRIES}. 0 = single
+   * attempt, no retry. Client errors (4xx except 429) and caller aborts are
+   * never retried.
+   */
+  maxRetries?: number
   /** Protocol style of the endpoint; defaults to {@link DEFAULT_API_STYLE} (`chat-completions`). */
   apiStyle?: ApiStyle
   /**
@@ -77,6 +88,7 @@ export const Config: z<Config> = z.object({
   maxBytes: z.number().step(1).min(1).default(DEFAULT_MAX_BYTES),
   maxOutputTokens: z.number().step(1).min(1).default(DEFAULT_MAX_OUTPUT_TOKENS),
   timeoutMs: z.number().min(1).default(DEFAULT_TIMEOUT_MS),
+  maxRetries: z.number().step(1).min(0).max(MAX_RETRIES_LIMIT).default(DEFAULT_MAX_RETRIES),
   apiStyle: z.union(API_STYLES).default(DEFAULT_API_STYLE),
   renderImagePreview: z.boolean().default(DEFAULT_RENDER_IMAGE_PREVIEW),
 })
@@ -94,6 +106,7 @@ export interface ResolvedConfig {
   maxBytes: number
   maxOutputTokens: number
   timeoutMs: number
+  maxRetries: number
   apiStyle: ApiStyle
   renderImagePreview: boolean
 }
@@ -129,16 +142,20 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const maxBytes = config.maxBytes ?? DEFAULT_MAX_BYTES
   const maxOutputTokens = config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS
   const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS
+  const maxRetries = config.maxRetries ?? DEFAULT_MAX_RETRIES
   const apiStyle = config.apiStyle ?? DEFAULT_API_STYLE
   for (const [field, value] of [['maxBytes', maxBytes], ['maxOutputTokens', maxOutputTokens], ['timeoutMs', timeoutMs]] as const) {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`describe-image: ${field} must be a positive safe integer`)
     }
   }
+  if (!Number.isSafeInteger(maxRetries) || maxRetries < 0 || maxRetries > MAX_RETRIES_LIMIT) {
+    throw new Error(`describe-image: maxRetries must be an integer between 0 and ${MAX_RETRIES_LIMIT}`)
+  }
   if (!API_STYLES.includes(apiStyle)) {
     throw new Error(`describe-image: apiStyle must be one of ${API_STYLES.map(style => JSON.stringify(style)).join(', ')}`)
   }
-  return { baseURL, model, apiKey, apiKeyEnv, defaultPrompt: config.defaultPrompt ?? DEFAULT_PROMPT, maxBytes, maxOutputTokens, timeoutMs, apiStyle, renderImagePreview: config.renderImagePreview ?? DEFAULT_RENDER_IMAGE_PREVIEW }
+  return { baseURL, model, apiKey, apiKeyEnv, defaultPrompt: config.defaultPrompt ?? DEFAULT_PROMPT, maxBytes, maxOutputTokens, timeoutMs, maxRetries, apiStyle, renderImagePreview: config.renderImagePreview ?? DEFAULT_RENDER_IMAGE_PREVIEW }
 }
 
 /**

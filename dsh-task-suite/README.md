@@ -32,8 +32,8 @@
 | 实时吞吐统计 | `@zzyyyds88/dsh-live-stats` | 会话状态行流式 token 估算（~ 启发式），provider 用量到达自动换真实值 |
 | Git 图谱 | `@zzyyyds88/dsh-client-ui-git-graph` | 分支选择器 + 提交历史 + 分支泳道图谱（host 端 git 服务 + 前端图谱） |
 | 右侧面板 | `@zzyyyds88/dsh-client-ui-aionui-panel` | 文件树 + 多标签预览（md/html/code/diff/csv/pdf/office/图片）+ SCM stage/unstage/discard，宽度拖拽与折叠持久化 |
-| 图像理解 | `@zzyyyds88/dsh-tool-describe-image` | 纯文本模型获得视觉：`describe_image` 工具把图片（本地路径 / http(s) URL / 附件引用）交给配置的 OpenAI 兼容视觉端点（Qwen-VL / GLM-4V / GPT-4o / 本地 Ollama 等），**只有返回文本进会话**；输入框加图片按钮；端点/模型/密钥/默认指令在「设置 → 插件 → 插件配置 → Image understanding」卡配置，即时生效 |
-| 设置中心 | `@zzyyyds88/dsh-client-ui-web-ui-settings` | 「设置 → 插件 → 插件配置」Web UI 插件组卡片 + 社区插件索引 |
+| 图像理解 | `@zzyyyds88/dsh-tool-describe-image` | 纯文本模型获得视觉：`describe_image` 工具把图片（本地路径 / http(s) URL / 附件引用）交给配置的 OpenAI 兼容视觉端点（Qwen-VL / GLM-4V / GPT-4o / 本地 Ollama 等），**只有返回文本进会话**；输入框加图片按钮；端点/模型/密钥/默认指令/**重试次数（maxRetries，默认 2，瞬时失败自动重试）**在「设置 → 插件 → 插件配置 → Image understanding」卡配置，即时生效 |
+| 设置中心 | `@zzyyyds88/dsh-client-ui-web-ui-settings` | 「设置 → 插件 → 插件配置」Web UI 插件组卡片（**已剔除社区插件索引卡**） |
 | 皮肤中心 | `@zzyyyds88/dsh-client-ui-skin-center` | 皮肤列表 / 试穿 / 一键应用（host `/api/skin-center/*`，热切换不重启） |
 | 皮肤聚合 | `@zzyyyds88/dsh-skins` | 11 款皮肤资产内置（blue-fantasy / dragon-heir / harbor / miku / minecraft / qq98 / ths / trading / whale-song / xp / **maid-atelier**） |
 | 聚合插件 | `@zzyyyds88/dsh-task-suite-all` | 一个包装齐上面全部（cordis.patch.yml 汇总各行 + compat shim 内嵌） |

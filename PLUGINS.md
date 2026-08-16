@@ -36,8 +36,8 @@
 | `@zzyyyds88/dsh-live-stats` | 前端 | **实时令牌统计 + 实时吞吐统计**：输入框下方 TPS / LLM 耗时 / 上下文占用 / 缓存命中率 / 输入输出 token；会话状态行流式 token 估算（~ 启发式，provider 用量到达自动换真实值） | 聚合包子包 |
 | `@zzyyyds88/dsh-client-ui-git-graph` | 前端+后端 | **Git 图谱**：分支选择器、提交历史、分支泳道图谱（host 端 git 服务 + 前端渲染） | 聚合包子包 |
 | `@zzyyyds88/dsh-client-ui-aionui-panel` | 前端+后端 | **右侧面板**：文件树（搜索定位）+ 多标签预览（md/html/code/diff/csv/pdf/office/图片）+ SCM 变更（stage/unstage/discard），宽度拖拽 + 折叠持久化 | 聚合包子包 |
-| `@zzyyyds88/dsh-tool-describe-image` | 前端+后端 | **图像理解**：`describe_image` 工具把图片（本地路径 / URL / 附件引用）交给 OpenAI 兼容视觉端点，只有返回文本进会话；输入框图片按钮；「设置 → 插件 → 插件配置 → Image understanding」卡配置端点/模型/密钥/默认指令，即时生效 | 聚合包子包 |
-| `@zzyyyds88/dsh-client-ui-web-ui-settings` | 前端 | **设置中心**：「设置 → 插件 → 插件配置」Web UI 插件组卡片 + 社区插件索引 | 聚合包子包 |
+| `@zzyyyds88/dsh-tool-describe-image` | 前端+后端 | **图像理解**：`describe_image` 工具把图片（本地路径 / URL / 附件引用）交给 OpenAI 兼容视觉端点，只有返回文本进会话；输入框图片按钮；「设置 → 插件 → 插件配置 → Image understanding」卡配置端点/模型/密钥/默认指令/**重试次数（maxRetries，默认 2，瞬时失败自动重试）**，即时生效 | 聚合包子包 |
+| `@zzyyyds88/dsh-client-ui-web-ui-settings` | 前端 | **设置中心**：「设置 → 插件 → 插件配置」Web UI 插件组卡片（已剔除社区插件索引卡） | 聚合包子包 |
 | `@zzyyyds88/dsh-client-ui-skin-center` + `@zzyyyds88/dsh-skins` | 前端+后端 | **皮肤中心 + 皮肤全家桶**：列表/试穿/一键应用（host `/api/skin-center/*` 热切换）；11 款皮肤资产内置（含收录的 maid-atelier，CC BY-NC-SA 4.0） | 聚合包子包 |
 
 > 皮肤：正式 profile 当前启用 `@linxin666/dsh-client-ui-skin-whale-song`（旧上游装）；

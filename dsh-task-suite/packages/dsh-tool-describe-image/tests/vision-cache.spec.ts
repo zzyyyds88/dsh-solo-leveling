@@ -32,6 +32,7 @@ const SPEC: tool.ResolvedConfig = {
   maxBytes: tool.DEFAULT_MAX_BYTES,
   maxOutputTokens: tool.DEFAULT_MAX_OUTPUT_TOKENS,
   timeoutMs: 60_000,
+  maxRetries: 0,
   apiStyle: 'chat-completions',
   renderImagePreview: tool.DEFAULT_RENDER_IMAGE_PREVIEW,
 }

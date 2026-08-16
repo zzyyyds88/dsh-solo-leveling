@@ -703,9 +703,18 @@ describe('resolveConfig, sniffing, and bounded reads', () => {
       maxBytes: tool.DEFAULT_MAX_BYTES,
       maxOutputTokens: tool.DEFAULT_MAX_OUTPUT_TOKENS,
       timeoutMs: tool.DEFAULT_TIMEOUT_MS,
+      maxRetries: tool.DEFAULT_MAX_RETRIES,
       apiStyle: tool.DEFAULT_API_STYLE,
       renderImagePreview: tool.DEFAULT_RENDER_IMAGE_PREVIEW,
     })
+  })
+
+  it('honors an explicit maxRetries override and rejects out-of-range values', () => {
+    expect(tool.resolveConfig({ ...minimal, maxRetries: 5 }).maxRetries).toBe(5)
+    expect(tool.resolveConfig({ ...minimal, maxRetries: 0 }).maxRetries).toBe(0)
+    expect(() => tool.resolveConfig({ ...minimal, maxRetries: -1 })).toThrow(/maxRetries must be an integer between 0 and 10/)
+    expect(() => tool.resolveConfig({ ...minimal, maxRetries: 11 })).toThrow(/maxRetries must be an integer between 0 and 10/)
+    expect(() => tool.resolveConfig({ ...minimal, maxRetries: 1.5 })).toThrow(/maxRetries must be an integer between 0 and 10/)
   })
 
   it('honors an explicit renderImagePreview override', () => {

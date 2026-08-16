@@ -382,25 +382,66 @@ export async function callVision(
     if (cached !== undefined) return cached
   }
   const { path, body } = buildVisionRequest(spec, prompt, image)
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
-    body,
-    redirect: 'error',
-    signal: AbortSignal.any([signal, AbortSignal.timeout(spec.timeoutMs)]),
-  })
-  if (!response.ok) {
-    const excerpt = await readBoundedText(response, 200)
-    throw new Error(`describe-image: vision endpoint returned HTTP ${response.status}: ${excerpt}`)
+  const attempts = spec.maxRetries + 1
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (signal.aborted) throw signal.reason
+    if (attempt > 0) await sleep(backoffMs(attempt))
+    try {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${apiKey}` },
+        body,
+        redirect: 'error',
+        signal: AbortSignal.any([signal, AbortSignal.timeout(spec.timeoutMs)]),
+      })
+      if (!response.ok) {
+        // Transient statuses (429 / 5xx) are retried up to maxRetries; client
+        // errors (4xx except 429) are final — retrying them cannot succeed.
+        if (!(response.status === 429 || response.status >= 500)) {
+          const excerpt = await readBoundedText(response, 200)
+          throw new VisionFatalError(`describe-image: vision endpoint returned HTTP ${response.status}: ${excerpt}`)
+        }
+        if (attempt + 1 < attempts) {
+          await readBoundedText(response, 64)
+          continue
+        }
+        const excerpt = await readBoundedText(response, 200)
+        throw new VisionFatalError(`describe-image: vision endpoint returned HTTP ${response.status} after ${attempts} attempts: ${excerpt}`)
+      }
+      const payloadBytes = await readBoundedBody(response, spec.maxOutputTokens * 8 + 64 * 1024)
+      let payload: unknown
+      try {
+        payload = JSON.parse(payloadBytes.toString('utf8'))
+      } catch {
+        throw new VisionFatalError('describe-image: vision endpoint returned invalid JSON')
+      }
+      const text = spec.apiStyle === 'responses' ? extractResponsesContent(payload) : extractChatCompletionsContent(payload)
+      if (cache !== undefined) cache.set(semanticRequestKey(spec, prompt, image), text)
+      return text
+    } catch (error) {
+      // The caller's own abort always wins: no retry, rethrow as-is.
+      if (signal.aborted) throw signal.reason
+      // Fatal responses (4xx / bad payload) must not be retried.
+      if (error instanceof VisionFatalError || attempt + 1 >= attempts) throw error
+      // A network failure or the per-attempt timeout (caller still live) is a
+      // transient failure worth one more try.
+    }
   }
-  const payloadBytes = await readBoundedBody(response, spec.maxOutputTokens * 8 + 64 * 1024)
-  let payload: unknown
-  try {
-    payload = JSON.parse(payloadBytes.toString('utf8'))
-  } catch {
-    throw new Error('describe-image: vision endpoint returned invalid JSON')
-  }
-  const text = spec.apiStyle === 'responses' ? extractResponsesContent(payload) : extractChatCompletionsContent(payload)
-  if (cache !== undefined) cache.set(semanticRequestKey(spec, prompt, image), text)
-  return text
+  throw new VisionFatalError('describe-image: vision request failed')
+}
+
+/**
+ * A vision-call failure that retrying cannot fix (client errors, malformed
+ * payloads). Network failures and timeouts are retried instead.
+ */
+class VisionFatalError extends Error {}
+
+/** Backoff for the nth retry: 400ms, 800ms, 1600ms… capped at 3s. */
+function backoffMs(attempt: number): number {
+  return Math.min(400 * 2 ** (attempt - 1), 3000)
+}
+
+/** Promisified setTimeout. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

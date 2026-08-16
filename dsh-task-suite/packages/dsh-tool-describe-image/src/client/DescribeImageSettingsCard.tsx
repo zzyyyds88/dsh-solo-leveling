@@ -24,6 +24,7 @@ export interface DescribeImageSettings {
   maxBytes?: number
   maxOutputTokens?: number
   timeoutMs?: number
+  maxRetries?: number
   apiStyle?: 'chat-completions' | 'responses'
   renderImagePreview?: boolean
 }
@@ -38,6 +39,7 @@ export interface DescribeImageSettingsCardState extends CardShell {
   maxBytes: CardFieldState
   maxOutputTokens: CardFieldState
   timeoutMs: CardFieldState
+  maxRetries: CardFieldState
   apiStyle: CardFieldState
   renderImagePreview: CardFieldState
 }
@@ -67,6 +69,7 @@ export class DescribeImageSettingsCardController {
       numberField('maxBytes'),
       numberField('maxOutputTokens'),
       numberField('timeoutMs'),
+      numberField('maxRetries'),
       booleanField('renderImagePreview'),
     ])
     this.store = this.form.bind(() => this.projection())
@@ -84,6 +87,7 @@ export class DescribeImageSettingsCardController {
       maxBytes: this.form.field('maxBytes'),
       maxOutputTokens: this.form.field('maxOutputTokens'),
       timeoutMs: this.form.field('timeoutMs'),
+      maxRetries: this.form.field('maxRetries'),
       renderImagePreview: this.form.field('renderImagePreview'),
     }
   }
@@ -214,6 +218,16 @@ export function DescribeImageSettingsCard(props: DescribeImageSettingsCardProps)
         {...state.timeoutMs}
         onEdit={(text) => { props.edit('timeoutMs', text) }}
         onReset={() => { props.resetField('timeoutMs') }}
+      />
+      <ValueField
+        id="settings-describe-image-maxretries"
+        label={t('field.maxRetries')}
+        hint={t('field.maxRetries.hint')}
+        numeric
+        {...fieldProps}
+        {...state.maxRetries}
+        onEdit={(text) => { props.edit('maxRetries', text) }}
+        onReset={() => { props.resetField('maxRetries') }}
       />
       <BooleanField
         id="settings-describe-image-render-preview"
