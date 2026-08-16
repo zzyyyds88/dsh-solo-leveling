@@ -454,19 +454,29 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     celebrateCompletion()
   }, [celebrateCompletion])
 
-  // 普通对话完成检测：流式回答（partial 有内容）从有到无，且非错误/非 agent 任务 → 庆祝。
+  const lastCompletionDiagRef = useRef('')
+  const [completionDiag, setCompletionDiag] = useState('')
+  const updateCompletionDiag = useCallback((message) => {
+    lastCompletionDiagRef.current = message
+    setCompletionDiag(message)
+  }, [])
+
+  // 普通对话完成检测：流式回答（partial 有文本内容）从有到无，且非错误/非 agent 任务 → 庆祝。
+  // 注意不能只判断 Boolean(snapshot.partial)：DSH 里 partial 结束时可能是空对象 {}，
+  // Boolean({}) 恒为 true，检测永不触发。必须看 blocks 里是否有实际文本。
   // 普通对话里 snapshot.running 恒为 false（那是 agent 任务循环的标志），完成时只有
   // partial 清空这一信号；agent 任务的 running→idle 已由上面 effect 处理（3 秒去重兜底）。
   useEffect(() => {
-    const hasPartial = Boolean(snapshot.partial)
-    const wasPartial = wasPartialRef.current
-    wasPartialRef.current = hasPartial
-    if (!wasPartial || hasPartial) return
+    const hasStreamContent = partialHasText(snapshot.partial)
+    const wasStreamContent = wasPartialRef.current
+    wasPartialRef.current = hasStreamContent
+    updateCompletionDiag(`partial文本:${hasStreamContent ? '有' : '无'} → ${wasStreamContent ? '有' : '无'} | running:${snapshot.running ? '是' : '否'} | 状态:${effectiveVisual.kind}`)
+    if (!wasStreamContent || hasStreamContent) return
     if (snapshot.running) return // agent 任务路径已处理
     const kind = effectiveVisual.kind
     if (kind === 'error' || kind === 'tool-error') return // 出错走安慰
     fireCompletionCelebration()
-  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration])
+  }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration, updateCompletionDiag])
 
   /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
   const comfortError = useCallback(() => {
@@ -609,9 +619,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       ['音频', audio.state === 'running' ? 'running ✓' : audio.state === 'suspended' ? 'suspended（点一下解锁）' : '未创建'],
       ['静音', muted ? '是' : '否'],
       ['音量', `${Math.round((audio.total ?? 1) * 100)}%`],
+      ...(completionDiag ? [['完成检测', completionDiag]] : []),
       ...(audioErr ? [['音频错误', audioErr]] : []),
     ]
-  }, [runningSessions.length, focusedSession?.running, list.ids, contextRatio, effectiveVisual.kind, muted])
+  }, [runningSessions.length, focusedSession?.running, list.ids, contextRatio, effectiveVisual.kind, muted, completionDiag])
 
   const showStream = Boolean(streamText && !tapText && bubblePage % 2 === 0)
   const activityLabel = rotatingActivityLabel(streamMode, phase, questionCount, thinkingMs)
@@ -647,6 +658,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
           <label>音量 <input type="range" min="0" max="100" value={Math.round((getVolume() ?? 1) * 100)} onChange={event => setVolume(Number(event.target.value) / 100)} aria-label="桌宠音量" /></label>
           <button type="button" onClick={() => { unlockAudio(); beep() }}>试音</button>
           <button type="button" onClick={() => { unlockAudio(); playCelebrate() }}>庆祝</button>
+          <button type="button" onClick={() => { unlockAudio(); speakVoice('done1') }}>语音</button>
         </footer>
       </section>}
       <nav className="dsh-live2d-tools" aria-label="Pet 快捷操作">
@@ -707,6 +719,11 @@ function sharedPrefixLength(left, right) {
   let index = 0
   while (index < left.length && index < right.length && left[index] === right[index]) index += 1
   return index
+}
+/** partial 是否含实际文本（reasoning 或回复）。空对象 {} 也算「无内容」。 */
+function partialHasText(partial) {
+  const blocks = Array.isArray(partial?.blocks) ? partial.blocks : []
+  return blocks.some(block => block?.kind && block.text)
 }
 function latestHumanTurnKey(snapshot) {
   const nodes = Array.isArray(snapshot?.nodes) ? snapshot.nodes : []
