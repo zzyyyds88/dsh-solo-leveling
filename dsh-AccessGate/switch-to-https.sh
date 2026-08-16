@@ -65,10 +65,12 @@ echo "== [2/5] 写入最终 profile 配置（webserver=127.0.0.1，access-gate m
 cd "$PROJECT"
 node install-access-gate-plugin.mjs --allow-formal
 
-echo "== [3/5] 证书（按 IP 匹配复用/重生成）+ Caddyfile + 启动 caddy（HTTPS 0.0.0.0:${HTTPS_PORT} → 127.0.0.1:3080）=="
-mkdir -p /etc/caddy/certs
-CERT="/etc/caddy/certs/dsh-web.crt"
-KEY="/etc/caddy/certs/dsh-web.key"
+echo "== [3/5] 证书（按地址命名，IP/域名匹配复用/重生成）+ 反代片段 + 启动 caddy =="
+mkdir -p /etc/caddy/certs /etc/caddy/sites.d
+# 证书按地址命名（同地址不同端口共享；不同地址各自证书，互不覆盖）
+CERT_BASE="dsh-$(printf '%s' "$LAN_IP" | tr -c 'A-Za-z0-9.-' '_')"
+CERT="/etc/caddy/certs/${CERT_BASE}.crt"
+KEY="/etc/caddy/certs/${CERT_BASE}.key"
 # 证书绑地址（IP 或域名）、不绑端口：换 IP/域名重配时必须重新生成，
 # 否则浏览器会因 SAN 不匹配报证书错误（TLS/SNI mismatch）。
 if echo "$LAN_IP" | grep -qE '^[0-9.]+$'; then
@@ -96,23 +98,37 @@ if [ "$needs_cert" = "1" ]; then
 else
   echo "  复用现有证书（SAN 匹配 ${LAN_IP}，有效期充足）"
 fi
-chown -R caddy:caddy /etc/caddy/certs && chmod 640 "$KEY"
-cat > /etc/caddy/Caddyfile <<EOF
+chown -R caddy:caddy /etc/caddy/certs 2>/dev/null || true
+chmod 640 "$KEY" 2>/dev/null || true
+
+# 主 Caddyfile：import 聚合全部反代片段（多 dsh 实例各自片段、互不覆盖）
+if ! grep -q "import /etc/caddy/sites.d/\*.conf" /etc/caddy/Caddyfile 2>/dev/null; then
+  cat > /etc/caddy/Caddyfile <<'EOF'
 # DSH Web GUI —— HTTPS 反向代理（caddy，自签内部 CA，浏览器首次信任一次）
+# 每个 dsh 实例一个片段：/etc/caddy/sites.d/dsh-<端口>.conf（由插件自动管理）
 # auto_https disable_redirects：不占用 80 端口（避免与既有 Web 服务冲突）
 {
 	auto_https disable_redirects
 }
 
+import /etc/caddy/sites.d/*.conf
+EOF
+  echo "  主 Caddyfile 已初始化为 import 聚合结构"
+fi
+
+# 本实例片段（正式实例端口 3080）
+FRAG="/etc/caddy/sites.d/dsh-3080.conf"
+cat > "$FRAG" <<EOF
+# dsh instance on 127.0.0.1:3080 — auto-managed by dsh-host-access-gate
 https://${LAN_IP}:${HTTPS_PORT} {
-	tls /etc/caddy/certs/dsh-web.crt /etc/caddy/certs/dsh-web.key
+	tls ${CERT} ${KEY}
 	reverse_proxy 127.0.0.1:3080
 }
 EOF
 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "  Caddyfile 校验失败"; exit 1; }
 systemctl enable caddy >/dev/null 2>&1 || true
 systemctl restart caddy
-echo "  caddy 已启动（${LAN_IP}:${HTTPS_PORT}）"
+echo "  caddy 已启动（${LAN_IP}:${HTTPS_PORT} → 127.0.0.1:3080）"
 
 echo "== [4/5] 启动 dsh web（回环 127.0.0.1:3080 + --trusted-host ${LAN_IP} 无端口）=="
 cd /root/.openclaw/workspace 2>/dev/null || cd /root

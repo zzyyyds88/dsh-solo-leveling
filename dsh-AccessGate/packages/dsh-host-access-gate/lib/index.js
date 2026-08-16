@@ -41,7 +41,7 @@
 */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -565,9 +565,11 @@ function makeRestartHandler(state) {
 }
 
 // ---- 反向代理自动运行（settings 配置过 lanHost/httpsPort 后，启动 dsh 即自动确保 caddy）----
+// 多实例共存：每个 dsh 实例写自己的 Caddyfile 片段 /etc/caddy/sites.d/dsh-<port>.conf，
+// 主 Caddyfile `import /etc/caddy/sites.d/*.conf` 合并加载全部片段 —— 不同实例各自
+// 反代、互不覆盖。证书按地址命名（同地址不同端口共享，不同地址各自证书）。
 const CADDY_FILE = "/etc/caddy/Caddyfile";
-const CERT_FILE = "/etc/caddy/certs/dsh-web.crt";
-const KEY_FILE = "/etc/caddy/certs/dsh-web.key";
+const SITES_DIR = "/etc/caddy/sites.d";
 /** 无 systemd 环境下由本插件拉起的 caddy 子进程（restart/退出时回收）。 */
 let caddyChild = void 0;
 
@@ -575,18 +577,33 @@ function hasSystemd() {
 	return existsSync("/run/systemd/system");
 }
 
-/** 启动时调用：读取反代参数，非空则确保证书/Caddyfile/caddy 就绪。失败不阻塞 DSH 本体。 */
+/** lanHost → 证书文件名（IP/域名安全化）。 */
+function certBaseName(lanHost) {
+	const safe = String(lanHost).replace(/[^A-Za-z0-9.-]/g, "_");
+	return `dsh-${safe}`;
+}
+
+/** 本实例的 Caddyfile 片段路径（按实例监听端口命名，多实例互不覆盖）。 */
+function siteFragmentPath(targetPort) {
+	return join(SITES_DIR, `dsh-${targetPort}.conf`);
+}
+
+/** 启动时调用：读反代参数，非空 → 写本实例片段；空 → 删除本实例片段（关闭反代）。 */
 function ensureReverseProxy(ctx, state) {
 	try {
 		const s = state.readSettings?.() ?? {};
 		const lanHost = typeof s.lanHost === "string" ? s.lanHost.trim() : "";
 		const httpsPort = Number(s.httpsPort);
-		if (lanHost.length === 0 || !Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535) {
-			return; // 未配置反代（默认不开启）
-		}
 		const targetPort = Number(process.env.DSH_WEB_PORT ?? "") || ctx.webServer?.port || 3080;
-		ensureCert(lanHost);
-		const changed = ensureCaddyfile(lanHost, httpsPort, targetPort);
+		const configured = lanHost.length > 0 && Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort < 65536;
+		ensureMainCaddyfile();
+		const changed = configured
+			? syncSiteFragment(lanHost, httpsPort, targetPort)
+			: removeSiteFragment(targetPort);
+		if (!configured) {
+			if (changed) ensureCaddyRunning(true);
+			return; // 未配置反代（默认不开启；有旧片段则已删除）
+		}
 		ensureCaddyRunning(changed);
 		console.log(`[dsh-host-access-gate] 反向代理已就绪：https://${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}`);
 	} catch (error) {
@@ -594,49 +611,82 @@ function ensureReverseProxy(ctx, state) {
 	}
 }
 
-/** 自签证书：SAN 匹配当前地址且有效期充足则复用，否则重新生成。 */
-function ensureCert(lanHost) {
-	mkdirSync("/etc/caddy/certs", { recursive: true });
-	const isIp = /^[0-9.]+$/.test(lanHost);
-	const sanSpec = isIp
-		? `subjectAltName=IP:${lanHost},DNS:localhost,IP:127.0.0.1`
-		: `subjectAltName=DNS:${lanHost},DNS:localhost,IP:127.0.0.1`;
-	let need = !existsSync(CERT_FILE) || !existsSync(KEY_FILE);
-	if (!need) {
-		need = spawnSync("openssl", ["x509", "-in", CERT_FILE, "-noout", "-checkend", "2592000"]).status !== 0;
-		if (!need) {
-			const san = spawnSync("openssl", ["x509", "-in", CERT_FILE, "-noout", "-ext", "subjectAltName"], { encoding: "utf8" }).stdout ?? "";
-			const pat = isIp ? new RegExp(`IP( Address)?:${lanHost}`) : new RegExp(`DNS:${lanHost}`);
-			if (!pat.test(san)) need = true;
-		}
-	}
-	if (need) {
-		spawnSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "3650", "-keyout", KEY_FILE, "-out", CERT_FILE, "-subj", `/CN=${lanHost}`, "-addext", sanSpec], { stdio: "ignore" });
-		console.log(`[dsh-host-access-gate] 已生成自签证书（SAN: ${lanHost}）`);
-	}
-	try {
-		chmodSync(KEY_FILE, 0o640);
-	} catch { /* 非 root / 只读，忽略 */ }
-}
-
-/** Caddyfile：内容与当前参数一致时跳过（幂等），否则重写并返回 true（需要重载）。 */
-function ensureCaddyfile(lanHost, httpsPort, targetPort) {
-	const content = `# DSH Web GUI —— HTTPS 反向代理（caddy，自签内部 CA，浏览器首次信任一次）
+/** 主 Caddyfile：确保是 import 全部片段的聚合结构（幂等，首次写入）。 */
+function ensureMainCaddyfile() {
+	const main = `# DSH Web GUI —— HTTPS 反向代理（caddy，自签内部 CA，浏览器首次信任一次）
+# 每个 dsh 实例一个片段：/etc/caddy/sites.d/dsh-<端口>.conf（由插件自动管理）
 # auto_https disable_redirects：不占用 80 端口（避免与既有 Web 服务冲突）
 {
 	auto_https disable_redirects
 }
 
+import /etc/caddy/sites.d/*.conf
+`;
+	const prev = existsSync(CADDY_FILE) ? readFileSync(CADDY_FILE, "utf8") : "";
+	if (prev.trim() === main.trim()) return;
+	mkdirSync(SITES_DIR, { recursive: true });
+	writeFileSync(CADDY_FILE, main);
+	console.log("[dsh-host-access-gate] 主 Caddyfile 已初始化为 import 聚合结构");
+}
+
+/**
+* 写/更新本实例反代片段（幂等：内容一致则跳过）。返回 true = 配置变化需重载 caddy。
+* 证书按地址命名（同地址不同端口共享证书）。
+*/
+function syncSiteFragment(lanHost, httpsPort, targetPort) {
+	mkdirSync(SITES_DIR, { recursive: true });
+	const base = certBaseName(lanHost);
+	const certFile = `/etc/caddy/certs/${base}.crt`;
+	const keyFile = `/etc/caddy/certs/${base}.key`;
+	ensureCert(lanHost, certFile, keyFile);
+	const content = `# dsh instance on 127.0.0.1:${targetPort} — auto-managed by dsh-host-access-gate
 https://${lanHost}:${httpsPort} {
-	tls ${CERT_FILE} ${KEY_FILE}
+	tls ${certFile} ${keyFile}
 	reverse_proxy 127.0.0.1:${targetPort}
 }
 `;
-	const prev = existsSync(CADDY_FILE) ? readFileSync(CADDY_FILE, "utf8") : "";
+	const frag = siteFragmentPath(targetPort);
+	const prev = existsSync(frag) ? readFileSync(frag, "utf8") : "";
 	if (prev === content) return false;
-	writeFileSync(CADDY_FILE, content);
-	console.log(`[dsh-host-access-gate] Caddyfile 已更新（${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}）`);
+	writeFileSync(frag, content);
+	console.log(`[dsh-host-access-gate] 反代片段已更新：${frag}（${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}）`);
 	return true;
+}
+
+/** 删除本实例反代片段（关闭反代时调用）。返回 true = 删除了片段需重载。 */
+function removeSiteFragment(targetPort) {
+	const frag = siteFragmentPath(targetPort);
+	if (!existsSync(frag)) return false;
+	rmSync(frag, { force: true });
+	console.log(`[dsh-host-access-gate] 反代片段已删除：${frag}（反代关闭）`);
+	return true;
+}
+
+/** 自签证书（按地址命名文件）：SAN 匹配且有效期充足则复用，否则重新生成。 */
+function ensureCert(lanHost, certFile, keyFile) {
+	mkdirSync("/etc/caddy/certs", { recursive: true });
+	const isIp = /^[0-9.]+$/.test(lanHost);
+	const sanSpec = isIp
+		? `subjectAltName=IP:${lanHost},DNS:localhost,IP:127.0.0.1`
+		: `subjectAltName=DNS:${lanHost},DNS:localhost,IP:127.0.0.1`;
+	let need = !existsSync(certFile) || !existsSync(keyFile);
+	if (!need) {
+		need = spawnSync("openssl", ["x509", "-in", certFile, "-noout", "-checkend", "2592000"]).status !== 0;
+		if (!need) {
+			const san = spawnSync("openssl", ["x509", "-in", certFile, "-noout", "-ext", "subjectAltName"], { encoding: "utf8" }).stdout ?? "";
+			const pat = isIp ? new RegExp(`IP( Address)?:${lanHost}`) : new RegExp(`DNS:${lanHost}`);
+			if (!pat.test(san)) need = true;
+		}
+	}
+	if (need) {
+		spawnSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "3650", "-keyout", keyFile, "-out", certFile, "-subj", `/CN=${lanHost}`, "-addext", sanSpec], { stdio: "ignore" });
+		console.log(`[dsh-host-access-gate] 已生成自签证书（SAN: ${lanHost}）`);
+	}
+	try {
+		// caddy 服务以 caddy 用户运行：key 需 caddy 可读（chown 失败则放宽到 644 兜底）
+		spawnSync("chown", ["caddy:caddy", certFile, keyFile]);
+		chmodSync(keyFile, 0o640);
+	} catch { /* 非 root / 只读，忽略 */ }
 }
 
 /** 确保 caddy 在跑：systemd 优先（start/reload），无 systemd 则 spawn 子进程。 */
