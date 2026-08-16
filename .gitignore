@@ -15,9 +15,12 @@ dsh-web-ui-main/
 # 官方源码参考快照（82M，从 deepseek-harness 公开仓库下载，可随时重新获取）
 定制插件化改造/upstream/
 
-# 测试环境（可随时删除重建；仅保留说明文件）
+# 测试环境（可随时删除重建；仅保留说明文件；test-env-2/3/4 为多环境扩展）
 test-env/*
 !test-env/README.md
+test-env-2/
+test-env-3/
+test-env-4/
 
 # 依赖
 node_modules/
