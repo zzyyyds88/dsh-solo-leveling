@@ -214,12 +214,17 @@ const hasBundleEntry = (name) => {
   } catch { return false; }
 };
 const stdInstalled = hasBundleEntry("dsh-host-access-gate") && hasBundleEntry("dsh-client-ui-access-gate");
-/** 已装包的 lib/index.js 与项目源码内容是否不一致（不一致 = 需要升级）。 */
+/** 已装包 lib/ 与项目源码内容是否不一致（比较 index.js 与 client.js；不一致 = 需要升级）。 */
 const installedDiffers = (name, projectDir) => {
   try {
-    const installed = readFileSync(join(profileDir, "node_modules", name, "lib", "index.js"), "utf8");
-    const source = readFileSync(join(projectDir, "lib", "index.js"), "utf8");
-    return installed !== source;
+    for (const rel of ["lib/index.js", "lib/client.js"]) {
+      const src = join(projectDir, rel);
+      if (!existsSync(src)) continue;
+      const installed = join(profileDir, "node_modules", name, rel);
+      if (!existsSync(installed)) return true;
+      if (readFileSync(installed, "utf8") !== readFileSync(src, "utf8")) return true;
+    }
+    return false;
   } catch {
     return !existsSync(join(projectDir, "lib", "index.js")) ? false : true;
   }

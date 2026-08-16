@@ -129,6 +129,12 @@ window.__ModuleLoader__.load({
 					|| (proxyOn && (lanDraft.trim() !== String(state.lanHost ?? "")
 						|| portDraft.trim() !== String(state.httpsPort ?? ""))));
 			if (!state.available) return null;
+			/** 反代启用时返回访问地址（https://<lanHost>:<port>/），否则空串。 */
+			const accessUrl = () => {
+				const lan = lanDraft.trim();
+				const port = Number.parseInt(portDraft.trim(), 10);
+				return proxyOn && lan.length > 0 && Number.isInteger(port) ? `https://${lan}:${port}/` : "";
+			};
 			const checkPortInUse = async (port) => {
 				try {
 					const res = await fetch("/access-gate/check-port", {
@@ -197,7 +203,8 @@ window.__ModuleLoader__.load({
 					const res = await fetch("/access-gate/restart", { method: "POST" });
 					if (res.ok) {
 						setKind("ok");
-						setMessage(t("restartSent"));
+						const url = accessUrl();
+						setMessage(url !== "" ? `${t("restartSent")}${t("restartVisit")} ${url}` : t("restartSent"));
 					} else {
 						setKind("err");
 						setMessage(t("restartFailed"));
@@ -235,6 +242,8 @@ window.__ModuleLoader__.load({
 			const dangerButtonStyle = { border: "1px solid var(--dsw-alias-label-error, #f87171)", borderRadius: "8px", background: "transparent", color: "var(--dsw-alias-label-error, #f87171)", height: "32px", padding: "0 18px", fontSize: "13px", cursor: "pointer" };
 			const messageStyle = { margin: "10px 0 0", fontSize: "12px", lineHeight: "1.6", color: kind === "ok" ? "var(--dsw-alias-label-success, #4ade80)" : "var(--dsw-alias-label-error)" };
 			const readOnlyStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "12px", margin: "8px 0 0" };
+			// 突出 HTTPS 访问地址（反代启用时常显）
+			const accessUrlStyle = { margin: "8px 0 0", fontSize: "13px", fontWeight: 600, lineHeight: "1.6", color: "var(--dsw-alias-label-success, #4ade80)" };
 			return (0, react_jsx_runtime.jsxs)("li", {
 				style: cardStyle,
 				children: [
@@ -316,6 +325,16 @@ window.__ModuleLoader__.load({
 											(0, react_jsx_runtime.jsx)("input", { type: "number", inputMode: "numeric", min: 1, max: 65535, step: 1, value: portDraft, disabled: disabled || !proxyOn, style: inputStyle, onChange: (event) => setPortDraft(event.target.value) }),
 											(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("httpsPortHint") })
 										]
+									}),
+									accessUrl() === "" ? null : (0, react_jsx_runtime.jsx)("p", {
+										style: accessUrlStyle,
+										children: (0, react_jsx_runtime.jsxs)("span", {
+											children: [
+												t("accessUrlLabel"),
+												" ",
+												(0, react_jsx_runtime.jsx)("b", { style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", color: "var(--dsw-alias-label-success, #4ade80)", wordBreak: "break-all" }, children: accessUrl() })
+											]
+										})
 									})
 								]
 							}),
@@ -352,6 +371,8 @@ window.__ModuleLoader__.load({
 			httpsPortLabel: "HTTPS 端口",
 			httpsPortPlaceholder: "例如 5700",
 			httpsPortHint: "caddy 对外 HTTPS 端口（1-65535）。改动后保存并点「重启」生效。",
+			accessUrlLabel: "🔒 重启生效后请访问：",
+			restartVisit: "重启生效后请访问",
 			saveLabel: "保存",
 			discard: "放弃",
 			restart: "重启",
@@ -388,6 +409,8 @@ window.__ModuleLoader__.load({
 			httpsPortLabel: "HTTPS port",
 			httpsPortPlaceholder: "e.g. 5700",
 			httpsPortHint: "The caddy external HTTPS port (1-65535). Save and press Restart after changing.",
+			accessUrlLabel: "🔒 Visit after restart:",
+			restartVisit: "after restart visit",
 			saveLabel: "Save",
 			discard: "Discard",
 			restart: "Restart",
