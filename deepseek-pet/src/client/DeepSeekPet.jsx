@@ -5,6 +5,10 @@ import {
   completionState, hasRecentCorrection, hasRecentImage, reasoningQuestionCount,
   stateFromSnapshot, streamFromSnapshot,
 } from './pet-state.js'
+import {
+  beep, getVolume, isMuted, playCelebrate, playPoke, playSad,
+  setVolume, speakVoice, toggleMuted, unlockAudio,
+} from './sound.js'
 
 const EMPTY_SNAPSHOT = Object.freeze({
   openState: 'open', running: false, runningCalls: [], partial: null,
@@ -17,6 +21,9 @@ const LAST_ACTIVITY_KEY = 'deepseek-pet:last-activity'
 const TEN_MINUTES = 10 * 60_000
 const THIRTY_MINUTES = 30 * 60_000
 const ONE_HOUR = 60 * 60_000
+const CELEBRATE_DURATION_MS = 4200
+const CONFETTI_COUNT = 18
+const CONFETTI_COLORS = ['#5594f1', '#75ddff', '#f1bd5b', '#7ed6a5', '#ff9eaa', '#c8a2ff']
 const FRAME_FOR_REACTION = Object.freeze({
   idle: 'idle-blink',
   'desk-coding': 'desk-coding-hands-up',
@@ -29,7 +36,39 @@ const WHIP_VARIANTS = Object.freeze([
   Object.freeze({ reaction: 'whip-frightened', text: '卧槽，用户怒了' }),
   Object.freeze({ reaction: 'whip-giggle', text: '打不着，嘿嘿❤️' }),
 ])
+const CELEBRATE_LINES = Object.freeze([
+  '搞定啦！٩(◕‿◕)۶',
+  '任务完成，快夸我！',
+  '耶～又完成一个！',
+  '干得漂亮，收工！',
+])
+const COMFORT_LINES = Object.freeze([
+  '出错了也没关系，我重新来',
+  '别担心，我收拾一下残局',
+  '这个工具不听话，我换个方式',
+])
+/** 状态 → 语音台词 key 候选（voice.generated.js）。 */
+const VOICE_FOR_STATE = Object.freeze({
+  success: ['done1', 'done2', 'done3', 'done4'],
+  error: ['error1', 'error2', 'error3'],
+  'tool-error': ['error1', 'error2', 'error3'],
+  approval: ['approval1', 'approval2'],
+  waiting: ['approval1', 'approval2'],
+  busy: ['busy1', 'busy2'],
+  thinking: ['thinking'],
+})
 let lastWhipReaction = ''
+
+/** 从候选里随机选一条（尽力避免刚说过的那条）。 */
+function pickVoiceKey(candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return ''
+  if (candidates.length === 1) return candidates[0]
+  const pool = candidates.filter(key => key !== lastWhipReaction)
+  const picked = pool.length > 0 ? pool : candidates
+  const key = picked[Math.floor(Math.random() * picked.length)]
+  lastWhipReaction = key
+  return key
+}
 
 function nextWhipVisual() {
   const pool = WHIP_VARIANTS.filter(variant => variant.reaction !== lastWhipReaction)
@@ -89,6 +128,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const [whipVisual, setWhipVisual] = useState(null)
   const [bubbleVisible, setBubbleVisible] = useState(true)
   const [bubblePage, setBubblePage] = useState(0)
+  const [celebrating, setCelebrating] = useState(false)
+  const [confetti, setConfetti] = useState([])
+  const [muted, setMuted] = useState(() => isMuted())
+  const [diagOpen, setDiagOpen] = useState(false)
   const [activeReaction, setActiveReaction] = useState(() => presentationForState(initialEffective, 0, {
     idleMs: initialIdleMsRef.current, visualMs: 0, waitingMs: 0,
   }).reaction)
@@ -107,6 +150,12 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   const typedStreamRef = useRef('')
   const streamTargetRef = useRef('')
   const reactionChangedAt = useRef(0)
+  const longPressTimer = useRef(null)
+  const longPressFired = useRef(false)
+  const clickCountRef = useRef(0)
+  const lastClickAtRef = useRef(0)
+  const clickTimerRef = useRef(null)
+  const celebrateTimer = useRef(null)
 
   useEffect(() => {
     let transitionTimer
@@ -120,6 +169,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
       if (immediate.kind !== 'idle') commit(immediate)
       else {
         commit(completionState())
+        celebrateCompletion()
         completionTimer = window.setTimeout(() => commit(immediate), 8000)
       }
     } else transitionTimer = window.setTimeout(() => commit(immediate), immediate.kind === 'error' ? 100 : 720)
@@ -358,6 +408,66 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     }
   }, [speak])
 
+  /** 任务完成庆祝：琶音 + 跳跃 + 纸屑 + 台词 + 语音。 */
+  const celebrateCompletion = useCallback(() => {
+    unlockAudio()
+    playCelebrate()
+    speakVoice(pickVoiceKey(VOICE_FOR_STATE.success))
+    setCollapsed(false)
+    setCelebrating(true)
+    setConfetti(Array.from({ length: CONFETTI_COUNT }, (_, index) => ({
+      id: index,
+      x: Math.random() * 100,
+      delay: Math.random() * 0.4,
+      duration: 1.2 + Math.random() * 0.9,
+      color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
+      rotate: Math.random() * 360,
+      drift: (Math.random() - 0.5) * 40,
+    })))
+    speak(CELEBRATE_LINES[Math.floor(Math.random() * CELEBRATE_LINES.length)], '')
+    window.clearTimeout(celebrateTimer.current)
+    celebrateTimer.current = window.setTimeout(() => {
+      setCelebrating(false)
+      setConfetti([])
+    }, CELEBRATE_DURATION_MS)
+  }, [speak])
+
+  /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
+  const comfortError = useCallback(() => {
+    unlockAudio()
+    playSad()
+    speakVoice(pickVoiceKey(VOICE_FOR_STATE.error))
+    speak(COMFORT_LINES[Math.floor(Math.random() * COMFORT_LINES.length)], '')
+  }, [speak])
+
+  // 出错 / 工具失败时播放安慰音（仅状态真实切换时，不重复打扰）
+  const prevKindRef = useRef(effectiveVisual.kind)
+  useEffect(() => {
+    const prev = prevKindRef.current
+    prevKindRef.current = effectiveVisual.kind
+    if (prev !== effectiveVisual.kind && (effectiveVisual.kind === 'error' || effectiveVisual.kind === 'tool-error')) {
+      comfortError()
+    }
+  }, [effectiveVisual.kind, comfortError])
+
+  // 进入等待批准/忙碌/思考等状态时播一句语音（30 秒冷却，避免话痨）
+  const stateVoiceAtRef = useRef(0)
+  useEffect(() => {
+    const keys = VOICE_FOR_STATE[effectiveVisual.kind]
+    if (!keys?.length) return
+    const now = Date.now()
+    if (now - stateVoiceAtRef.current < 30_000) return
+    stateVoiceAtRef.current = now
+    unlockAudio()
+    speakVoice(pickVoiceKey(keys))
+  }, [effectiveVisual.kind])
+
+  useEffect(() => () => {
+    window.clearTimeout(celebrateTimer.current)
+    window.clearTimeout(longPressTimer.current)
+    window.clearTimeout(clickTimerRef.current)
+  }, [])
+
   useEffect(() => {
     const onWhip = () => showWhipVisual(nextWhipVisual())
     window.addEventListener(WHIP_EVENT, onWhip)
@@ -367,9 +477,90 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
 
   const tap = useCallback(() => {
     if (dragged.current) { dragged.current = false; return }
+    unlockAudio()
+    playPoke()
+    speakVoice(pickVoiceKey(['poke1', 'poke2', 'poke3']))
     const words = tapTextFor(effectiveVisual.kind)
     speak(words[Math.floor(Math.random() * words.length)], '')
   }, [effectiveVisual.kind, speak])
+
+  /** 单击计数：三连击触发诊断，否则 280ms 后正常反应。 */
+  const handleClick = useCallback(() => {
+    if (dragged.current) { dragged.current = false; return }
+    const now = Date.now()
+    clickCountRef.current = (now - lastClickAtRef.current < 450) ? clickCountRef.current + 1 : 1
+    lastClickAtRef.current = now
+    if (clickCountRef.current >= 3) {
+      clickCountRef.current = 0
+      setDiagOpen(current => !current)
+      return
+    }
+    window.clearTimeout(clickTimerRef.current)
+    clickTimerRef.current = window.setTimeout(() => {
+      if (longPressFired.current) { longPressFired.current = false; return }
+      tap()
+    }, 280)
+  }, [tap])
+
+  /** 长按摸头（700ms）：跳跃庆祝 + 台词 + 音效。 */
+  const handlePointerDownForInteraction = useCallback((event) => {
+    if (event.button !== 0) return
+    longPressFired.current = false
+    const startX = event.clientX
+    const startY = event.clientY
+    window.clearTimeout(longPressTimer.current)
+    longPressTimer.current = window.setTimeout(() => {
+      if (dragged.current) return
+      longPressFired.current = true
+      window.clearTimeout(clickTimerRef.current)
+      unlockAudio()
+      playCelebrate()
+      speakVoice(pickVoiceKey(['headpat1', 'headpat2']))
+      setCelebrating(true)
+      setCollapsed(false)
+      speak('嘿嘿，被主人摸头啦～好开心！', '')
+      window.clearTimeout(celebrateTimer.current)
+      celebrateTimer.current = window.setTimeout(() => {
+        setCelebrating(false)
+        setConfetti([])
+      }, CELEBRATE_DURATION_MS)
+    }, 700)
+    const cancelOnMove = event => {
+      if (Math.hypot(event.clientX - startX, event.clientY - startY) > 5) {
+        window.clearTimeout(longPressTimer.current)
+        window.removeEventListener('pointermove', cancelOnMove)
+      }
+    }
+    window.addEventListener('pointermove', cancelOnMove)
+    window.setTimeout(() => window.removeEventListener('pointermove', cancelOnMove), 800)
+  }, [speak])
+
+  /** 双击：折叠态展开，否则切换静音。 */
+  const handleDoubleClick = useCallback(() => {
+    window.clearTimeout(clickTimerRef.current)
+    if (collapsed) {
+      setCollapsed(false)
+      return
+    }
+    unlockAudio()
+    const nextMuted = toggleMuted()
+    setMuted(nextMuted)
+    speakVoice(nextMuted ? 'muted' : 'unmuted')
+    speak(nextMuted ? '声音已关闭 🔇（双击恢复）' : '声音已开启 🔊（双击静音）', '')
+  }, [collapsed, speak])
+
+  /** 诊断面板内容。 */
+  const diagLines = useMemo(() => {
+    const running = runningSessions.length + (focusedSession?.running ? 1 : 0)
+    return [
+      ['会话', `${(list.ids ?? []).length} 个`],
+      ['运行中', `${running} 个`],
+      ['上下文', `${Math.round(contextRatio * 100)}%`],
+      ['状态', effectiveVisual.kind],
+      ['音量', `${Math.round((getVolume() ?? 1) * 100)}%`],
+      ['静音', muted ? '是' : '否'],
+    ]
+  }, [runningSessions.length, focusedSession?.running, list.ids, contextRatio, effectiveVisual.kind, muted])
 
   const showStream = Boolean(streamText && !tapText && bubblePage % 2 === 0)
   const activityLabel = rotatingActivityLabel(streamMode, phase, questionCount, thinkingMs)
@@ -379,21 +570,36 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   return (
     <aside data-dsh-live2d-root data-collapsed={collapsed ? 'true' : 'false'} data-pet-state={effectiveVisual.kind}
       data-reaction-pending={reactionPending ? 'true' : 'false'} data-tapped={tapText ? 'true' : 'false'}
+      data-celebrating={celebrating ? 'true' : 'false'} data-muted={muted ? 'true' : 'false'}
       style={{ '--pet-drag-x': `${offset.x}px`, '--pet-drag-y': `${offset.y}px`, '--pet-scale': scale }} aria-label="DeepSeek 任务状态助手">
       <div className="dsh-live2d-bubble" data-visible={bubbleVisible || taskActive || tapText ? 'true' : 'false'} data-stream={showStream ? 'true' : 'false'} role="status" aria-live="polite">
         <span>{bubbleTitle}</span><small ref={streamLineRef} title={showStream ? streamTarget : bubbleDetail}>{bubbleDetail}{showStream && <i aria-hidden="true" />}</small>
       </div>
+      {confetti.length > 0 && <div className="dsh-live2d-confetti" aria-hidden="true">
+        {confetti.map(piece => <i key={piece.id} style={{ '--cf-x': `${piece.x}%`, '--cf-delay': `${piece.delay}s`, '--cf-dur': `${piece.duration}s`, '--cf-color': piece.color, '--cf-rot': `${piece.rotate}deg`, '--cf-drift': `${piece.drift}px` }} />)}
+      </div>}
       <div className="dsh-live2d-stage">
-        <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动 DeepSeek 状态助手'}
-          onClick={tap} onDoubleClick={() => { if (collapsed) setCollapsed(false) }} onPointerDown={pointerDown}
+        <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动/单击/长按/双击/三击 DeepSeek 状态助手'}
+          onClick={handleClick} onDoubleClick={handleDoubleClick} onPointerDown={event => { pointerDown(event); handlePointerDownForInteraction(event) }}
           onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={wheelScale}>
           <span className="dsh-live2d-sprites" aria-hidden="true">
             {Object.entries(REACTIONS).map(([name, src]) => <img key={name} src={src} alt="" draggable="false" data-active={name === (collapsed ? 'idle' : activeReaction) ? 'true' : 'false'} />)}
             {Object.entries(REACTION_FRAMES).map(([name, src]) => <img key={name} src={src} alt="" draggable="false" data-frame="true" data-active={name === visibleFrame ? 'true' : 'false'} />)}
           </span>
         </button>
+        <span className="dsh-live2d-mute-hint" data-visible={tapText && (tapText.includes('声音已关闭') || tapText.includes('声音已开启')) ? 'true' : 'false'} aria-hidden="true">{muted ? '🔇' : '🔊'}</span>
       </div>
+      {diagOpen && <section className="dsh-live2d-diag" aria-label="桌宠诊断">
+        <header><b>DeepSeek 桌宠诊断</b><button type="button" onClick={() => setDiagOpen(false)} aria-label="关闭诊断">✕</button></header>
+        <dl>{diagLines.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+        <footer>
+          <label>音量 <input type="range" min="0" max="100" value={Math.round((getVolume() ?? 1) * 100)} onChange={event => setVolume(Number(event.target.value) / 100)} aria-label="桌宠音量" /></label>
+          <button type="button" onClick={() => { unlockAudio(); beep() }}>试音</button>
+          <button type="button" onClick={() => { unlockAudio(); playCelebrate() }}>庆祝</button>
+        </footer>
+      </section>}
       <nav className="dsh-live2d-tools" aria-label="Pet 快捷操作">
+        <button type="button" title={muted ? '声音已关闭（点击开启）' : '声音已开启（点击静音）'} aria-label={muted ? '开启声音' : '静音'} onClick={() => { unlockAudio(); const next = toggleMuted(); setMuted(next); speakVoice(next ? 'muted' : 'unmuted') }}><b>{muted ? '🔇' : '🔊'}</b><span>{muted ? '静音中' : '有声'}</span></button>
         <button type="button" title="最小化 Pet" aria-label="最小化 Pet" onClick={() => setCollapsed(true)}><b>−</b><span>最小化</span></button>
       </nav>
       <section className="dsh-live2d-sessions" data-visible={focusedSession || runningSessions.length ? 'true' : 'false'} aria-label="活跃会话">

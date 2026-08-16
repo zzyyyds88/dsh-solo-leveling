@@ -32,19 +32,55 @@
 - 构建链独立（esbuild + Python/Pillow 素材生成），`lib/` 已入库，安装不依赖
   网络与构建环境。
 
-## 3. 目录结构
+## 3. 功能增强（移植 dsh-whale-pet 的 Web 端功能）
+
+> 在**零改动收录**基础上，按用户要求移植了
+> [aceice01/dsh-whale-pet](https://github.com/aceice01/dsh-whale-pet) 的 Web 端
+> 功能（仅 Web，不做桌面/Electron 版）。音效为 WebAudio 实时合成（零素材依赖）；
+> 语音用 edge-tts 合成**本项目原创台词**（不复制 whale-pet 的任何文本/音频），
+> 完全离线内嵌。
+
+| 移植功能 | 说明 |
+|---|---|
+| 🎵 完成庆祝琶音 | C5-E5-G5-C6 + 高音 shimmer，任务完成 / 摸头时播放 |
+| 🎵 出错安慰音 | 低音下滑 + 泛音，任务出错 / 工具失败时播放 |
+| 🎵 戳音 / 撒娇音 | 单击戳一戳 / 状态切换时的短音效 |
+| 🗣️ 离线语音 | edge-tts 晓伊音色合成 23 条原创台词（完成/出错/戳/摸头/批准/问候/静音/忙碌/思考），base64 内嵌，AudioContext 解码播放 |
+| 🥰 长按摸头 | 按住角色 700ms → 跳跃庆祝 + 语音 + 台词 |
+| 🔇 双击静音 | 展开态双击切换静音（折叠态双击仍是展开），语音播报状态 |
+| 🩺 三击诊断 | 快速三连击开关诊断面板（会话数/运行中/上下文/状态/音量），可试音、播庆祝、调总音量 |
+| 🎊 纸屑庆祝 | 任务完成时 CSS 纸屑飘落 + 角色跳跃动画 |
+| 🎛️ 音量系统 | 总音量 + 语音/音效/庆祝分动作音量，localStorage 持久化 |
+| 🔈 静音按钮 | 工具条新增静音/有声开关（带状态提示） |
+
+**互动速查**：单击=戳一戳（音效+语音）· 长按 700ms=摸头 · 双击=静音/展开 ·
+三击=诊断 · 拖动/滚轮缩放/折叠保留原功能。
+
+### 语音重新合成（可选，需网络）
+
+```bash
+pip install edge-tts            # 或用 pipx/venv（README 已记录）
+python3 scripts/synth-voice.py  # 重新生成 src/client/voice.generated.js
+node scripts/build.mjs          # 重新构建 lib/
+# 音色/语速可用环境变量覆盖：PET_VOICE=zh-CN-YunxiNeural PET_RATE=-10% python3 scripts/synth-voice.py
+```
+
+## 4. 目录结构
 
 ```text
 deepseek-pet/
-├── README.md              ← 本思路库（收录说明 + 安装 + 验证）
+├── README.md              ← 本思路库（收录说明 + 安装 + 验证 + 功能增强）
 ├── README.upstream.md     ← 上游 README（原名归档）
 ├── LICENSE                ← 上游 MIT 许可
 ├── package.json           ← 上游包定义（dsh.client / dsh.bundle 声明）
 ├── cordis.patch.yml       ← 上游自带 patch（insert: deepseek-pet）
-├── src/                   ← 上游源码（client 组件 / host 空壳 / 素材）
+├── src/                   ← 上游源码 + 本工作区增强
+│   └── client/
+│       ├── sound.js       ← 【增强】WebAudio 音效层 + 音量持久化 + 语音播放
+│       ├── voice.generated.js ← 【增强】edge-tts 合成的 23 条台词（base64）
 ├── lib/                   ← 构建产物（lib/index.js + lib/client.js，已入库）
 ├── public/ assets/        ← 表情源素材（WebP）
-├── scripts/               ← 上游构建/素材脚本（build.mjs / embed-assets.mjs / build_assets.py）
+├── scripts/               ← 构建/素材脚本（build.mjs / embed-assets.mjs / build_assets.py / synth-voice.py）
 ├── tests/                 ← 上游单元测试（node --test）
 ├── docs/                  ← 上游预览图
 ├── install-to-test-env.sh ← 装进工作区测试环境（只写 test-env*，不碰正式）
@@ -102,6 +138,7 @@ dsh plugin --profile web remove deepseek-pet
 | `dsh.client.inject` 依赖 `@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-ui-layout` | ✓ rc.6 均存在 |
 | 构建产物 | ✓ `node scripts/build.mjs` 可重复构建（esbuild，无需 Pillow；`assets.generated.js` 已入库） |
 | 上游单元测试 | ⚠ 14 项中 13 项通过；1 项失败为上游测试断言 bug（idle 轮换 phase=99 期望 'idle' 实际 'proud'，不影响运行） |
+| 功能增强回归 | ✓ 音效/语音/互动全部内嵌 client bundle（test-env-2 验证 boot 清单 + bundle 加载）；上游 13 项测试仍通过 |
 
 ## 6. 上游同步（升级 DSH 后 / 上游更新后）
 
