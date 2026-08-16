@@ -4,8 +4,8 @@
 # 作用：把本目录构建好的 dsh-mobile-adapt 装进正式 profile
 #       （/root/.dsh/profiles/web），覆盖当前已安装的旧版。
 # 会重启正式 dsh web（端口 3080）：先停 → 换文件 → 再起，全程 30 秒左右。
-# 鉴权/配置不动：cordis.patch.yml 里的 mobile-adapt 条目保持不变，
-# 版本 0.2.0 只是替换包内容（新增 client bundle）。
+# 挂载：cordis.patch.yml 里已有的 mobile-adapt 条目保持不变；缺失时幂等补写
+# （兜底全新部署场景，避免装完不挂载）。
 #
 # 用法：
 #   bash install-to-profile.sh            # 直接安装（含重启确认）
@@ -55,6 +55,29 @@ rm -rf "$DST/lib"
 cp -a "$PROJECT_DIR/lib" "$DST/lib"
 cp "$PROJECT_DIR/package.json" "$DST/package.json"
 echo "  ✓ 已替换 $DST（旧版备份于 $DST.bak）"
+
+# 2.5) 幂等确认挂载行（cordis.patch.yml 缺 mobile-adapt 条目时补上；
+#       正式环境通常已有该条目，此处兜底全新部署场景）
+PATCH="$PROFILE/cordis.patch.yml"
+if [ -f "$PATCH" ] && grep -q "id: mobile-adapt" "$PATCH" && grep -q "name: dsh-mobile-adapt" "$PATCH"; then
+  echo "  （cordis.patch.yml 已含 mobile-adapt 挂载行，跳过）"
+elif [ -f "$PATCH" ]; then
+  if [ ! -s "$PATCH" ] || grep -q '^\[\]$' "$PATCH"; then
+    cat > "$PATCH" <<'EOF'
+# dsh-mobile-adapt 挂载（install-to-profile.sh 自动写入）
+- insert:
+    - id: mobile-adapt
+      name: dsh-mobile-adapt
+      inject:
+        - webServer
+EOF
+  else
+    printf '\n- insert:\n    - id: mobile-adapt\n      name: dsh-mobile-adapt\n      inject:\n        - webServer\n' >> "$PATCH"
+  fi
+  echo "  ✓ mobile-adapt 挂载行已补写 $PATCH"
+else
+  echo "  ⚠ 未找到 $PATCH，跳过挂载行确认（请检查 profile 配置）"
+fi
 
 # 3) 启动
 if [ "${1:-}" != "--no-restart" ]; then
