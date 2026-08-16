@@ -39,8 +39,8 @@
 
 | 项目 | 内容 | 现状 |
 |---|---|---|
-| `修改默认工作目录/` | Web GUI 目录选择器默认打开 `/home/user/Projects` | 已被 **dsh-defaults 统一插件**替代（设置页配置 `defaultWorkingDirectory`），脚本保留兜底 |
-| `思考强度与重试默认值/` | 思考强度档位 + 默认重试 2→5 | 思考强度已被 `dsh-llm-pi-ai` 替代；重试默认次数并入 **dsh-defaults 统一插件**（设置页配置 `defaultRetryCount`，`patch-retry-policy.py` 保留兜底） |
+| ~~修改默认工作目录~~ | Web GUI 目录选择器默认打开 `/home/user/Projects` | 已被 **dsh-defaults 统一插件**替代，原文件夹已删除 |
+| ~~思考强度与重试默认值~~ | 思考强度档位 + 默认重试 2→5 | 已被 **dsh-defaults 统一插件**替代（思考强度 fork 内建、重试设置页全局生效），原文件夹已删除 |
 | `全网监听与登录鉴权/` | caddy HTTPS 反代 + 口令门闸 | 门闸/命名空间/放行已插件化；caddy + profile 配置天然免疫；安装包补丁需重打 |
 
 ### 1.3 环境
