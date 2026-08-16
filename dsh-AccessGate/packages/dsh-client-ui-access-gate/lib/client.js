@@ -138,7 +138,8 @@ window.__ModuleLoader__.load({
 			};
 			/** 重启后提示：systemd 自动重启说明 + 可复制给 AI 的配置提示词。 */
 			const buildRestartHelp = (lan, url) => {
-				const cmd = `node /usr/bin/dsh web${lan ? ` --trusted-host ${lan}` : ""}`;
+				// 无需 --trusted-host：connection 覆盖已在 profile 固化 trustedHosts（默认 192.168.1.100）
+				const cmd = `node /usr/bin/dsh web`;
 				return [
 					t("restartHelpIntro"),
 					"",

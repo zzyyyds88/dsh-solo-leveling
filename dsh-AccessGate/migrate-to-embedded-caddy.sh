@@ -57,10 +57,10 @@ fs.writeFileSync(p, yaml.dump(doc, { lineWidth: 120 }));
 console.log("  access-gate:", JSON.stringify(doc["access-gate"]));
 ' "$LAN_IP" "$HTTPS_PORT" 2>&1 | tee -a "$LOG"
 
-# ---------- 4) 启动正式 dsh（保持原启动方式） ----------
+# ---------- 4) 启动正式 dsh（无需 --trusted-host：connection 覆盖已固化 trustedHosts） ----------
 log "== 4/5 启动正式 dsh web（3080）=="
 cd /root 2>/dev/null || cd "$WS"
-nohup node /usr/bin/dsh web --trusted-host "$LAN_IP" > "$DSH_HOME/dsh-web.log" 2>&1 &
+nohup node /usr/bin/dsh web > "$DSH_HOME/dsh-web.log" 2>&1 &
 echo $! > "$DSH_HOME/dsh-web.pid"
 log "  已启动（PID $(cat "$DSH_HOME/dsh-web.pid")，日志 $DSH_HOME/dsh-web.log）"
 
