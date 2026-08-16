@@ -40,7 +40,19 @@ if [ -d "$PROFILE/node_modules" ]; then
     echo "✗ 测试实例正在运行（PID $(cat "$TEST_ENV/dsh-web.pid")），先 scripts/test-env-stop.sh"; exit 1
   fi
   echo "== 删除旧测试环境 =="
+  # 保留说明文件（test-env-1/README.md 等 git 跟踪的文档），重建后放回
+  local readme=""
+  if [ -f "$TEST_ENV/README.md" ]; then
+    readme="$(mktemp)"
+    cp "$TEST_ENV/README.md" "$readme"
+  fi
   rm -rf "$TEST_ENV"
+  if [ -n "$readme" ]; then
+    mkdir -p "$TEST_ENV"
+    cp "$readme" "$TEST_ENV/README.md"
+    rm -f "$readme"
+    echo "  （保留 README.md 说明文件）"
+  fi
 fi
 
 mkdir -p "$TEST_ENV"
