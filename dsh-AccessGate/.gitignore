@@ -10,5 +10,4 @@ packages/dsh-host-webserver/lib/
 *.log
 .DS_Store
 
-# 内置 caddy 二进制（39MB，打包时放入：cp /usr/bin/caddy bin/ 或 scripts/fetch 下载）
-packages/dsh-host-access-gate/bin/caddy
+# 注：内置 caddy 二进制（bin/caddy，39MB）已入库（用户要求可交付，clone 即可打包）
