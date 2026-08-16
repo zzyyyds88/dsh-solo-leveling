@@ -188,7 +188,9 @@ scripts/test-env-stop.sh && scripts/test-env-start.sh      # 3. 重启测试实�
 
 ## 10. 版本控制与发布到 GitHub 开源
 
-工作区根目录已是 git 仓库（默认分支 `main`，初始化提交已完成）。日常流程：
+工作区根目录已是 git 仓库（默认分支 `main`，初始化提交已完成）；GitHub SSH 密钥
+已配置并验证通过（`ssh -T git@github.com` → `Hi zzyyyds88!`），远端用 SSH 地址。
+日常流程：
 
 ```bash
 git add <改动文件> && git commit -m "feat(项目名): 一句话说明"   # 有意义的改动即提交
@@ -197,18 +199,25 @@ git pull --rebase && git push                                   # 有远端后
 
 - **提交规范**：Conventional Commits（`type(scope): subject`），type ∈
   `feat|fix|chore|docs|test|refactor|perf`；提交信息避免 emoji。
+- **插件总览**：仓库的插件清单（正在使用 / 使用方法 / 更新情况 / 维护）维护在
+  [PLUGINS.md](PLUGINS.md)，改动插件后同步更新。
 - **禁止入库**（.gitignore 已覆盖）：`node_modules/`、测试环境运行态
   （`test-env/` 仅保留 README.md）、第三方参考快照 `dsh-web-ui-main/`
   （88M，可随时按 `开发备忘.md` 的加速下载命令重新获取）、日志与密钥。
 - **发布到 GitHub 开源检查清单**：
   1. 全库自查无敏感信息（口令/密钥/token；`git grep -i password` 复查）；
   2. 补 LICENSE（如 MIT，作者信息按需修改）；
-  3. GitHub 建仓库 → `git remote add origin <url>` → `git push -u origin main`；
+  3. GitHub 建仓库 → `git remote add origin git@github.com:zzyyyds88/<仓库名>.git`
+     → `git push -u origin main`；
   4. 仓库打 topic 标签：`dsh`、`dsh-plugin`、`deepseek-harness`、`plugin`，
      即会被 [dsh-plugin 主题](https://github.com/topics/dsh-plugin) 及
      Oh-My-DSH / 插件市场等聚合收录；
   5. 根 README 面向公众改写（去掉本机路径等私有细节），可考虑拆成
      `README.en.md` 双语。
+- **发布插件到 npm（个人）**：完全可以。同名覆盖 fork（`@deepseek-ai/*`）不能
+  发 npm（scope 受保护、包为 private），走 git/tarball/profile 分发；全新独立
+  插件用个人 scope `@zzyyyds88/dsh-*` 发布。完整步骤见
+  [docs/发布npm插件.md](docs/发布npm插件.md)。
 
 ## 11. 验证与门禁
 

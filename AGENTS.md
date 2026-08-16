@@ -54,7 +54,8 @@ scripts/test-env-init.sh --force                # 重建基线（DSH 升级后�
    五个 fork 参考实现）与 `定制插件化改造/改造方案.md`。
 4. 提交信息用 Conventional Commits（`type(scope): subject`），避免 emoji；
    **有意义的改动即 git 提交**，禁止把 node_modules / 测试环境 / 密钥提交入库。
-5. 根 README 第 5 节项目清单、各项目「升级后重打补丁指南.md」保持同步更新。
+5. 根 README 第 5 节项目清单、[PLUGINS.md](PLUGINS.md)（插件总览：使用/更新/维护）、
+   各项目「升级后重打补丁指南.md」保持同步更新。
 
 ## 关键事实（升级后需核对）
 

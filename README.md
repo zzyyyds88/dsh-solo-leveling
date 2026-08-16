@@ -99,6 +99,9 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
 
 ## 5. 项目清单
 
+> 插件总览（正在使用 / 使用方法 / 更新情况 / 维护）见 **[PLUGINS.md](PLUGINS.md)**。
+> 个人发布插件到 npm 见 [docs/发布npm插件.md](docs/发布npm插件.md)。
+
 | 项目 | 一句话说明 | 状态 |
 |---|---|---|
 | `修改默认工作目录/` | Web GUI 目录选择器默认打开 `/home/user/Projects`（替代 `/root`） | 已实施，升级后需重打 |
