@@ -204,14 +204,15 @@ git pull --rebase && git push                                   # 有远端后
 - **禁止入库**（.gitignore 已覆盖）：`node_modules/`、测试环境运行态
   （`test-env/` 仅保留 README.md）、第三方参考快照 `dsh-web-ui-main/`
   （88M，可随时按 `开发备忘.md` 的加速下载命令重新获取）、日志与密钥。
-- **发布到 GitHub 开源检查清单**：
+- **发布到 GitHub 开源检查清单**（仓库名已定：`dsh-solo-leveling`，远端已配）：
   1. 全库自查无敏感信息（口令/密钥/token；`git grep -i password` 复查）；
   2. 补 LICENSE（如 MIT，作者信息按需修改）；
-  3. GitHub 建仓库 → `git remote add origin git@github.com:zzyyyds88/<仓库名>.git`
-     → `git push -u origin main`；
-  4. 仓库打 topic 标签：`dsh`、`dsh-plugin`、`deepseek-harness`、`plugin`，
-     即会被 [dsh-plugin 主题](https://github.com/topics/dsh-plugin) 及
-     Oh-My-DSH / 插件市场等聚合收录；
+  3. 在 GitHub 建空仓库 `dsh-solo-leveling`（Public）→ 本仓库远端已配置
+     `origin = git@github.com:zzyyyds88/dsh-solo-leveling.git`，建好后
+     `git push -u origin main` 即可；
+  4. 仓库打 topic 标签：`dsh`、`dsh-plugin`、`deepseek-harness`、`plugin`、
+     `self-hosted`、`linux-server`，即会被 [dsh-plugin 主题](https://github.com/topics/dsh-plugin)
+     及 Oh-My-DSH / 插件市场等聚合收录；
   5. 根 README 面向公众改写（去掉本机路径等私有细节），可考虑拆成
      `README.en.md` 双语。
 - **发布插件到 npm（个人）**：完全可以。同名覆盖 fork（`@deepseek-ai/*`）不能

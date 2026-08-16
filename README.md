@@ -1,5 +1,7 @@
 # DSH 用户体验升级工作区
 
+> GitHub 开源仓库：**`zzyyyds88/dsh-solo-leveling`**（SSH 远端已配置，建库后推送）
+
 > 本文件夹是**专门用于升级 DeepSeek / DeepSeek Harness（DSH）用户体验**的地方。
 > 凡是「让 DSH 用起来更顺手」的定制、补丁、改进，都放在这里，并留下完整记录，
 > 保证升级后能一键恢复、思路可复用。
