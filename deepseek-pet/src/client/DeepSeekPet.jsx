@@ -608,20 +608,16 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     speak(words[Math.floor(Math.random() * words.length)], '')
   }, [effectiveVisual.kind, speak])
 
-  /** 切换静音（双击 / 工具条按钮共用）。折叠态双击仍是展开。 */
+  /** 切换静音（工具条按钮）。双击不再触发。 */
   const handleToggleMute = useCallback(() => {
-    if (collapsed) {
-      setCollapsed(false)
-      return
-    }
     unlockAudio()
     const nextMuted = toggleMuted()
     setMuted(nextMuted)
     if (alertEnabled('prompt')) speakVoice(nextMuted ? 'muted' : 'unmuted')
-    speak(nextMuted ? '声音已关闭 🔇（双击恢复）' : '声音已开启 🔊（双击静音）', '')
-  }, [collapsed, speak])
+    speak(nextMuted ? '声音已关闭 🔇（工具条可恢复）' : '声音已开启 🔊', '')
+  }, [speak])
 
-  /** 单击计数：三连击触发诊断；两连击（且不再来第三下）切静音；单点戳一戳。 */
+  /** 单击计数：三连击触发诊断；双击折叠态展开；其余单击戳一戳（不再双击切静音）。 */
   const handleClick = useCallback(() => {
     if (dragged.current) { dragged.current = false; return }
     const now = Date.now()
@@ -629,23 +625,23 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     lastClickAtRef.current = now
     window.clearTimeout(clickTimerRef.current)
     if (clickCountRef.current >= 3) {
-      // 三连击：清掉可能排队的双击静音，直接开诊断
+      // 三连击：清掉可能排队的双击动作，直接开诊断
       clickCountRef.current = 0
       setDiagOpen(current => !current)
       return
     }
     clickTimerRef.current = window.setTimeout(() => {
       if (longPressFired.current) { longPressFired.current = false; return }
-      if (clickCountRef.current >= 2) {
-        // 两次点击后 450ms 内没有第三下 → 判定为双击 → 切静音
-        clickCountRef.current = 0
-        handleToggleMute()
+      const count = clickCountRef.current
+      clickCountRef.current = 0
+      if (count >= 2 && collapsed) {
+        // 折叠态双击：展开
+        setCollapsed(false)
         return
       }
-      clickCountRef.current = 0
       tap()
     }, 450)
-  }, [tap, handleToggleMute])
+  }, [tap, collapsed])
 
   /** 长按摸头（700ms）：跳跃庆祝 + 台词 + 音效。 */
   const handlePointerDownForInteraction = useCallback((event) => {
@@ -729,7 +725,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
         {confetti.map(piece => <i key={piece.id} style={{ '--cf-x': `${piece.x}%`, '--cf-delay': `${piece.delay}s`, '--cf-dur': `${piece.duration}s`, '--cf-color': piece.color, '--cf-rot': `${piece.rotate}deg`, '--cf-drift': `${piece.drift}px` }} />)}
       </div>}
       <div className="dsh-live2d-stage">
-        <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动/单击/长按/双击/三击 DeepSeek 状态助手'}
+        <button className="dsh-live2d-character" type="button" aria-label={collapsed ? '双击展开 DeepSeek 状态助手' : '拖动/单击/长按/三击 DeepSeek 状态助手'}
           onClick={handleClick} onPointerDown={event => { pointerDown(event); handlePointerDownForInteraction(event) }}
           onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp} onWheel={wheelScale}>
           <span className="dsh-live2d-sprites" aria-hidden="true">

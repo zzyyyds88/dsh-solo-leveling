@@ -76,7 +76,7 @@ export function alertToggles() {
   return { ...settings.alerts }
 }
 
-/** 是否静音（双击桌宠切换）。 */
+/** 是否静音（工具条按钮切换）。 */
 export function isMuted() { return settings.muted }
 
 /** 切换静音，返回新状态。 */

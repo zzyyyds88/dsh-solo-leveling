@@ -186,7 +186,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
           <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声">
             <PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />
           </PetField>
-          <PetField label="启用声音" hint="总静音开关（与双击桌宠联动）">
+          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）">
             <PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />
           </PetField>
           {Object.entries(ALERT_LABELS).map(([key, label]) => (
