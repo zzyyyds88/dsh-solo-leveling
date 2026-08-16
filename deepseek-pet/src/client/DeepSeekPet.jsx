@@ -490,12 +490,12 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     const now = Date.now()
     clickCountRef.current = (now - lastClickAtRef.current < 450) ? clickCountRef.current + 1 : 1
     lastClickAtRef.current = now
+    window.clearTimeout(clickTimerRef.current)
     if (clickCountRef.current >= 3) {
       clickCountRef.current = 0
       setDiagOpen(current => !current)
       return
     }
-    window.clearTimeout(clickTimerRef.current)
     clickTimerRef.current = window.setTimeout(() => {
       if (longPressFired.current) { longPressFired.current = false; return }
       tap()
