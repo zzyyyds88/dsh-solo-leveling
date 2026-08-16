@@ -119,12 +119,29 @@ window.__ModuleLoader__.load({
 					|| lanDraft.trim() !== String(state.lanHost ?? "")
 					|| portDraft.trim() !== String(state.httpsPort ?? ""));
 			if (!state.available) return null;
+			const checkPortInUse = async (port) => {
+				try {
+					const res = await fetch("/access-gate/check-port", {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify({ port })
+					});
+					return (await res.json()).inUse === true;
+				} catch {
+					return false; // 检测不可用 → 放行（后端 ensure 仍会兜底）
+				}
+			};
 			const save = async () => {
 				const lanHost = lanDraft.trim();
 				const httpsPort = Number.parseInt(portDraft.trim(), 10);
 				if (lanHost.length > 0 && (!Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535)) {
 					setKind("err");
 					setMessage(t("portInvalid"));
+					return;
+				}
+				if (lanHost.length > 0 && await checkPortInUse(httpsPort)) {
+					setKind("err");
+					setMessage(t("portInUse"));
 					return;
 				}
 				if (password.length > 0) {
@@ -318,7 +335,8 @@ window.__ModuleLoader__.load({
 			saved: "已保存：反代参数已更新（启用或关闭），点「重启」后生效。",
 			savedWithPassword: "已保存：口令已更新，旧会话已失效，请重新登录；反代参数点「重启」后生效。",
 			saveFailed: "保存失败：可能已被其它修改覆盖或权限不足，请重试。",
-			portInvalid: "HTTPS 端口必须是 1-65535 的整数。"
+			portInvalid: "HTTPS 端口必须是 1-65535 的整数。",
+			portInUse: "该 HTTPS 端口已被占用（可能是其它服务或另一实例的反代），请换一个端口。"
 		};
 		const en = {
 			title: "Access Gate",
@@ -350,7 +368,8 @@ window.__ModuleLoader__.load({
 			saved: "Saved: proxy parameters updated (enabled or disabled); press Restart to apply.",
 			savedWithPassword: "Saved: password changed and all old sessions are invalid — please sign in again; proxy parameters apply after Restart.",
 			saveFailed: "Save failed: possibly overwritten concurrently or not permitted. Retry.",
-			portInvalid: "The HTTPS port must be an integer between 1 and 65535."
+			portInvalid: "The HTTPS port must be an integer between 1 and 65535.",
+			portInUse: "This HTTPS port is already in use (another service or another instance's proxy). Pick a different port."
 		};
 		/**
 		* Mount the card into the Plugins settings section's 插件配置 area.

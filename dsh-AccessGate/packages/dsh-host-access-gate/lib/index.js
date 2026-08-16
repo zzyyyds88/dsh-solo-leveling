@@ -542,6 +542,49 @@ function makeSetupHandler(state, limiter) {
  * 直接 kill 进程（不做脚本式重启），由机器各自的 supervisor（systemd/docker/PM2）
  * 按配置拉起 dsh；dsh 重启后插件自动重新确保反向代理运行。 */
 const RESTART_PATH = "/access-gate/restart";
+/** POST /access-gate/check-port —— 设置卡保存前检测 HTTPS 端口是否被占用（排除 caddy 自身）。 */
+const CHECK_PORT_PATH = "/access-gate/check-port";
+
+/** ss -tlnp 检测端口是否被非 caddy 进程监听。 */
+function checkPortInUse(port, excludeCaddy) {
+	try {
+		const out = spawnSync("ss", ["-tlnp"], { encoding: "utf8" }).stdout ?? "";
+		const re = new RegExp(`[:.]${port}\\b`);
+		for (const line of out.split("\n")) {
+			if (!re.test(line)) continue;
+			if (excludeCaddy && /caddy/.test(line)) continue; // caddy 自己绑定的端口不算占用
+			return true;
+		}
+	} catch { /* ss 不可用 → 不做检测（放行） */ }
+	return false;
+}
+
+function makeCheckPortHandler(state) {
+	return async (req, res) => {
+		const send = (status, body) => {
+			res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+			res.end(JSON.stringify(body));
+		};
+		if (req.method !== "POST") return send(405, { ok: false, error: { code: "method", message: "POST only" } });
+		if (state.password === void 0 || state.key === void 0 || !sessionFromRequest(req, state.key)) {
+			return send(401, { ok: false, error: { code: "unauthorized", message: "login required" } });
+		}
+		let port;
+		try {
+			const body = JSON.parse(await readBody(req));
+			port = Number(body?.port);
+		} catch {
+			return send(400, { ok: false, error: { code: "bad-request", message: "port required" } });
+		}
+		if (!Number.isInteger(port) || port < 1 || port > 65535) {
+			return send(400, { ok: false, error: { code: "bad-request", message: "port must be 1-65535" } });
+		}
+		// 与当前配置端口相同 → 可能是 caddy 自己绑定（不算占用）；改到新端口才严格检测
+		const current = state.readSettings?.()?.httpsPort;
+		const excludeCaddy = String(port) === String(current ?? "");
+		send(200, { ok: true, port, inUse: checkPortInUse(port, excludeCaddy) });
+	};
+}
 
 function makeRestartHandler(state) {
 	return async (req, res) => {
@@ -846,6 +889,11 @@ function apply(ctx, config) {
 		path: RESTART_PATH,
 		handler: makeRestartHandler(state)
 	}), "access-gate: /access-gate/restart route");
+	ctx.effect(() => ctx.webServer.register({
+		kind: "exact",
+		path: CHECK_PORT_PATH,
+		handler: makeCheckPortHandler(state)
+	}), "access-gate: /access-gate/check-port route");
 
 	// settings 提供方就绪后挂上引用（供 /setup 写入）；同时延迟启动反向代理
 	// ensure（等 webServer.port 与 settings 命名空间就绪），配置过反代参数即
