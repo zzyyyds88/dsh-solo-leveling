@@ -42,14 +42,16 @@ if [ "$CHECK" -eq 1 ]; then
   done
   # 测试期间备份的 fork 残留
   if [ -d "$PROFILE/node_modules/@deepseek-ai" ]; then
-    local_pkgs="$(ls -d "$PROFILE/node_modules/@deepseek-ai"/*.bak 2>/dev/null | wc -l)"
+    local_pkgs="$(ls -d "$PROFILE/node_modules/@deepseek-ai"/*.bak 2>/dev/null | wc -l || true)"
     [ "$local_pkgs" -gt 0 ] && { echo "  ✗ 有 .bak fork 备份残留"; ISSUES=1; }
   fi
-  for pkg in dsh-host-access-gate dsh-client-ui-access-gate dsh-defaults dsh-client-ui-defaults dsh-deepseekpet; do
+  # 本地插件残留：仅检测「非正式基线」的测试期插件（access-gate /
+  # dsh-mobile-adapt 已是正式基线内容，不算残留）
+  for pkg in dsh-defaults dsh-client-ui-defaults dsh-deepseekpet; do
     [ -d "$PROFILE/node_modules/$pkg" ] && { echo "  ✗ 本地插件残留: $pkg"; ISSUES=1; }
   done
   if [ -f "$PROFILE/cordis.patch.yml" ]; then
-    if grep -qE "access-gate|dsh-defaults|deepseek-pet|ui-access-gate" "$PROFILE/cordis.patch.yml" 2>/dev/null; then
+    if grep -qE "dsh-defaults|deepseek-pet" "$PROFILE/cordis.patch.yml" 2>/dev/null; then
       echo "  ✗ cordis.patch.yml 含测试期定制挂载（基线只保留正式环境已有的配置）"
       ISSUES=1
     fi
