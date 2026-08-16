@@ -49,8 +49,8 @@ export function stateFromSnapshot(snapshot) {
   const pending = Array.isArray(snapshot.pending) ? snapshot.pending : []
   if (pending.length > 0) {
     const kind = pending[0]?.kind
-    if (kind === 'approval') return state('waiting', '等你确认工具调用', '请在任务中确认，我会在这里等你')
-    return state('waiting', '等待你的回答', kind === 'question' ? '请在任务中回答问题' : '请在任务中完成交互')
+    if (kind === 'approval') return state('waiting', '等你确认工具调用', '请在任务中确认，我会在这里等你', { promptKind: 'approval' })
+    return state('waiting', '等待你的回答', kind === 'question' ? '请在任务中回答问题' : '请在任务中完成交互', { promptKind: kind === 'question' ? 'question' : 'interact' })
   }
 
   if (hasRecentImage(snapshot)) {
@@ -151,8 +151,8 @@ export function completionState() {
   return state('success', '任务完成', '完成啦！')
 }
 
-function state(kind, label, detail) {
-  return { kind, label, detail }
+function state(kind, label, detail, extra = {}) {
+  return { kind, label, detail, ...extra }
 }
 
 function friendlyToolName(name) {

@@ -71,7 +71,7 @@ const VOICE_FOR_EVENT = Object.freeze({
 })
 const VOICE_FOR_STATE = Object.freeze({
   approval: ['approval1', 'approval2'],
-  waiting: ['approval1', 'approval2'],
+  question: ['question1', 'question2'],
   busy: ['busy1', 'busy2'],
   thinking: ['thinking'],
 })
@@ -509,17 +509,21 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
     }
   }, [effectiveVisual.kind, comfortError])
 
-  // 进入等待批准/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）
+  // 进入等待批准/提问/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）。
+  // waiting 用 effectiveVisual.promptKind 区分「审批」与「提问」，播不同台词。
   useEffect(() => {
     const kind = effectiveVisual.kind
     if (kind !== 'waiting' && kind !== 'approval' && kind !== 'busy' && kind !== 'thinking') return
-    const keys = VOICE_FOR_STATE[kind]
-    if (!keys?.length) return
     if (!alertEnabled('prompt')) return
+    const voiceKey = kind === 'waiting'
+      ? (effectiveVisual.promptKind === 'approval' ? 'approval' : 'question')
+      : kind
+    const keys = VOICE_FOR_STATE[voiceKey]
+    if (!keys?.length) return
     unlockAudio()
     playPrompt()
     speakVoice(pickVoiceKey(keys))
-  }, [effectiveVisual.kind])
+  }, [effectiveVisual.kind, effectiveVisual.promptKind])
 
   useEffect(() => () => {
     window.clearTimeout(celebrateTimer.current)
@@ -713,10 +717,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
 export function deriveVisual(visual, signals) {
   if (visual.kind === 'waiting' || visual.kind === 'approval') {
     const waitingMs = signals.waitingMs ?? 0
-    if (waitingMs >= 4 * 60_000) return { kind: 'waiting', label: '等着等着犯困了', detail: '请在任务中回答，我还在等你' }
-    if (waitingMs >= 2 * 60_000) return { kind: 'waiting', label: '等得有点生气了', detail: '任务里的问题还没有回答' }
-    if (waitingMs >= 45_000) return { kind: 'waiting', label: '还在等你呢', detail: '请回到任务中完成回答' }
-    return { kind: 'waiting', label: visual.label, detail: visual.detail }
+    if (waitingMs >= 4 * 60_000) return { kind: 'waiting', label: '等着等着犯困了', detail: '请在任务中回答，我还在等你', promptKind: visual.promptKind }
+    if (waitingMs >= 2 * 60_000) return { kind: 'waiting', label: '等得有点生气了', detail: '任务里的问题还没有回答', promptKind: visual.promptKind }
+    if (waitingMs >= 45_000) return { kind: 'waiting', label: '还在等你呢', detail: '请回到任务中完成回答', promptKind: visual.promptKind }
+    return { kind: 'waiting', label: visual.label, detail: visual.detail, promptKind: visual.promptKind }
   }
   if (visual.kind === 'error' || visual.kind === 'tool-error' || visual.kind === 'success') return visual
   if (signals.hasImage) return { kind: 'vision', label: '图片暂时看不见', detail: 'DeepSeek 当前不支持视觉输入' }
