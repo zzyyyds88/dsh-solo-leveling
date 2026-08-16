@@ -67,7 +67,7 @@ node scripts/build.mjs          # 重新构建 lib/
 ## 4. 目录结构
 
 ```text
-deepseek-pet/
+dsh-deepseekpet/            ← 原名 deepseek-pet/，2026-08 目录改名
 ├── README.md              ← 本思路库（收录说明 + 安装 + 验证 + 功能增强）
 ├── README.upstream.md     ← 上游 README（原名归档）
 ├── LICENSE                ← 上游 MIT 许可

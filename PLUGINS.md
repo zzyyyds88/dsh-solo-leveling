@@ -30,7 +30,7 @@
 | `dsh-host-access-gate` | 后端 | **访问门禁**：登录门闸（首次 `/setup` 设口令、会话 Cookie + 限速、`access-gate` 口令命名空间）；由 `dsh-web-auth` 改名规范化，正式形态见 `dsh-AccessGate/` | profile 挂载 |
 | `dsh-client-ui-access-gate` | 前端 | 「设置 → 插件 → 插件配置 → 访问门禁」**卡片**（`settings.plugin.item`，样式同官方网页搜索卡片）：改访问口令 + 配置 HTTPS 反代参数（局域网地址/端口）；由 `dsh-client-ui-web-auth` 改名 + 标签页改卡片 | profile 挂载 |
 | `dsh-mobile-adapt` | 前端 | 移动端适配 | profile 挂载 |
-| `deepseek-pet`（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT，收录） | 前端 | **网页桌宠**：随任务/工具调用/上下文占用/活跃会话自动切换表情（思考/编码/等待批准/多会话忙碌等），支持拖动、缩放、折叠、批准/提问气泡；**增强**：WebAudio 音效（完成琶音/出错安慰/戳音）、edge-tts 离线语音（23 条原创台词）、长按摸头、双击静音、三击诊断、纸屑庆祝、音量持久化 | profile 挂载（`deepseek-pet/install-to-test-env.sh` / 正式 `dsh plugin add`） |
+| `deepseek-pet`（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT，收录） | 前端 | **网页桌宠**：随任务/工具调用/上下文占用/活跃会话自动切换表情（思考/编码/等待批准/多会话忙碌等），支持拖动、缩放、折叠、批准/提问气泡；**增强**：WebAudio 音效（完成琶音/出错安慰/戳音）、edge-tts 离线语音（23 条原创台词）、长按摸头、双击静音、三击诊断、纸屑庆祝、音量持久化 | profile 挂载（`dsh-deepseekpet/install-to-test-env.sh` / 正式 `dsh plugin add`） |
 | `@zzyyyds88/dsh-task-suite-all`（`dsh-task-suite/`，自 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) v0.1.17 抽取） | 前端聚合 | **精选 Web UI 插件集（一个包装齐）**：任务看板（五列 + cron 定时跑 + 真实会话执行）、实时令牌统计（TPS/LLM 耗时/上下文/缓存命中/输入输出 token）、实时吞吐统计（流式估算）、Git 图谱（分支泳道 + 提交历史）、右侧面板（文件树 + 多标签预览 + SCM stage/unstage/discard）、图像理解（describe_image 工具 + 配置卡）、设置中心、皮肤中心 + 11 款皮肤 | 聚合包 cordis.patch.yml 汇总子包行；皮肤互斥走 HOME 层 managed 区段（皮肤中心热切换，无需重启） |
 | `@zzyyyds88/dsh-client-ui-task-board` | 前端 | **任务看板**：五列（待规划/待办/进行中/已完成/已失败），卡片「执行」交给真实 DSH 会话并回写状态，详情可配 cron 定时跑 | 聚合包子包 |
 | `@zzyyyds88/dsh-live-stats` | 前端 | **实时令牌统计 + 实时吞吐统计**：输入框下方 TPS / LLM 耗时 / 上下文占用 / 缓存命中率 / 输入输出 token；会话状态行流式 token 估算（~ 启发式，provider 用量到达自动换真实值） | 聚合包子包 |
@@ -93,14 +93,14 @@ dsh plugin add ./<包名>-<版本>.tgz
 | `dsh-defaults` + `dsh-client-ui-defaults` | 设置 → 插件 → 插件配置 →「默认值」卡片可读写；改默认工作目录后选择器即时定位；重试默认对所有供应商生效（`node dsh-defaults/verify-defaults.mjs` 一键验证） |
 | `dsh-web-auth` + `dsh-client-ui-web-auth` | 首次 `/setup` 设口令；设置 → 插件 → 访问口令可改口令 |
 | `dsh-host-access-gate` + `dsh-client-ui-access-gate`（访问门禁） | 首次 `/setup` 设口令；设置 → 插件 → 插件配置 →「访问门禁」卡片改口令 + 配置反代参数（lanHost/httpsPort）；`settings.describe`（登录后）含 `access-gate` 命名空间 |
-| `deepseek-pet` | 页面右下角出现桌宠角色；`deepseek-pet/verify.sh --live` 一键验证（boot 清单含 `deepseek-pet` 条目 + `/plugins/deepseek-pet/client.js` 可加载） |
+| `deepseek-pet` | 页面右下角出现桌宠角色；`dsh-deepseekpet/verify.sh --live` 一键验证（boot 清单含 `deepseek-pet` 条目 + `/plugins/deepseek-pet/client.js` 可加载） |
 | `dsh-task-suite`（`@zzyyyds88/*` 全家桶） | 侧边栏「任务看板」、输入框下方实时统计、输入框上方 Git 分支选择器、右侧「预览 / 文件/变更」面板、对话提到图片可走 describe_image、设置 → 插件 → 插件配置 Web UI 组（含 Image understanding 卡）+ 皮肤中心；`dsh-task-suite/verify.sh --live` 一键验证（boot 清单 8 插件 + 皮肤行 + bundle 路由）；皮肤热切换：`POST /api/skin-center/apply {"skin":"<id>"}` |
 
 ## 3. 插件的更新情况
 
 | 插件 | 适配 DSH 版本 | 构建 | 测试环境验证 | 正式安装 | 备注 |
 |---|---|---|---|---|---|
-| 八个 fork 插件（webserver / apiproxy / connection / host-directory-picker / llm / llm-deepseek / pi-ai / 退役的 client-directory-picker） | 0.1.0-rc.6 | ✅ 全部构建通过（源码归位：门闸三件套在 `dsh-AccessGate/packages/`，其余在 `dsh-Moresettings/packages/`） | ✅ 全链路 + 强度菜单 + 默认目录 + 全局重试兜底 | ⏳ 待用户执行（`dsh-Moresettings/install-to-profile.sh`） | 同包名覆盖，升级天然免疫；apiproxy 为两项目共享（AccessGate 维护源码） |
+| 八个 fork 插件（webserver / apiproxy / connection / host-directory-picker / llm / llm-deepseek / pi-ai / 退役的 client-directory-picker） | 0.1.0-rc.6 | ✅ 全部构建通过（源码自包含：门闸三件套在 `dsh-AccessGate/packages/`，其余五个在 `dsh-Moresettings/packages/`，apiproxy 两项目各维护一份同源码副本） | ✅ 全链路 + 强度菜单 + 默认目录 + 全局重试兜底 | ⏳ 待用户执行（`dsh-Moresettings/install-to-profile.sh`） | 同包名覆盖，升级天然免疫 |
 | `dsh-defaults` / `dsh-client-ui-defaults`（统一默认值插件） | 0.1.0-rc.6 | 源码即产物 | ✅ verify-defaults.mjs 9 项全过 | ⏳ 待用户执行 | 插件配置卡片：默认工作目录 + 对所有供应商生效的默认重试次数 |
 | `dsh-web-auth` / `dsh-client-ui-web-auth` | 0.1.0-rc.6 | 源码即产物 | ✅ | ✅（正式 profile 已挂载） | 升级免疫；**已被「访问门禁」插件化替代（`dsh-AccessGate/`），正式切换待用户执行 `switch-to-https.sh`** |
 | `dsh-host-access-gate` / `dsh-client-ui-access-gate`（访问门禁） | 0.1.0-rc.6 | 源码即产物（依赖 fork 需重建 apiproxy） | ✅ 17 项集成 + 真实实例链路（test-env 3090） | ⏳ 待用户执行（`dsh-AccessGate/switch-to-https.sh`） | 升级免疫；apiproxy fork 含 `access-gate` 命名空间暴露 |
@@ -136,6 +136,6 @@ dsh plugin add ./<包名>-<版本>.tgz
 | fork 插件（profile 覆盖） | 通常免疫；重验即可；上游 API 变动时改 `src/` 重新构建 | 覆盖前自动 `.bak` 备份，拷回即回退 |
 | `dsh-web-auth` / `dsh-host-access-gate` 等 npm 插件 | 随 profile 免疫；误删则重跑 `node dsh-AccessGate/install-access-gate-plugin.mjs --allow-formal`（旧版重跑 `node install-auth-plugin.mjs`） | 同脚本幂等重装 |
 | 安装包补丁（三个旧项目） | 重跑各自幂等补丁脚本 + `switch-to-https.sh` | 补丁旁 `.bak` / unpatch 说明 |
-| `deepseek-pet`（收录桌宠） | 随 profile 免疫；上游更新时 `git fetch` 合并 + `node scripts/build.mjs` 重建 + test-env 重验 | `dsh plugin --profile web remove deepseek-pet`；测试环境 `node deepseek-pet/install-pet-plugin.mjs --unpatch` |
+| `deepseek-pet`（收录桌宠） | 随 profile 免疫；上游更新时 `git fetch` 合并 + `node scripts/build.mjs` 重建 + test-env 重验 | `dsh plugin --profile web remove deepseek-pet`；测试环境 `node dsh-deepseekpet/install-pet-plugin.mjs --unpatch` |
 | `dsh-task-suite`（精选 Web UI 插件集） | 随 profile 免疫；上游 dsh-web-ui 发新版时对照 README §1 重新抽取相关包源码 + `pnpm -r build` + test-env 重验；DSH 大版本升级按 `dsh-task-suite/升级后重打补丁指南.md` | 测试环境：`scripts/test-env-reset.sh`（patch 有 `.bak`）；正式：删 `node_modules/@zzyyyds88/` 目录 + 还原 `cordis.patch.yml` 与 HOME 层 managed 区段（先备份） |
 | retryPolicy 配置 | 重跑 `patch-retry-policy.py`（apply/幂等/unpatch 全测过） | 脚本 unpatch |
