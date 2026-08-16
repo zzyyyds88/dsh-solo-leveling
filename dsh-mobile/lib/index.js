@@ -162,9 +162,9 @@ const MOBILE_CSS = `
     max-width: 100% !important;
   }
 
-  /* ── 4. 桌宠缩小贴角，减少对手机内容的遮挡 ─────────────────────── */
+  /* ── 4. 桌宠缩小贴角，减少对手机内容的遮挡（0.75：比桌面小但仍清晰可交互） ─── */
   [data-dsh-live2d-root] {
-    --pet-scale: 0.58 !important;
+    --pet-scale: 0.75 !important;
     right: -30px !important;
     bottom: -24px !important;
   }
