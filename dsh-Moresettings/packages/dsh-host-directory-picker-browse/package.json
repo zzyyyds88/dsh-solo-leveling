@@ -1,0 +1,24 @@
+{
+  "name": "@deepseek-ai/dsh-host-directory-picker-browse",
+  "version": "0.1.0-rc.6-local.1",
+  "private": true,
+  "description": "Local fork of the official browse directory-picker backend: when the client opens the picker without a path, the listing starts at the directory configured in the dsh-defaults settings namespace (defaultWorkingDirectory), falling back to the official home-directory behavior when unset. Same package name so the profile node_modules copy overrides the global install.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./invariant": "./lib/invariant.js",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "lightningcss": "1.32.0",
+    "tsdown": "0.22.2",
+    "typescript": "~5.7.2"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,108 @@
+# 本次 diff（fork 改动 vs 上游/改动前）
+
+## 1. dsh-host-directory-picker-browse（新 fork，vs upstream 源码）
+```diff
+@@ -214,6 +214,20 @@
+     return this.browseCapability
+   }
+ 
++  /**
++   * The start directory for an opener that names no path: the
++   * `dsh-defaults` settings namespace's `defaultWorkingDirectory` when it is
++   * a fully qualified path, otherwise undefined (official behavior — the
++   * host home directory). Read per call, so a settings change reaches the
++   * next picker open without a restart. (Local fork.)
++   */
++  private configuredStartPath(): string | undefined {
++    const settings = this.ctx.get('settings')
++    const value = (settings?.get?.('dsh-defaults') as { defaultWorkingDirectory?: string } | undefined)
++      ?.defaultWorkingDirectory
++    return typeof value === 'string' && value.length > 0 && fullyQualified(value) ? value : undefined
++  }
++
+   private async list(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
+     const home = homedir()
+     // The seam contract takes fully qualified paths only; resolve() would
+@@ -222,7 +236,7 @@
+     if (path !== undefined && !fullyQualified(path)) {
+       throw new DirectoryPickerError('directory-unreadable', path, `cannot list "${path}": not a fully qualified path`)
+     }
+-    const target = resolve(path ?? home)
++    const target = resolve(path ?? this.configuredStartPath() ?? home)
+     // Stream the level (opendir, one dirent at a time) into a name-sorted
+     // window of maxEntries + 1 candidates: memory stays bounded no matter how
+     // many children the directory holds, the window keeps the name-sorted
+```
+
+## 2. dsh-host-apiproxy（vs 改动前，一行）
+```diff
+@@ exposedNamespaces() @@
+   exposed.add("web-auth")
++  /* Local fork: dsh-defaults 命名空间由 dsh-defaults 插件注册，
++     GUI 设置面板需要读写它来配置默认工作目录与默认重试次数。 */
++  exposed.add("dsh-defaults")
+```
+
+## 3. dsh-llm-pi-ai（vs 改动前 fork，两处新增）
+
+### 3.1 src/config.ts —— resolveProfiles 重试兜底
+
+```diff
+@@ resolveProfiles(providers) → resolveProfiles(providers, defaults?) @@
++/** dsh-defaults 命名空间消费面（本地 fork）。 */
++export interface PiAiDefaults {
++  defaultRetryCount?: number
++}
++
+ export function resolveProfiles(
+   providers: Readonly<Record<string, PiAiProviderProfile>> | undefined,
++  defaults?: PiAiDefaults,
+ ): Map<string, ResolvedPiAiProviderProfile> {
+@@
+-    retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
++    // 本地 fork：未声明 retryPolicy 时用 dsh-defaults.defaultRetryCount 兜底
++    const defaultsRetry = defaults?.defaultRetryCount
++    const fallbackRetry = Number.isSafeInteger(defaultsRetry) && (defaultsRetry as number) >= 0
++      ? { mode: 'normal' as const, maxRetries: defaultsRetry as number }
++      : undefined
++    retryPolicy: resolveRetryPolicy(
++      retryPolicy ?? fallbackRetry,
++      `llm-pi-ai: provider "${provider}" retryPolicy`,
++    ),
+```
+
+### 3.2 src/index.ts —— 读取命名空间 + settings/updated 变更重新注册
+
+```diff
+@@ apply() @@
++  let settings: SettingsProvider | undefined
++  ctx.inject(['settings'], (sctx) => {
++    settings = sctx.settings
++    sctx.effect(() => () => { settings = undefined })
++  })
++  const defaultsSnapshot = (): PiAiDefaults | undefined => {
++    const value = settings?.get('dsh-defaults')
++    return value === undefined ? undefined : value as PiAiDefaults
++  }
+   const profiles = () => {
+     const raw = current()
+-    if (raw === lastRaw && memoized !== undefined) return memoized
+-    const next = resolveProfiles(raw.providers)
++    const defaults = settings?.get('dsh-defaults')
++    if (raw === lastRaw && defaults === lastDefaults && memoized !== undefined) return memoized
++    const next = resolveProfiles(raw.providers, defaults === undefined ? undefined : defaults as PiAiDefaults)
++    lastDefaults = defaults
+     ...
+   }
+@@ 文件末尾 @@
++  // 本地 fork：dsh-defaults 变更（重试默认值）必须重新注册路由——
++  // 监听 settings/updated（commit 事件，resolved 已替换），
++  // 而非 settings/document-updated（bumpRevision 先于 commit，读到旧值）。
++  ctx.effect(() => {
++    const onDefaultsUpdated = (ns: unknown): void => {
++      if (ns !== 'dsh-defaults') return
++      try { ensureRegistrationFacts() } catch (error) { ctx.logger.error(...) }
++    }
++    return ctx.on('settings/updated', onDefaultsUpdated)
++  }, 'llm-pi-ai: dsh-defaults change re-registration')
+```

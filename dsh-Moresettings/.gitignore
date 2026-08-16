@@ -1,0 +1,14 @@
+# 依赖与构建产物（fork 包的 lib 由 src 构建，不入库）
+node_modules/
+
+# fork 包（带 src/）的 lib 是构建产物，忽略；新插件（无 src/，源码即产物）的 lib 入库
+packages/dsh-client-ui-directory-picker-browse/lib/
+packages/dsh-host-directory-picker-browse/lib/
+packages/dsh-host-apiproxy/lib/
+packages/dsh-llm/lib/
+packages/dsh-llm-deepseek/lib/
+packages/dsh-llm-pi-ai/lib/
+
+# 运行态与杂项
+*.log
+.DS_Store

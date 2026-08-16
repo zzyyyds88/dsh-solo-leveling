@@ -1,0 +1,676 @@
+//#region lib/types/index.js
+/**
+* dsh-host-access-gate — 访问门禁：登录鉴权插件（本地定制，不随上游分发）
+*
+* 为 DSH Web GUI 提供「口令登录」门闸 + 口令管理：
+*
+* 一、门闸（注册到 dsh-host-webserver 的请求门闸钩子上，该钩子由本地
+*     dsh-host-webserver fork 提供，profile 同名覆盖、升级免疫），在路由
+*     分发之前统一拦截所有 HTTP 请求与 WebSocket 升级：
+*       - 已登录（有效会话 Cookie）→ 放行，后续链路完全不变；
+*       - 未登录：页面/静态资源 → 302 到 /login；/api/* → 401 JSON；
+*         WebSocket 升级 → 拒绝（webserver 回 403）；
+*       - 首次运行（尚未设置任何口令）→ 全部跳转到 /setup 首次设置页。
+*
+* 二、口令来源（按优先级）：
+*       1. 插件 config.password（写死在 profile patch 中）；
+*       2. settings 命名空间 access-gate.password（GUI「设置 → 插件」里修改，
+*          或 /setup 首次设置页写入；存 $DSH_HOME/settings.yaml）；
+*       3. 环境变量 DSH_ACCESS_GATE_PASSWORD（兼容旧名 DSH_WEB_PASSWORD）；
+*       4. config.passwordFile 指向的文件内容（trim）。
+*     GUI 里修改口令后旧会话立即失效（key 随口令轮换），需重新登录。
+*
+* 三、首次运行（监听 0.0.0.0 / mode:on 且上面 4 个来源都没有口令）：
+*       进入「首次设置」模式：所有请求跳转到 /setup 页面，由用户自行
+*       设置访问口令（不生成、不打印任何口令/密文），设置完成后进入
+*       正常登录模式。若希望跳过该页，直接设置 DSH_ACCESS_GATE_PASSWORD 启动即可。
+*
+* 四、启用方式（config.mode，默认 auto）：
+*       - auto：仅当 webserver 监听 0.0.0.0 时启用；
+*       - on：无论监听地址一律启用；
+*       - off：彻底关闭（回到无鉴权状态）。
+*
+* 五、对外服务：提供 webAuth 服务（isAuthenticated(request)），供
+*     dsh-client-connection 的受保护方法围栏在「已登录」时放行 settings.*
+*     （LAN 用户登录后可以在设置面板里改口令）。
+*
+* 会话 Cookie：dsh_session = v1.<expiresMs>.<nonce>.<hmac>，HMAC-SHA256
+* 签名（密钥由口令派生），HttpOnly + SameSite=Strict，默认 7 天有效。
+* 登录接口带简单限速（按来源 IP）。
+* @module dsh-host-access-gate
+*/
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import z from "@deepseek-ai/schemastery";
+import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
+
+/** Stable Cordis plugin name. */
+const name = "access-gate";
+/** Services required before the gate can be registered. */
+const inject = ["webServer"];
+
+/** The webserver schema's all-interfaces bind literal. */
+const ALL_INTERFACES_HOST = "0.0.0.0";
+/** Session cookie name. */
+const COOKIE_NAME = "dsh_session";
+/** Signed token prefix (bump on format change). */
+const TOKEN_PREFIX = "v1.";
+/** Login/logout/setup route paths. */
+const LOGIN_PATH = "/login";
+const LOGOUT_PATH = "/logout";
+const SETUP_PATH = "/setup";
+/** Public asset prefix: login/setup pages load the background without a session.
+ * 注意：不带尾斜杠——fork 的 prefix 匹配是 `pathname.startsWith(prefix + "/")`。 */
+const ASSET_PREFIX = "/access-gate";
+/** Asset directory inside this plugin package (installed by install script). */
+const ASSET_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "assets");
+/** Settings namespace holding the GUI-managed password. */
+const SETTINGS_NS = settingsNamespace("access-gate");
+/** Static salt for the HMAC key derivation. */
+const KEY_SALT = "dsh-access-gate-key";
+/** Cap on login/setup request bodies. */
+const MAX_BODY_BYTES = 16 * 1024;
+/** Minimum length the setup page / settings card enforce for a new password. */
+const MIN_PASSWORD_LENGTH = 6;
+/** webAuth service name the privileged-method fence consults. */
+const WEB_AUTH_SERVICE = "webAuth";
+
+const Config = z.object({
+	password: z.string(),
+	passwordFile: z.string(),
+	mode: z.union([z.const("auto"), z.const("on"), z.const("off")]).default("auto"),
+	sessionTtlSeconds: z.natural().min(60).default(7 * 24 * 3600),
+	lockoutMaxAttempts: z.natural().min(1).default(10),
+	lockoutWindowMs: z.natural().min(1000).default(10 * 60 * 1000)
+});
+//#endregion
+//#region lib/types/password.js
+/** Resolve the non-settings password sources, or undefined when none. */
+function resolveFallbackPassword(config) {
+	if (typeof config.password === "string" && config.password.length > 0) return config.password;
+	const fromEnv = process.env.DSH_ACCESS_GATE_PASSWORD ?? process.env.DSH_WEB_PASSWORD;
+	if (typeof fromEnv === "string" && fromEnv.length > 0) return fromEnv;
+	if (typeof config.passwordFile === "string" && config.passwordFile.length > 0) {
+		return readFileSync(config.passwordFile, "utf8").trim();
+	}
+	return void 0;
+}
+//#endregion
+//#region lib/types/cookie.js
+/** Derive the HMAC key from the password (change password → all sessions die). */
+function deriveKey(password) {
+	return createHmac("sha256", KEY_SALT).update(password).digest("hex");
+}
+/** Sign one session token valid until `expiresMs`. */
+function signToken(key, expiresMs) {
+	const nonce = randomBytes(18).toString("base64url");
+	const payload = `${TOKEN_PREFIX}${String(expiresMs)}.${nonce}`;
+	const sig = createHmac("sha256", key).update(payload).digest("hex");
+	return `${payload}.${sig}`;
+}
+/** Verify a session token: format, HMAC (constant-time), and expiry. */
+function verifyToken(token, key) {
+	const parts = token.split(".");
+	if (parts.length !== 4 || parts[0] !== "v1") return false;
+	const [, expiresText, nonce, sig] = parts;
+	const expires = Number(expiresText);
+	if (!Number.isFinite(expires) || expires <= Date.now()) return false;
+	const payload = `${TOKEN_PREFIX}${expiresText}.${nonce}`;
+	const expected = createHmac("sha256", key).update(payload).digest("hex");
+	if (sig.length !== expected.length) return false;
+	return timingSafeEqual(Buffer.from(sig, "utf8"), Buffer.from(expected, "utf8"));
+}
+/** Whether a cookie header value carries a valid session token. */
+function sessionFromCookie(cookieHeader, key) {
+	if (typeof cookieHeader !== "string" || cookieHeader.length === 0) return false;
+	for (const part of cookieHeader.split(";")) {
+		const eq = part.indexOf("=");
+		if (eq < 0) continue;
+		if (part.slice(0, eq).trim() !== COOKIE_NAME) continue;
+		if (verifyToken(part.slice(eq + 1).trim(), key)) return true;
+	}
+	return false;
+}
+/** node:http request → valid session? */
+function sessionFromRequest(req, key) {
+	return sessionFromCookie(typeof req?.headers?.cookie === "string" ? req.headers.cookie : "", key);
+}
+//#endregion
+//#region lib/types/util.js
+/** Constant-time-ish string comparison (hash-then-compare). */
+function safeEqual(a, b) {
+	const ha = createHmac("sha256", "dsh-access-gate-compare").update(String(a)).digest();
+	const hb = createHmac("sha256", "dsh-access-gate-compare").update(String(b)).digest();
+	return timingSafeEqual(ha, hb);
+}
+/** Sanitize a redirect target: only simple absolute paths survive. */
+function sanitizeNext(raw) {
+	if (typeof raw !== "string") return "/";
+	const match = /^(\/[A-Za-z0-9._~\-/]*)(\?.*)?$/.exec(raw);
+	if (match === null || match[1].startsWith("//")) return "/";
+	return match[1];
+}
+/** Escape one attribute value inside an inline page. */
+function escapeHtml(value) {
+	return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+/** Read a small request body with a hard cap. */
+async function readBody(req) {
+	const chunks = [];
+	let received = 0;
+	for await (const chunk of req) {
+		received += chunk.length;
+		if (received > MAX_BODY_BYTES) throw new Error("body too large");
+		chunks.push(chunk);
+	}
+	return Buffer.concat(chunks);
+}
+/** Client address for rate limiting: first X-Forwarded-For entry when proxied, else the socket address. */
+function clientAddress(req) {
+	const forwarded = req?.headers?.["x-forwarded-for"];
+	if (typeof forwarded === "string" && forwarded.length > 0) return forwarded.split(",")[0].trim();
+	return req?.socket?.remoteAddress ?? "unknown";
+}
+/** Per-source-address failed-attempt limiter. */
+function createRateLimiter(maxAttempts, windowMs) {
+	const failures = new Map();
+	return {
+		blocked(address) {
+			const rec = failures.get(address);
+			return rec !== void 0 && rec.count >= maxAttempts && Date.now() - rec.firstAt < windowMs;
+		},
+		fail(address) {
+			const now = Date.now();
+			const rec = failures.get(address);
+			if (rec === void 0 || now - rec.firstAt >= windowMs) failures.set(address, { count: 1, firstAt: now });
+			else rec.count += 1;
+		},
+		clear(address) {
+			failures.delete(address);
+		}
+	};
+}
+//#endregion
+//#region lib/types/pages.js
+/** Shared page head/style used by the login and setup pages (blue liquid glass). */
+const PAGE_STYLE = `
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden;
+         background: #0b1220 url('/access-gate/bg.webp') center/cover no-repeat fixed;
+         color: #eef2fa;
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  /* 液态玻璃氛围：深蓝渐变叠加 + 流动光斑 */
+  body::before { content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(1200px 620px at 12% 8%, rgba(47,107,255,.38), transparent 62%),
+      radial-gradient(920px 520px at 88% 88%, rgba(34,211,238,.30), transparent 62%),
+      linear-gradient(180deg, rgba(6,10,20,.45), rgba(6,10,20,.72)); }
+  .blob { position: fixed; border-radius: 50%; filter: blur(72px); opacity: .5; z-index: 0; pointer-events: none;
+          animation: drift 19s ease-in-out infinite alternate; }
+  .blob.b1 { width: 430px; height: 430px; left: -90px; top: -70px;
+             background: radial-gradient(circle, rgba(47,107,255,.6), transparent 70%); }
+  .blob.b2 { width: 370px; height: 370px; right: -70px; bottom: -90px;
+             background: radial-gradient(circle, rgba(34,211,238,.55), transparent 70%); animation-delay: -7s; }
+  .blob.b3 { width: 260px; height: 260px; left: 56%; top: 28%;
+             background: radial-gradient(circle, rgba(129,140,248,.45), transparent 70%); animation-delay: -13s; }
+  @keyframes drift { from { transform: translate3d(0,0,0) scale(1); }
+                     to { transform: translate3d(64px,-44px,0) scale(1.16); } }
+  .card { position: relative; z-index: 1; width: min(92vw, 424px);
+          background: rgba(255,255,255,.075);
+          border: 1px solid rgba(255,255,255,.24);
+          border-radius: 22px; padding: 36px 32px 26px;
+          backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);
+          box-shadow: 0 26px 80px rgba(2,8,23,.6), inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 0 rgba(255,255,255,.06); }
+  .logo { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .logo-mark { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+               color: #fff; font-weight: 800; font-size: 15px; letter-spacing: .5px;
+               background: linear-gradient(135deg, #3b6dff, #22d3ee);
+               box-shadow: 0 8px 22px rgba(59,109,255,.5), inset 0 1px 0 rgba(255,255,255,.35); }
+  h1 { font-size: 20px; margin: 0; color: #f4f7fd; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.35); }
+  .sub { color: #b3bfd6; font-size: 13px; margin: 10px 0 22px; line-height: 1.7; }
+  label { display: block; font-size: 13px; color: #bcc6dc; margin: 16px 0 8px; }
+  input { width: 100%; padding: 12px 14px; border-radius: 13px; border: 1px solid rgba(255,255,255,.20);
+          background: rgba(9,14,28,.5); color: #eef2fa; font-size: 15px; outline: none;
+          transition: border-color .15s, box-shadow .15s; }
+  input:focus { border-color: rgba(79,124,255,.95); box-shadow: 0 0 0 3px rgba(79,124,255,.24); }
+  button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 13px; cursor: pointer;
+           color: #fff; font-size: 15px; font-weight: 600; letter-spacing: 4px;
+           background: linear-gradient(135deg, #2f6bff, #38bdf8);
+           box-shadow: 0 12px 30px rgba(47,107,255,.45), inset 0 1px 0 rgba(255,255,255,.3);
+           transition: filter .15s, transform .05s; }
+  button:hover { filter: brightness(1.12); }
+  button:active { transform: translateY(1px); }
+  .error { display: none; margin-top: 16px; padding: 10px 12px; border-radius: 11px;
+           background: rgba(255,80,80,.16); border: 1px solid rgba(255,80,80,.42); color: #ffb8b8; font-size: 13px; line-height: 1.5; }
+  .foot { margin-top: 26px; text-align: center; color: rgba(212,222,242,.55); font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+`;
+/** Login page (normal mode), blue liquid glass. */
+const LOGIN_PAGE = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek Harness · 登录</title>
+<style>${PAGE_STYLE}</style>
+</head>
+<body>
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="card">
+    <div class="logo"><div class="logo-mark">DSH</div><h1>DeepSeek Harness</h1></div>
+    <p class="sub">该服务需要登录后才能使用</p>
+    <form method="post" action="/login" autocomplete="off">
+      <label for="password">访问口令</label>
+      <input id="password" name="password" type="password" placeholder="请输入访问口令" required autofocus>
+      <button type="submit">登 录</button>
+    </form>
+    <div class="error" id="error"></div>
+    <div class="foot">DeepSeek Harness Web GUI · 访问门禁</div>
+  </div>
+  <script>
+    var q = new URLSearchParams(location.search);
+    if (q.get("error")) {
+      var e = document.getElementById("error");
+      e.style.display = "block";
+      e.textContent = q.get("error") === "locked" ? "尝试次数过多，请稍后再试" : "口令错误，请重试";
+    }
+    document.getElementById("password").focus();
+  <\/script>
+</body>
+</html>
+`;
+/** First-run setup page (no password configured anywhere yet), blue liquid glass. */
+const SETUP_PAGE = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeepSeek Harness · 首次设置</title>
+<style>${PAGE_STYLE}</style>
+</head>
+<body>
+  <div class="blob b1"></div>
+  <div class="blob b2"></div>
+  <div class="blob b3"></div>
+  <div class="card">
+    <div class="logo"><div class="logo-mark">DSH</div><h1>首次设置访问口令</h1></div>
+    <p class="sub">尚未设置访问口令，请先设置一个（至少 ${MIN_PASSWORD_LENGTH} 位）。
+    设置完成后将跳转到登录页。</p>
+    <form method="post" action="/setup" autocomplete="off">
+      <label for="password">新访问口令（至少 ${MIN_PASSWORD_LENGTH} 位）</label>
+      <input id="password" name="password" type="password" required autofocus>
+      <label for="confirm">确认新访问口令</label>
+      <input id="confirm" name="confirm" type="password" required>
+      <button type="submit">设置口令</button>
+    </form>
+    <div class="error" id="error"></div>
+    <div class="foot">DeepSeek Harness Web GUI · 首次设置</div>
+  </div>
+  <script>
+    var q = new URLSearchParams(location.search);
+    if (q.get("error")) {
+      var e = document.getElementById("error");
+      e.style.display = "block";
+      e.textContent = q.get("error") === "locked" ? "尝试次数过多，请稍后再试"
+        : q.get("error") === "short" ? "口令至少需要 " + ${MIN_PASSWORD_LENGTH} + " 位"
+        : q.get("error") === "mismatch" ? "两次输入的口令不一致" : "设置失败，请重试";
+    }
+    document.getElementById("password").focus();
+  <\/script>
+</body>
+</html>
+`;
+/** Render the login page with an optional hidden `next` target. */
+function renderLoginPage(next) {
+	if (next === "/") return LOGIN_PAGE;
+	return LOGIN_PAGE.replace("</form>", `<input type="hidden" name="next" value="${escapeHtml(next)}"></form>`);
+}
+/** Serve one whitelisted asset from the plugin's assets directory. */
+function makeAssetHandler(root) {
+	const TYPES = {
+		".webp": "image/webp",
+		".png": "image/png",
+		".jpg": "image/jpeg",
+		".jpeg": "image/jpeg",
+		".gif": "image/gif",
+		".svg": "image/svg+xml",
+		".css": "text/css; charset=utf-8",
+		".js": "text/javascript; charset=utf-8",
+	};
+	return async (req, res) => {
+		try {
+			const url = new URL(req.url ?? "/", "http://x");
+			const name = decodeURIComponent(url.pathname.slice(ASSET_PREFIX.length).replace(/^\/+/, ""));
+			if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+				res.writeHead(404);
+				res.end();
+				return;
+			}
+			const file = join(root, name);
+			if (!file.startsWith(root) || !existsSync(file)) {
+				res.writeHead(404);
+				res.end();
+				return;
+			}
+			const ext = extname(name).toLowerCase();
+			res.writeHead(200, {
+				"content-type": TYPES[ext] ?? "application/octet-stream",
+				"cache-control": "public, max-age=3600",
+			});
+			res.end(readFileSync(file));
+		} catch (error) {
+			console.error("[dsh-host-access-gate] asset error:", error instanceof Error ? error.stack : String(error));
+			res.writeHead(500);
+			res.end();
+		}
+	};
+}
+//#endregion
+//#region lib/types/handlers.js
+/** /login route: GET serves the page, POST validates the password (reads current state). */
+function makeLoginHandler(state, ttl, limiter) {
+	return async (req, res) => {
+		const password = state.password;
+		const key = state.key;
+		if (password === void 0 || key === void 0) {
+			res.writeHead(302, { location: SETUP_PATH, "cache-control": "no-store" });
+			res.end();
+			return;
+		}
+		if (req.method === "GET" || req.method === "HEAD") {
+			if (sessionFromRequest(req, key)) {
+				res.writeHead(302, { location: "/" });
+				res.end();
+				return;
+			}
+			const url = new URL(req.url ?? "/", "http://x");
+			const next = sanitizeNext(url.searchParams.get("next") ?? "/");
+			const body = renderLoginPage(next);
+			res.writeHead(200, {
+				"content-type": "text/html; charset=utf-8",
+				"cache-control": "no-store",
+				"x-frame-options": "DENY"
+			});
+			res.end(req.method === "HEAD" ? void 0 : body);
+			return;
+		}
+		if (req.method !== "POST") {
+			res.writeHead(405);
+			res.end();
+			return;
+		}
+		const address = clientAddress(req);
+		if (limiter.blocked(address)) {
+			res.writeHead(302, { location: `${LOGIN_PATH}?error=locked`, "cache-control": "no-store" });
+			res.end();
+			return;
+		}
+		let sentPassword = "";
+		let next = "/";
+		try {
+			const body = await readBody(req);
+			const contentType = (req.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase();
+			if (contentType === "application/json") {
+				const json = JSON.parse(body.toString("utf8"));
+				if (typeof json?.password === "string") sentPassword = json.password;
+				next = sanitizeNext(typeof json?.next === "string" ? json.next : "/");
+			} else {
+				const params = new URLSearchParams(body.toString("utf8"));
+				sentPassword = params.get("password") ?? "";
+				next = sanitizeNext(params.get("next") ?? "/");
+			}
+		} catch {
+			sentPassword = "";
+		}
+		if (!safeEqual(sentPassword, password)) {
+			limiter.fail(address);
+			res.writeHead(302, { location: `${LOGIN_PATH}?error=wrong`, "cache-control": "no-store" });
+			res.end();
+			return;
+		}
+		limiter.clear(address);
+		const token = signToken(key, Date.now() + ttl * 1000);
+		res.writeHead(302, {
+			location: next,
+			"set-cookie": `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${String(ttl)}`,
+			"cache-control": "no-store"
+		});
+		res.end();
+	};
+}
+/** /logout route: POST clears the session cookie. */
+async function handleLogout(req, res) {
+	if (req.method !== "POST") {
+		res.writeHead(405);
+		res.end();
+		return;
+	}
+	try {
+		await readBody(req);
+	} catch {
+		/* drain or drop; the response below is what matters */
+	}
+	res.writeHead(302, {
+		location: LOGIN_PATH,
+		"set-cookie": `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
+		"cache-control": "no-store"
+	});
+	res.end();
+}
+/**
+* /setup route: first-run password setup. GET serves the page; POST writes
+* the new password into settings (no secret handshake — the operator sets
+* their own key here).
+* @param state - mutable auth state; `settings` is the settings provider.
+*/
+function makeSetupHandler(state, limiter) {
+	return async (req, res) => {
+		if (req.method === "GET" || req.method === "HEAD") {
+			if (state.password !== void 0) {
+				res.writeHead(302, { location: LOGIN_PATH });
+				res.end();
+				return;
+			}
+			res.writeHead(200, {
+				"content-type": "text/html; charset=utf-8",
+				"cache-control": "no-store",
+				"x-frame-options": "DENY"
+			});
+			res.end(req.method === "HEAD" ? void 0 : SETUP_PAGE);
+			return;
+		}
+		if (req.method !== "POST") {
+			res.writeHead(405);
+			res.end();
+			return;
+		}
+		const address = clientAddress(req);
+		if (limiter.blocked(address)) {
+			res.writeHead(302, { location: `${SETUP_PATH}?error=locked`, "cache-control": "no-store" });
+			res.end();
+			return;
+		}
+		let password = "";
+		let confirm = "";
+		try {
+			const body = await readBody(req);
+			const contentType = (req.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase();
+			if (contentType === "application/json") {
+				const json = JSON.parse(body.toString("utf8"));
+				password = typeof json?.password === "string" ? json.password : "";
+				confirm = typeof json?.confirm === "string" ? json.confirm : "";
+			} else {
+				const params = new URLSearchParams(body.toString("utf8"));
+				password = params.get("password") ?? "";
+				confirm = params.get("confirm") ?? "";
+			}
+		} catch {
+			password = "";
+		}
+		if (password.length < MIN_PASSWORD_LENGTH) {
+			res.writeHead(302, { location: `${SETUP_PATH}?error=short`, "cache-control": "no-store" });
+			res.end();
+			return;
+		}
+		if (password !== confirm) {
+			res.writeHead(302, { location: `${SETUP_PATH}?error=mismatch`, "cache-control": "no-store" });
+			res.end();
+			return;
+		}
+		if (state.settings === void 0) {
+			res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
+			res.end("settings service unavailable");
+			return;
+		}
+		// 写入 settings.access-gate.password → onChange 轮换 key 并退出首次设置模式
+		await state.settings.update(SETTINGS_NS, { password });
+		limiter.clear(address);
+		res.writeHead(302, { location: LOGIN_PATH, "cache-control": "no-store" });
+		res.end();
+	};
+}
+//#endregion
+//#region lib/types/index.js
+/**
+* Mount the auth gate, routes, settings namespace, and webAuth service.
+* @param ctx - plugin context carrying the webServer service.
+* @param config - validated {@link Config}.
+*/
+function apply(ctx, config) {
+	const fallbackPassword = resolveFallbackPassword(config);
+	const enabled = config.mode === "on" ? true : config.mode === "off" ? false : ctx.webServer.host === ALL_INTERFACES_HOST;
+	if (!enabled) return;
+
+	const ttl = config.sessionTtlSeconds;
+	const limiter = createRateLimiter(config.lockoutMaxAttempts, config.lockoutWindowMs);
+	/** Mutable auth state read by the gate/routes at request time. */
+	const state = {
+		password: fallbackPassword,
+		key: fallbackPassword === void 0 ? void 0 : deriveKey(fallbackPassword),
+		settings: void 0,
+		readSettings: void 0,
+		announcedSetup: false
+	};
+
+	// settings 命名空间：GUI 设置面板（access-gate 卡片）与 /setup 页写口令的落点。
+	// onChange 在每个写之后重算口令并轮换 key；清除口令且无任何后备口令时，
+	// 回到「首次设置」模式（/setup 页），绝不出现无鉴权裸奔。
+	installSettingsSection(ctx, SETTINGS_NS, z.object({
+		password: z.string().role("secret"),
+		// 反向代理参数（供 switch-to-https.sh 生成 Caddyfile / 固化 trusted-host 使用）
+		lanHost: z.string().default("192.168.1.100"),
+		httpsPort: z.natural().min(1).max(65535).default(5700)
+	}), {
+		password: fallbackPassword ?? "",
+		lanHost: "192.168.1.100",
+		httpsPort: 5700
+	}, {
+		setSource: (get) => {
+			state.readSettings = get;
+		},
+		onChange: () => {
+			const stored = state.readSettings?.()?.password;
+			const password = typeof stored === "string" && stored.length > 0 ? stored : fallbackPassword;
+			state.password = password;
+			state.key = password === void 0 ? void 0 : deriveKey(password);
+			if (password === void 0) announceSetup();
+			else state.announcedSetup = false;
+		}
+	});
+
+	// 首次运行（0.0.0.0 且无任何口令来源）→ 提示去 /setup 设置口令
+	const announceSetup = () => {
+		if (state.password !== void 0 || state.announcedSetup) return;
+		state.announcedSetup = true;
+		console.log("");
+		console.log("──────────────────────────────────────────────────────────────");
+		console.log(" [dsh-host-access-gate] 首次运行：尚未设置访问口令。");
+		console.log(" [dsh-host-access-gate]   请打开本机 Web 界面并访问 /setup 页面，");
+		console.log(" [dsh-host-access-gate]   设置你自己的访问口令（至少 " + String(MIN_PASSWORD_LENGTH) + " 位）。");
+		console.log(" [dsh-host-access-gate]   （也可设置环境变量 DSH_ACCESS_GATE_PASSWORD=<口令> 后重启，跳过此页。）");
+		console.log("──────────────────────────────────────────────────────────────");
+		console.log("");
+	};
+
+	// webAuth 服务：供 client-connection 的受保护方法围栏判断「已登录」。
+	ctx.provide(WEB_AUTH_SERVICE, {
+		isAuthenticated: (request) => {
+			const cookie = typeof request?.headers?.get === "function" ? request.headers.get("cookie") ?? "" : "";
+			return state.key !== void 0 && sessionFromCookie(cookie, state.key);
+		}
+	});
+
+
+	// 门闸
+	const gate = (req, res, pathname) => {
+		if (pathname.startsWith(ASSET_PREFIX)) return true; // 公共资源（登录页背景等），无需会话
+		if (pathname === SETUP_PATH) return true;
+		if (pathname === LOGIN_PATH || pathname === LOGOUT_PATH) {
+			if (state.password === void 0) return res !== null ? redirectTo(res, SETUP_PATH) : false;
+			return true;
+		}
+		if (state.password === void 0) {
+			// 首次设置模式：一律去 /setup
+			if (res === null) return false;
+			if (pathname === "/api" || pathname.startsWith("/api/")) return unauthorized(res);
+			return redirectTo(res, SETUP_PATH);
+		}
+		if (sessionFromRequest(req, state.key)) return true;
+		if (res === null) return false;
+		if (pathname === "/api" || pathname.startsWith("/api/")) return unauthorized(res);
+		const target = sanitizeNext(pathname);
+		res.writeHead(302, { location: `${LOGIN_PATH}?next=${encodeURIComponent(target)}`, "cache-control": "no-store" });
+		res.end();
+		return false;
+	};
+
+	ctx.effect(() => ctx.webServer.registerGate(gate), "access-gate: gate");
+	ctx.effect(() => ctx.webServer.register({
+		kind: "prefix",
+		path: ASSET_PREFIX,
+		handler: makeAssetHandler(ASSET_DIR)
+	}), "access-gate: assets route");
+	ctx.effect(() => ctx.webServer.register({
+		kind: "exact",
+		path: LOGIN_PATH,
+		handler: makeLoginHandler(state, ttl, limiter)
+	}), "access-gate: /login route");
+	ctx.effect(() => ctx.webServer.register({
+		kind: "exact",
+		path: LOGOUT_PATH,
+		handler: handleLogout
+	}), "access-gate: /logout route");
+	ctx.effect(() => ctx.webServer.register({
+		kind: "exact",
+		path: SETUP_PATH,
+		handler: makeSetupHandler(state, limiter)
+	}), "access-gate: /setup route");
+
+	// settings 提供方就绪后挂上引用（供 /setup 写入）
+	ctx.inject(["settings"], (sctx) => {
+		state.settings = sctx.settings;
+		sctx.effect(() => () => {
+			state.settings = void 0;
+		});
+	});
+}
+
+/** 302 redirect helper shared by the gate. */
+function redirectTo(res, location) {
+	res.writeHead(302, { location, "cache-control": "no-store" });
+	res.end();
+	return false;
+}
+/** 401 JSON helper shared by the gate. */
+function unauthorized(res) {
+	res.writeHead(401, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+	res.end(JSON.stringify({ ok: false, error: { code: "unauthorized", message: "login required" } }));
+	return false;
+}
+//#endregion
+export { Config, apply, inject, name };

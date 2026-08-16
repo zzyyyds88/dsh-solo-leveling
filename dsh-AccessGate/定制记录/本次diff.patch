@@ -1,0 +1,2129 @@
+# 访问门禁（Access Gate）—— 本次改动 diff
+# 生成：2026-08-16；含 apiproxy fork 命名空间暴露 + 新项目全部文件
+
+# ============================================================
+# 1) fork：dsh-host-apiproxy 增加 access-gate 命名空间暴露
+# ============================================================
+
+--- 定制插件化改造/packages/dsh-host-apiproxy/src/api-proxy.ts  (改造前)
++++ 定制插件化改造/packages/dsh-host-apiproxy/src/api-proxy.ts  (改造后)
+@@ exposedNamespaces() @@
+     /* Local fork: web-auth 命名空间由旧 dsh-web-auth 插件注册（保留兼容存量）；
++    access-gate 命名空间由 dsh-host-access-gate 插件注册（「访问门禁」），
++    GUI 设置面板（登录后）需要读写它来修改访问口令。 */
+     exposed.add('web-auth')
++    exposed.add('access-gate')
+
+# ============================================================
+# 2) 新项目文件（访问门禁/）
+# ============================================================
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/packages/dsh-host-access-gate/package.json"
+@@ -0,0 +1,12 @@
++{
++  "name": "dsh-host-access-gate",
++  "version": "0.1.0",
++  "description": "访问门禁：DSH Web GUI 登录门闸（口令登录 / 首次设置 / 会话 Cookie / 限速）",
++  "private": true,
++  "type": "module",
++  "main": "lib/index.js",
++  "exports": {
++    ".": "./lib/index.js"
++  },
++  "license": "MIT"
++}
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/packages/dsh-host-access-gate/lib/index.js"
+@@ -0,0 +1,583 @@
++//#region lib/types/index.js
++/**
++* dsh-host-access-gate — 访问门禁：登录鉴权插件（本地定制，不随上游分发）
++*
++* 为 DSH Web GUI 提供「口令登录」门闸 + 口令管理：
++*
++* 一、门闸（注册到 dsh-host-webserver 的请求门闸钩子上，该钩子由本地
++*     dsh-host-webserver fork 提供，profile 同名覆盖、升级免疫），在路由
++*     分发之前统一拦截所有 HTTP 请求与 WebSocket 升级：
++*       - 已登录（有效会话 Cookie）→ 放行，后续链路完全不变；
++*       - 未登录：页面/静态资源 → 302 到 /login；/api/* → 401 JSON；
++*         WebSocket 升级 → 拒绝（webserver 回 403）；
++*       - 首次运行（尚未设置任何口令）→ 全部跳转到 /setup 首次设置页。
++*
++* 二、口令来源（按优先级）：
++*       1. 插件 config.password（写死在 profile patch 中）；
++*       2. settings 命名空间 access-gate.password（GUI「设置 → 插件」里修改，
++*          或 /setup 首次设置页写入；存 $DSH_HOME/settings.yaml）；
++*       3. 环境变量 DSH_ACCESS_GATE_PASSWORD（兼容旧名 DSH_WEB_PASSWORD）；
++*       4. config.passwordFile 指向的文件内容（trim）。
++*     GUI 里修改口令后旧会话立即失效（key 随口令轮换），需重新登录。
++*
++* 三、首次运行（监听 0.0.0.0 / mode:on 且上面 4 个来源都没有口令）：
++*       进入「首次设置」模式：所有请求跳转到 /setup 页面，由用户自行
++*       设置访问口令（不生成、不打印任何口令/密文），设置完成后进入
++*       正常登录模式。若希望跳过该页，直接设置 DSH_ACCESS_GATE_PASSWORD 启动即可。
++*
++* 四、启用方式（config.mode，默认 auto）：
++*       - auto：仅当 webserver 监听 0.0.0.0 时启用；
++*       - on：无论监听地址一律启用；
++*       - off：彻底关闭（回到无鉴权状态）。
++*
++* 五、对外服务：提供 webAuth 服务（isAuthenticated(request)），供
++*     dsh-client-connection 的受保护方法围栏在「已登录」时放行 settings.*
++*     （LAN 用户登录后可以在设置面板里改口令）。
++*
++* 会话 Cookie：dsh_session = v1.<expiresMs>.<nonce>.<hmac>，HMAC-SHA256
++* 签名（密钥由口令派生），HttpOnly + SameSite=Strict，默认 7 天有效。
++* 登录接口带简单限速（按来源 IP）。
++* @module dsh-host-access-gate
++*/
++import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
++import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import os from "node:os";
++import z from "@deepseek-ai/schemastery";
++import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
++
++/** Stable Cordis plugin name. */
++const name = "access-gate";
++/** Services required before the gate can be registered. */
++const inject = ["webServer"];
++
++/** The webserver schema's all-interfaces bind literal. */
++const ALL_INTERFACES_HOST = "0.0.0.0";
++/** Session cookie name. */
++const COOKIE_NAME = "dsh_session";
++/** Signed token prefix (bump on format change). */
++const TOKEN_PREFIX = "v1.";
++/** Login/logout/setup route paths. */
++const LOGIN_PATH = "/login";
++const LOGOUT_PATH = "/logout";
++const SETUP_PATH = "/setup";
++/** Settings namespace holding the GUI-managed password. */
++const SETTINGS_NS = settingsNamespace("access-gate");
++/** Static salt for the HMAC key derivation. */
++const KEY_SALT = "dsh-access-gate-key";
++/** Cap on login/setup request bodies. */
++const MAX_BODY_BYTES = 16 * 1024;
++/** Minimum length the setup page / settings card enforce for a new password. */
++const MIN_PASSWORD_LENGTH = 6;
++/** webAuth service name the privileged-method fence consults. */
++const WEB_AUTH_SERVICE = "webAuth";
++
++const Config = z.object({
++	password: z.string(),
++	passwordFile: z.string(),
++	mode: z.union([z.const("auto"), z.const("on"), z.const("off")]).default("auto"),
++	sessionTtlSeconds: z.natural().min(60).default(7 * 24 * 3600),
++	lockoutMaxAttempts: z.natural().min(1).default(10),
++	lockoutWindowMs: z.natural().min(1000).default(10 * 60 * 1000)
++});
++//#endregion
++//#region lib/types/password.js
++/** Resolve the non-settings password sources, or undefined when none. */
++function resolveFallbackPassword(config) {
++	if (typeof config.password === "string" && config.password.length > 0) return config.password;
++	const fromEnv = process.env.DSH_ACCESS_GATE_PASSWORD ?? process.env.DSH_WEB_PASSWORD;
++	if (typeof fromEnv === "string" && fromEnv.length > 0) return fromEnv;
++	if (typeof config.passwordFile === "string" && config.passwordFile.length > 0) {
++		return readFileSync(config.passwordFile, "utf8").trim();
++	}
++	return void 0;
++}
++//#endregion
++//#region lib/types/cookie.js
++/** Derive the HMAC key from the password (change password → all sessions die). */
++function deriveKey(password) {
++	return createHmac("sha256", KEY_SALT).update(password).digest("hex");
++}
++/** Sign one session token valid until `expiresMs`. */
++function signToken(key, expiresMs) {
++	const nonce = randomBytes(18).toString("base64url");
++	const payload = `${TOKEN_PREFIX}${String(expiresMs)}.${nonce}`;
++	const sig = createHmac("sha256", key).update(payload).digest("hex");
++	return `${payload}.${sig}`;
++}
++/** Verify a session token: format, HMAC (constant-time), and expiry. */
++function verifyToken(token, key) {
++	const parts = token.split(".");
++	if (parts.length !== 4 || parts[0] !== "v1") return false;
++	const [, expiresText, nonce, sig] = parts;
++	const expires = Number(expiresText);
++	if (!Number.isFinite(expires) || expires <= Date.now()) return false;
++	const payload = `${TOKEN_PREFIX}${expiresText}.${nonce}`;
++	const expected = createHmac("sha256", key).update(payload).digest("hex");
++	if (sig.length !== expected.length) return false;
++	return timingSafeEqual(Buffer.from(sig, "utf8"), Buffer.from(expected, "utf8"));
++}
++/** Whether a cookie header value carries a valid session token. */
++function sessionFromCookie(cookieHeader, key) {
++	if (typeof cookieHeader !== "string" || cookieHeader.length === 0) return false;
++	for (const part of cookieHeader.split(";")) {
++		const eq = part.indexOf("=");
++		if (eq < 0) continue;
++		if (part.slice(0, eq).trim() !== COOKIE_NAME) continue;
++		if (verifyToken(part.slice(eq + 1).trim(), key)) return true;
++	}
++	return false;
++}
++/** node:http request → valid session? */
++function sessionFromRequest(req, key) {
++	return sessionFromCookie(typeof req?.headers?.cookie === "string" ? req.headers.cookie : "", key);
++}
++//#endregion
++//#region lib/types/util.js
++/** Constant-time-ish string comparison (hash-then-compare). */
++function safeEqual(a, b) {
++	const ha = createHmac("sha256", "dsh-access-gate-compare").update(String(a)).digest();
++	const hb = createHmac("sha256", "dsh-access-gate-compare").update(String(b)).digest();
++	return timingSafeEqual(ha, hb);
++}
++/** Sanitize a redirect target: only simple absolute paths survive. */
++function sanitizeNext(raw) {
++	if (typeof raw !== "string") return "/";
++	const match = /^(\/[A-Za-z0-9._~\-/]*)(\?.*)?$/.exec(raw);
++	if (match === null || match[1].startsWith("//")) return "/";
++	return match[1];
++}
++/** Escape one attribute value inside an inline page. */
++function escapeHtml(value) {
++	return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
++}
++/** Read a small request body with a hard cap. */
++async function readBody(req) {
++	const chunks = [];
++	let received = 0;
++	for await (const chunk of req) {
++		received += chunk.length;
++		if (received > MAX_BODY_BYTES) throw new Error("body too large");
++		chunks.push(chunk);
++	}
++	return Buffer.concat(chunks);
++}
++/** Client address for rate limiting: first X-Forwarded-For entry when proxied, else the socket address. */
++function clientAddress(req) {
++	const forwarded = req?.headers?.["x-forwarded-for"];
++	if (typeof forwarded === "string" && forwarded.length > 0) return forwarded.split(",")[0].trim();
++	return req?.socket?.remoteAddress ?? "unknown";
++}
++/** Per-source-address failed-attempt limiter. */
++function createRateLimiter(maxAttempts, windowMs) {
++	const failures = new Map();
++	return {
++		blocked(address) {
++			const rec = failures.get(address);
++			return rec !== void 0 && rec.count >= maxAttempts && Date.now() - rec.firstAt < windowMs;
++		},
++		fail(address) {
++			const now = Date.now();
++			const rec = failures.get(address);
++			if (rec === void 0 || now - rec.firstAt >= windowMs) failures.set(address, { count: 1, firstAt: now });
++			else rec.count += 1;
++		},
++		clear(address) {
++			failures.delete(address);
++		}
++	};
++}
++//#endregion
++//#region lib/types/pages.js
++/** Shared page head/style used by the login and setup pages. */
++const PAGE_STYLE = `
++  :root { color-scheme: dark; }
++  * { box-sizing: border-box; }
++  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
++         background: #0b0e14; color: #d7dae0;
++         font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif; }
++  .card { width: min(92vw, 400px); background: #141922; border: 1px solid #262e3d; border-radius: 14px;
++          padding: 36px 32px 26px; box-shadow: 0 12px 40px rgba(0,0,0,.45); }
++  .logo { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
++  .logo-mark { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #4f7cff, #22d3ee);
++               display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 16px; }
++  h1 { font-size: 19px; margin: 0; color: #eef1f6; }
++  .sub { color: #8b93a7; font-size: 13px; margin: 6px 0 20px; line-height: 1.6; }
++  label { display: block; font-size: 13px; color: #aab2c5; margin: 14px 0 8px; }
++  input { width: 100%; padding: 11px 12px; border-radius: 9px; border: 1px solid #2c3547;
++          background: #0d1119; color: #eef1f6; font-size: 15px; outline: none; }
++  input:focus { border-color: #4f7cff; box-shadow: 0 0 0 3px rgba(79,124,255,.18); }
++  button { width: 100%; margin-top: 20px; padding: 11px; border: 0; border-radius: 9px; background: #2f6bff;
++           color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }
++  button:hover { background: #3b76ff; }
++  .error { display: none; margin-top: 14px; padding: 10px 12px; border-radius: 9px;
++           background: rgba(255,80,80,.12); border: 1px solid rgba(255,80,80,.35); color: #ff9d9d; font-size: 13px; line-height: 1.5; }
++  .foot { margin-top: 22px; text-align: center; color: #5c6478; font-size: 12px; }
++`;
++/** Login page (normal mode). */
++const LOGIN_PAGE = `<!doctype html>
++<html lang="zh-CN">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>DeepSeek Harness · 登录</title>
++<style>${PAGE_STYLE}</style>
++</head>
++<body>
++  <div class="card">
++    <div class="logo"><div class="logo-mark">DSH</div><h1>DeepSeek Harness</h1></div>
++    <p class="sub">该服务需要登录后才能使用</p>
++    <form method="post" action="/login" autocomplete="off">
++      <label for="password">访问口令</label>
++      <input id="password" name="password" type="password" placeholder="请输入访问口令" required autofocus>
++      <button type="submit">登 录</button>
++    </form>
++    <div class="error" id="error"></div>
++    <div class="foot">DeepSeek Harness Web GUI · 访问门禁</div>
++  </div>
++  <script>
++    var q = new URLSearchParams(location.search);
++    if (q.get("error")) {
++      var e = document.getElementById("error");
++      e.style.display = "block";
++      e.textContent = q.get("error") === "locked" ? "尝试次数过多，请稍后再试" : "口令错误，请重试";
++    }
++    document.getElementById("password").focus();
++  <\/script>
++</body>
++</html>
++`;
++/** First-run setup page (no password configured anywhere yet). */
++const SETUP_PAGE = `<!doctype html>
++<html lang="zh-CN">
++<head>
++<meta charset="utf-8">
++<meta name="viewport" content="width=device-width, initial-scale=1">
++<title>DeepSeek Harness · 首次设置</title>
++<style>${PAGE_STYLE}</style>
++</head>
++<body>
++  <div class="card">
++    <div class="logo"><div class="logo-mark">DSH</div><h1>首次设置访问口令</h1></div>
++    <p class="sub">尚未设置访问口令，请先设置一个（至少 ${MIN_PASSWORD_LENGTH} 位）。
++    设置完成后将跳转到登录页。</p>
++    <form method="post" action="/setup" autocomplete="off">
++      <label for="password">新访问口令（至少 ${MIN_PASSWORD_LENGTH} 位）</label>
++      <input id="password" name="password" type="password" required autofocus>
++      <label for="confirm">确认新访问口令</label>
++      <input id="confirm" name="confirm" type="password" required>
++      <button type="submit">设置口令</button>
++    </form>
++    <div class="error" id="error"></div>
++    <div class="foot">DeepSeek Harness Web GUI · 首次设置</div>
++  </div>
++  <script>
++    var q = new URLSearchParams(location.search);
++    if (q.get("error")) {
++      var e = document.getElementById("error");
++      e.style.display = "block";
++      e.textContent = q.get("error") === "locked" ? "尝试次数过多，请稍后再试"
++        : q.get("error") === "short" ? "口令至少需要 " + ${MIN_PASSWORD_LENGTH} + " 位"
++        : q.get("error") === "mismatch" ? "两次输入的口令不一致" : "设置失败，请重试";
++    }
++    document.getElementById("password").focus();
++  <\/script>
++</body>
++</html>
++`;
++/** Render the login page with an optional hidden `next` target. */
++function renderLoginPage(next) {
++	if (next === "/") return LOGIN_PAGE;
++	return LOGIN_PAGE.replace("</form>", `<input type="hidden" name="next" value="${escapeHtml(next)}"></form>`);
++}
++//#endregion
++//#region lib/types/handlers.js
++/** /login route: GET serves the page, POST validates the password (reads current state). */
++function makeLoginHandler(state, ttl, limiter) {
++	return async (req, res) => {
++		const password = state.password;
++		const key = state.key;
++		if (password === void 0 || key === void 0) {
++			res.writeHead(302, { location: SETUP_PATH, "cache-control": "no-store" });
++			res.end();
++			return;
++		}
++		if (req.method === "GET" || req.method === "HEAD") {
++			if (sessionFromRequest(req, key)) {
++				res.writeHead(302, { location: "/" });
++				res.end();
++				return;
++			}
++			const url = new URL(req.url ?? "/", "http://x");
++			const next = sanitizeNext(url.searchParams.get("next") ?? "/");
++			const body = renderLoginPage(next);
++			res.writeHead(200, {
++				"content-type": "text/html; charset=utf-8",
++				"cache-control": "no-store",
++				"x-frame-options": "DENY"
++			});
++			res.end(req.method === "HEAD" ? void 0 : body);
++			return;
++		}
++		if (req.method !== "POST") {
++			res.writeHead(405);
++			res.end();
++			return;
++		}
++		const address = clientAddress(req);
++		if (limiter.blocked(address)) {
++			res.writeHead(302, { location: `${LOGIN_PATH}?error=locked`, "cache-control": "no-store" });
++			res.end();
++			return;
++		}
++		let sentPassword = "";
++		let next = "/";
++		try {
++			const body = await readBody(req);
++			const contentType = (req.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase();
++			if (contentType === "application/json") {
++				const json = JSON.parse(body.toString("utf8"));
++				if (typeof json?.password === "string") sentPassword = json.password;
++				next = sanitizeNext(typeof json?.next === "string" ? json.next : "/");
++			} else {
++				const params = new URLSearchParams(body.toString("utf8"));
++				sentPassword = params.get("password") ?? "";
++				next = sanitizeNext(params.get("next") ?? "/");
++			}
++		} catch {
++			sentPassword = "";
++		}
++		if (!safeEqual(sentPassword, password)) {
++			limiter.fail(address);
++			res.writeHead(302, { location: `${LOGIN_PATH}?error=wrong`, "cache-control": "no-store" });
++			res.end();
++			return;
++		}
++		limiter.clear(address);
++		const token = signToken(key, Date.now() + ttl * 1000);
++		res.writeHead(302, {
++			location: next,
++			"set-cookie": `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${String(ttl)}`,
++			"cache-control": "no-store"
++		});
++		res.end();
++	};
++}
++/** /logout route: POST clears the session cookie. */
++async function handleLogout(req, res) {
++	if (req.method !== "POST") {
++		res.writeHead(405);
++		res.end();
++		return;
++	}
++	try {
++		await readBody(req);
++	} catch {
++		/* drain or drop; the response below is what matters */
++	}
++	res.writeHead(302, {
++		location: LOGIN_PATH,
++		"set-cookie": `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
++		"cache-control": "no-store"
++	});
++	res.end();
++}
++/**
++* /setup route: first-run password setup. GET serves the page; POST writes
++* the new password into settings (no secret handshake — the operator sets
++* their own key here).
++* @param state - mutable auth state; `settings` is the settings provider.
++*/
++function makeSetupHandler(state, limiter) {
++	return async (req, res) => {
++		if (req.method === "GET" || req.method === "HEAD") {
++			if (state.password !== void 0) {
++				res.writeHead(302, { location: LOGIN_PATH });
++				res.end();
++				return;
++			}
++			res.writeHead(200, {
++				"content-type": "text/html; charset=utf-8",
++				"cache-control": "no-store",
++				"x-frame-options": "DENY"
++			});
++			res.end(req.method === "HEAD" ? void 0 : SETUP_PAGE);
++			return;
++		}
++		if (req.method !== "POST") {
++			res.writeHead(405);
++			res.end();
++			return;
++		}
++		const address = clientAddress(req);
++		if (limiter.blocked(address)) {
++			res.writeHead(302, { location: `${SETUP_PATH}?error=locked`, "cache-control": "no-store" });
++			res.end();
++			return;
++		}
++		let password = "";
++		let confirm = "";
++		try {
++			const body = await readBody(req);
++			const contentType = (req.headers["content-type"] ?? "").split(";", 1)[0]?.trim().toLowerCase();
++			if (contentType === "application/json") {
++				const json = JSON.parse(body.toString("utf8"));
++				password = typeof json?.password === "string" ? json.password : "";
++				confirm = typeof json?.confirm === "string" ? json.confirm : "";
++			} else {
++				const params = new URLSearchParams(body.toString("utf8"));
++				password = params.get("password") ?? "";
++				confirm = params.get("confirm") ?? "";
++			}
++		} catch {
++			password = "";
++		}
++		if (password.length < MIN_PASSWORD_LENGTH) {
++			res.writeHead(302, { location: `${SETUP_PATH}?error=short`, "cache-control": "no-store" });
++			res.end();
++			return;
++		}
++		if (password !== confirm) {
++			res.writeHead(302, { location: `${SETUP_PATH}?error=mismatch`, "cache-control": "no-store" });
++			res.end();
++			return;
++		}
++		if (state.settings === void 0) {
++			res.writeHead(503, { "content-type": "text/plain; charset=utf-8" });
++			res.end("settings service unavailable");
++			return;
++		}
++		// 写入 settings.access-gate.password → onChange 轮换 key 并退出首次设置模式
++		await state.settings.update(SETTINGS_NS, { password });
++		limiter.clear(address);
++		res.writeHead(302, { location: LOGIN_PATH, "cache-control": "no-store" });
++		res.end();
++	};
++}
++//#endregion
++//#region lib/types/index.js
++/**
++* Mount the auth gate, routes, settings namespace, and webAuth service.
++* @param ctx - plugin context carrying the webServer service.
++* @param config - validated {@link Config}.
++*/
++function apply(ctx, config) {
++	const fallbackPassword = resolveFallbackPassword(config);
++	const enabled = config.mode === "on" ? true : config.mode === "off" ? false : ctx.webServer.host === ALL_INTERFACES_HOST;
++	if (!enabled) return;
++
++	const ttl = config.sessionTtlSeconds;
++	const limiter = createRateLimiter(config.lockoutMaxAttempts, config.lockoutWindowMs);
++	/** Mutable auth state read by the gate/routes at request time. */
++	const state = {
++		password: fallbackPassword,
++		key: fallbackPassword === void 0 ? void 0 : deriveKey(fallbackPassword),
++		settings: void 0,
++		readSettings: void 0,
++		announcedSetup: false
++	};
++
++	// settings 命名空间：GUI 设置面板（access-gate 卡片）与 /setup 页写口令的落点。
++	// onChange 在每个写之后重算口令并轮换 key；清除口令且无任何后备口令时，
++	// 回到「首次设置」模式（/setup 页），绝不出现无鉴权裸奔。
++	installSettingsSection(ctx, SETTINGS_NS, z.object({ password: z.string().role("secret") }), {
++		password: fallbackPassword ?? ""
++	}, {
++		setSource: (get) => {
++			state.readSettings = get;
++		},
++		onChange: () => {
++			const stored = state.readSettings?.()?.password;
++			const password = typeof stored === "string" && stored.length > 0 ? stored : fallbackPassword;
++			state.password = password;
++			state.key = password === void 0 ? void 0 : deriveKey(password);
++			if (password === void 0) announceSetup();
++			else state.announcedSetup = false;
++		}
++	});
++
++	// 首次运行（0.0.0.0 且无任何口令来源）→ 提示去 /setup 设置口令
++	const announceSetup = () => {
++		if (state.password !== void 0 || state.announcedSetup) return;
++		state.announcedSetup = true;
++		console.log("");
++		console.log("──────────────────────────────────────────────────────────────");
++		console.log(" [dsh-host-access-gate] ⚠ 首次运行：尚未设置访问口令。");
++		console.log(" [dsh-host-access-gate]   请打开本机 Web 界面并访问 /setup 页面，");
++		console.log(" [dsh-host-access-gate]   设置你自己的访问口令（至少 " + String(MIN_PASSWORD_LENGTH) + " 位）。");
++		console.log(" [dsh-host-access-gate]   （也可设置环境变量 DSH_ACCESS_GATE_PASSWORD=<口令> 后重启，跳过此页。）");
++		console.log("──────────────────────────────────────────────────────────────");
++		console.log("");
++	};
++
++	// webAuth 服务：供 client-connection 的受保护方法围栏判断「已登录」。
++	ctx.provide(WEB_AUTH_SERVICE, {
++		isAuthenticated: (request) => {
++			const cookie = typeof request?.headers?.get === "function" ? request.headers.get("cookie") ?? "" : "";
++			return state.key !== void 0 && sessionFromCookie(cookie, state.key);
++		}
++	});
++
++
++	// 门闸
++	const gate = (req, res, pathname) => {
++		if (pathname === SETUP_PATH) return true;
++		if (pathname === LOGIN_PATH || pathname === LOGOUT_PATH) {
++			if (state.password === void 0) return res !== null ? redirectTo(res, SETUP_PATH) : false;
++			return true;
++		}
++		if (state.password === void 0) {
++			// 首次设置模式：一律去 /setup
++			if (res === null) return false;
++			if (pathname === "/api" || pathname.startsWith("/api/")) return unauthorized(res);
++			return redirectTo(res, SETUP_PATH);
++		}
++		if (sessionFromRequest(req, state.key)) return true;
++		if (res === null) return false;
++		if (pathname === "/api" || pathname.startsWith("/api/")) return unauthorized(res);
++		const target = sanitizeNext(pathname);
++		res.writeHead(302, { location: `${LOGIN_PATH}?next=${encodeURIComponent(target)}`, "cache-control": "no-store" });
++		res.end();
++		return false;
++	};
++
++	ctx.effect(() => ctx.webServer.registerGate(gate), "access-gate: gate");
++	ctx.effect(() => ctx.webServer.register({
++		kind: "exact",
++		path: LOGIN_PATH,
++		handler: makeLoginHandler(state, ttl, limiter)
++	}), "access-gate: /login route");
++	ctx.effect(() => ctx.webServer.register({
++		kind: "exact",
++		path: LOGOUT_PATH,
++		handler: handleLogout
++	}), "access-gate: /logout route");
++	ctx.effect(() => ctx.webServer.register({
++		kind: "exact",
++		path: SETUP_PATH,
++		handler: makeSetupHandler(state, limiter)
++	}), "access-gate: /setup route");
++
++	// settings 提供方就绪后挂上引用（供 /setup 写入）
++	ctx.inject(["settings"], (sctx) => {
++		state.settings = sctx.settings;
++		sctx.effect(() => () => {
++			state.settings = void 0;
++		});
++	});
++}
++
++/** 302 redirect helper shared by the gate. */
++function redirectTo(res, location) {
++	res.writeHead(302, { location, "cache-control": "no-store" });
++	res.end();
++	return false;
++}
++/** 401 JSON helper shared by the gate. */
++function unauthorized(res) {
++	res.writeHead(401, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
++	res.end(JSON.stringify({ ok: false, error: { code: "unauthorized", message: "login required" } }));
++	return false;
++}
++//#endregion
++export { Config, apply, inject, name };
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/packages/dsh-client-ui-access-gate/package.json"
+@@ -0,0 +1,27 @@
++{
++  "name": "dsh-client-ui-access-gate",
++  "description": "访问门禁：设置 → 插件 → 插件配置 的「访问口令」卡片",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "main": "lib/index.js",
++  "exports": {
++    ".": "./lib/index.js",
++    "./client": "./lib/client.js",
++    "./package.json": "./package.json"
++  },
++  "dsh": {
++    "client": {
++      "platform": "web",
++      "inject": [
++        "@deepseek-ai/dsh-client-connection",
++        "@deepseek-ai/dsh-client-locale",
++        "@deepseek-ai/dsh-client-runtime",
++        "@deepseek-ai/dsh-client-ui-settings",
++        "@deepseek-ai/dsh-client-ui-slots",
++        "@deepseek-ai/dsh-api-remotes"
++      ]
++    }
++  },
++  "license": "MIT"
++}
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/packages/dsh-client-ui-access-gate/lib/index.js"
+@@ -0,0 +1,12 @@
++//#region lib/types/index.js
++/**
++* Access-gate settings card, node half. The empty apply exists so the plugin
++* appears in the host cordis.yml / Loader; the browser half owns the card
++* through exports["./client"], discovered from the package.json dsh.client
++* declaration. The namespace it edits (access-gate) is registered and exposed
++* by the dsh-host-access-gate host plugin.
++*/
++/** Host plugin body — no host-side behavior for this surface plugin. */
++function apply() {}
++//#endregion
++export { apply };
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/packages/dsh-client-ui-access-gate/lib/client.js"
+@@ -0,0 +1,257 @@
++// dsh-client-ui-access-gate — plugin-config card for the access password.
++// Hand-authored client bundle in the tsdown __ModuleLoader__ format (local
++// customization; rebuild with the DSH repo toolchain if the format ever shifts).
++//
++// Registers one card in the Settings → Plugins → 插件配置 section
++// (`settings.plugin.item`), styled after the official web-search card: a
++// collapsible card with title/description, the password fields, and
++// save/discard.
++window.__ModuleLoader__.load({
++	id: "dsh-client-ui-access-gate",
++	factory: (require) => {
++		var module = { exports: {} };
++		var exports = module.exports;
++		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
++		let _deepseek_ai_dsh_client_ui_slots = require("@deepseek-ai/dsh-client-ui-slots");
++		let react = require("react");
++		let react_jsx_runtime = require("react/jsx-runtime");
++		let _deepseek_ai_dsh_client_runtime_client = require("@deepseek-ai/dsh-client-runtime/client");
++		let _deepseek_ai_dsh_client_locale = require("@deepseek-ai/dsh-client-locale");
++		//#region lib/types/client/index.js
++		/**
++		* Access-gate password card, browser half. Registers one card in the
++		* Plugins settings section's 插件配置 area (`settings.plugin.item`) and
++		* binds the `access-gate` settings namespace (registered by the
++		* dsh-host-access-gate host plugin, exposed by the dsh-host-apiproxy
++		* fork). Saving a new password rotates the host's HMAC key immediately,
++		* so the current session dies — the card tells the user to sign in again.
++		* @module dsh-client-ui-access-gate
++		*/
++		/** Locale dictionary namespace owned by this plugin. */
++		const NS = "dsh-client-ui-access-gate";
++		/** Minimum password length, kept in sync with the host plugin. */
++		const MIN_PASSWORD_LENGTH = 6;
++		/** Required services (cordis fiber inject). */
++		const inject = [
++			"slots",
++			"locale",
++			"connection",
++			"remote",
++			"settingsScope"
++		];
++		/** Bridges the `access-gate` scope onto the card's snapshot store. */
++		var AccessGateCardController = class {
++			/** @param scope - the bound settings scope for the `access-gate` namespace. */
++			constructor(scope) {
++				this.scope = scope;
++				this.store = (0, _deepseek_ai_dsh_client_runtime_client.createSnapshotStore)(this.projection());
++				this.unsub = scope.subscribe(() => {
++					this.store.set(this.projection());
++				});
++			}
++			projection() {
++				const snapshot = this.scope.getSnapshot();
++				return {
++					available: snapshot.status === "ready",
++					writable: snapshot.writable
++				};
++			}
++			/** Write a new password to the namespace; resolves after the host accepted it. */
++			async save(password) {
++				if (typeof password !== "string" || password.length === 0) return false;
++				try {
++					await this.scope.set("password", password);
++					return true;
++				} catch {
++					return false;
++				}
++			}
++			/** Build the face the card's slot registration injects. */
++			inject() {
++				return {
++					hooks: { accessGateCard: this.store },
++					save: (password) => this.save(password)
++				};
++			}
++		};
++		/** The card component: write-only password form (set new password only). */
++		function AccessGateCard(props) {
++			const { t } = props;
++			const state = props.useAccessGateCard((snapshot) => snapshot);
++			const [open, setOpen] = react.useState(false);
++			const [password, setPassword] = react.useState("");
++			const [confirm, setConfirm] = react.useState("");
++			const [message, setMessage] = react.useState("");
++			const [kind, setKind] = react.useState("ok");
++			const [saving, setSaving] = react.useState(false);
++			const disabled = !state.available || !state.writable;
++			// The stored password is secret (role("secret")) and never surfaced;
++			// any typed input counts as an unsaved draft.
++			const dirty = password.length > 0 || confirm.length > 0;
++			if (!state.available) return null;
++			const save = async () => {
++				if (password.length < MIN_PASSWORD_LENGTH) {
++					setKind("err");
++					setMessage(t("tooShort"));
++					return;
++				}
++				if (password !== confirm) {
++					setKind("err");
++					setMessage(t("mismatch"));
++					return;
++				}
++				setSaving(true);
++				const ok = await props.save(password);
++				setSaving(false);
++				if (ok) {
++					setKind("ok");
++					setMessage(t("saved"));
++					setPassword("");
++					setConfirm("");
++				} else {
++					setKind("err");
++					setMessage(t("saveFailed"));
++				}
++			};
++			const discard = () => {
++				setPassword("");
++				setConfirm("");
++				setMessage("");
++			};
++			// Card chrome: collapsible header + body + footer (styled after the
++			// official web-search PluginCard, inline styles + theme variables).
++			const cardStyle = { border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-layer-3)", borderRadius: "10px", overflow: "hidden" };
++			const headerStyle = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "12px 14px", width: "100%", border: 0, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" };
++			const titleStyle = { fontSize: "14px", fontWeight: 600, margin: 0, color: "var(--dsw-alias-label-primary)" };
++			const descStyle = { fontSize: "12px", lineHeight: "1.6", margin: "2px 0 0", color: "var(--dsw-alias-label-tertiary)" };
++			const pendingStyle = { fontSize: "11px", color: "var(--dsw-alias-label-secondary)", background: "var(--dsw-alias-bg-layer-1)", borderRadius: "5px", padding: "1px 6px", whiteSpace: "nowrap" };
++			const bodyStyle = { borderTop: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-module-platform)", padding: "10px 14px 12px" };
++			const fieldStyle = { display: "flex", flexDirection: "column", gap: "6px", padding: "8px 0" };
++			const labelStyle = { fontSize: "13px", fontWeight: 500, color: "var(--dsw-alias-label-primary)" };
++			const inputStyle = { border: "1px solid var(--dsw-alias-border-l2)", background: "var(--dsw-alias-bg-layer-1)", height: "34px", font: "inherit", color: "var(--dsw-alias-label-primary)", borderRadius: "8px", padding: "0 12px", fontSize: "13px", lineHeight: "1.5", width: "100%", boxSizing: "border-box" };
++			const hintStyle = { color: "var(--dsw-alias-label-tertiary)", margin: 0, fontSize: "12px", lineHeight: "1.6" };
++			const buttonStyle = { border: 0, borderRadius: "8px", background: "var(--dsw-alias-brand-primary)", color: "#fff", height: "32px", padding: "0 18px", fontSize: "13px", fontWeight: 600, cursor: "pointer" };
++			const ghostButtonStyle = { border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "8px", background: "transparent", color: "var(--dsw-alias-label-primary)", height: "32px", padding: "0 18px", fontSize: "13px", cursor: "pointer" };
++			const messageStyle = { margin: "10px 0 0", fontSize: "12px", lineHeight: "1.6", color: kind === "ok" ? "var(--dsw-alias-label-success, #4ade80)" : "var(--dsw-alias-label-error)" };
++			const readOnlyStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "12px", margin: "8px 0 0" };
++			return (0, react_jsx_runtime.jsxs)("li", {
++				style: cardStyle,
++				children: [
++					(0, react_jsx_runtime.jsxs)("button", {
++						type: "button",
++						style: headerStyle,
++						"aria-expanded": open,
++						onClick: () => {
++							setOpen(!open);
++						},
++						children: [
++							(0, react_jsx_runtime.jsxs)("span", {
++								style: { display: "flex", flexDirection: "column", gap: "2px", minWidth: "0" },
++								children: [
++									(0, react_jsx_runtime.jsx)("h3", { style: titleStyle, children: t("title") }),
++									(0, react_jsx_runtime.jsx)("p", { style: descStyle, children: t("description") })
++								]
++							}),
++							(0, react_jsx_runtime.jsxs)("span", {
++								style: { display: "flex", alignItems: "center", gap: "8px", flex: "none" },
++								children: [
++									dirty ? (0, react_jsx_runtime.jsx)("span", { style: pendingStyle, children: t("unsaved") }) : null,
++									(0, react_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-label-tertiary)", fontSize: "12px" }, children: open ? "▾" : "▸" })
++								]
++							})
++						]
++					}),
++					open ? (0, react_jsx_runtime.jsxs)("div", {
++						style: bodyStyle,
++						children: [
++							!state.writable ? (0, react_jsx_runtime.jsx)("p", { role: "status", style: readOnlyStyle, children: t("readOnly") }) : null,
++							(0, react_jsx_runtime.jsxs)("div", {
++								style: fieldStyle,
++								children: [
++									(0, react_jsx_runtime.jsx)("label", { style: labelStyle, children: t("passwordLabel") }),
++									(0, react_jsx_runtime.jsx)("input", { type: "password", value: password, disabled, style: inputStyle, placeholder: t("passwordPlaceholder"), autoComplete: "new-password", onChange: (event) => setPassword(event.target.value) }),
++									(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("passwordHint") })
++								]
++							}),
++							(0, react_jsx_runtime.jsxs)("div", {
++								style: fieldStyle,
++								children: [
++									(0, react_jsx_runtime.jsx)("label", { style: labelStyle, children: t("confirmLabel") }),
++									(0, react_jsx_runtime.jsx)("input", { type: "password", value: confirm, disabled, style: inputStyle, placeholder: t("confirmPlaceholder"), autoComplete: "new-password", onChange: (event) => setConfirm(event.target.value) }),
++									(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("confirmHint") })
++								]
++							}),
++							(0, react_jsx_runtime.jsxs)("div", {
++								style: { display: "flex", gap: "10px", marginTop: "8px" },
++								children: [
++									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: save, disabled: disabled || saving, style: buttonStyle, children: t("saveLabel") }),
++									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: discard, disabled: disabled || saving || !dirty, style: ghostButtonStyle, children: t("discard") })
++								]
++							}),
++							message === "" ? null : (0, react_jsx_runtime.jsx)("p", { role: "status", style: messageStyle, children: message })
++						]
++					}) : null
++				]
++			});
++		}
++		const zh = {
++			title: "访问口令",
++			description: "修改 Web 界面登录口令。保存后立即生效，所有旧会话失效，需要重新登录。",
++			passwordLabel: "新访问口令（至少 6 位）",
++			passwordPlaceholder: "输入新口令",
++			passwordHint: "保存后旧会话会全部失效，请用新口令重新登录。",
++			confirmLabel: "确认新访问口令",
++			confirmPlaceholder: "再次输入新口令",
++			confirmHint: "两次输入需保持一致。",
++			saveLabel: "保存",
++			discard: "放弃",
++			unsaved: "未保存",
++			readOnly: "当前设置不可写。",
++			tooShort: "口令至少需要 6 位。",
++			mismatch: "两次输入的口令不一致。",
++			saved: "已保存：访问口令已更新，旧会话已失效，请重新登录。",
++			saveFailed: "保存失败：可能已被其它修改覆盖或权限不足，请重试。"
++		};
++		const en = {
++			title: "Access password",
++			description: "Change the web GUI login password. Takes effect immediately; all existing sessions are invalidated.",
++			passwordLabel: "New access password (at least 6 chars)",
++			passwordPlaceholder: "Enter new password",
++			passwordHint: "All existing sessions are invalidated on save; sign in again with the new password.",
++			confirmLabel: "Confirm new access password",
++			confirmPlaceholder: "Enter it again",
++			confirmHint: "Both entries must match.",
++			saveLabel: "Save",
++			discard: "Discard",
++			unsaved: "Unsaved",
++			readOnly: "Settings are not writable.",
++			tooShort: "The password needs at least 6 characters.",
++			mismatch: "The two entries do not match.",
++			saved: "Saved: the password changed and all old sessions are invalid — please sign in again.",
++			saveFailed: "Save failed: possibly overwritten concurrently or not permitted. Retry."
++		};
++		/**
++		* Mount the card into the Plugins settings section's 插件配置 area.
++		* @param ctx - the browser plugin context.
++		*/
++		function apply(ctx) {
++			const scope = ctx.settingsScope.bind({ namespace: "access-gate" });
++			const controller = new AccessGateCardController(scope);
++			const t = ctx.locale.bind(NS);
++			ctx.effect(() => ctx.locale.register(NS, { zh, en }), "ui-access-gate: card dictionaries");
++			ctx.slots.inject("settings.plugin.item", function* () {
++				yield ctx.slots.register({
++					name: "settings.plugin.item",
++					id: "access-gate",
++					order: 30,
++					locale: NS,
++					inject: () => controller.inject()
++				}, AccessGateCard);
++			});
++		}
++		//#endregion
++		exports.apply = apply;
++		exports.inject = inject;
++		return module.exports;
++	}
++});
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/install-access-gate-plugin.mjs"
+@@ -0,0 +1,398 @@
++#!/usr/bin/env node
++/**
++ * install-access-gate-plugin.mjs — 安装/卸载「访问门禁」鉴权插件（幂等，可重复执行）
++ *
++ * 做四件事：
++ *   1) 前置校验门闸基础已就位（二选一）：
++ *        - profile 里 dsh-host-webserver / dsh-host-apiproxy / dsh-client-connection
++ *          三个 fork 包（定制插件化改造 构建产物，profile 同名覆盖）；
++ *        - 或全局安装包里打过旧补丁的对应文件（升级前的存量环境）。
++ *      缺少 registerGate / 命名空间暴露 / settings.* 登录放行时拒绝安装。
++ *   2) 把项目内两个插件包复制到 web profile 的 node_modules：
++ *        dsh-host-access-gate / dsh-client-ui-access-gate
++ *      （Loader 以裸包名解析，profile 目录是加载基准）。
++ *   3) 把 web profile 的 cordis.patch.yml 升级为：
++ *        - id: webserver   → 监听地址 127.0.0.1（回环，HTTPS 反代在前；端口沿用 webStartup ?? 3080）；
++ *        - id: connection  → trustedHosts 固化（免 --trusted-host）；
++ *        - insert: access-gate → 挂载鉴权插件（口令取 DSH_ACCESS_GATE_PASSWORD，
++ *          兼容旧名 DSH_WEB_PASSWORD）；
++ *        - insert: ui-access-gate → 挂载前端卡片插件；
++ *      同时把旧版行（web-auth / ui-web-auth）从 patch 中移除。
++ *   4) 存量迁移：
++ *        - settings.yaml 里旧命名空间 web-auth: 重命名为 access-gate:（仅当
++ *          access-gate: 尚不存在；先备份 settings.yaml.bak）；
++ *        - 删除 profile 里旧插件目录 dsh-web-auth / dsh-client-ui-web-auth
++ *          （patch 已迁移，旧插件不再挂载）。
++ *
++ * YAML 合并用与 dsh 完全相同的 entryListSchema（含 `!!js` 表达式标签），
++ * 所以 `!!js ctx.webStartup.port ?? 3080` 这类表达式能无损读写。
++ *
++ * 用法：
++ *   node install-access-gate-plugin.mjs                # 安装（幂等）
++ *   node install-access-gate-plugin.mjs --dry-run      # 只检查，不写入
++ *   node install-access-gate-plugin.mjs --unpatch      # 卸载：还原 patch 文件(.bak)并删除插件目录
++ *   node install-access-gate-plugin.mjs --dsh-root <路径>   # 指定 dsh 安装根（自动搜索时可不填）
++ *   node install-access-gate-plugin.mjs --profile-dir <路径> # 指定 profile 目录（自动推导时可不填）
++ *   node install-access-gate-plugin.mjs --dsh-home <路径>   # 指定 DSH_HOME（settings.yaml 位置，默认 ~/.dsh）
++ *
++ * 退出码：0 = 已是最新/处理完成；2 = 失败（已打印原因）。
++ */
++import { createRequire } from "node:module";
++import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
++import { dirname, join } from "node:path";
++import { fileURLToPath } from "node:url";
++import os from "node:os";
++
++const HERE = dirname(fileURLToPath(import.meta.url));
++const PLUGIN_SRC = join(HERE, "packages", "dsh-host-access-gate");
++const CLIENT_PLUGIN_SRC = join(HERE, "packages", "dsh-client-ui-access-gate");
++const PLUGIN_FILES = ["package.json", "lib/index.js"];
++const CLIENT_PLUGIN_FILES = ["package.json", "lib/index.js", "lib/client.js"];
++
++const CANDIDATE_DSH_ROOTS = [
++  "/usr/lib/node_modules/@deepseek-ai/dsh",
++  "/usr/local/lib/node_modules/@deepseek-ai/dsh",
++];
++
++/** 门闸基础标记：profile fork 优先，全局安装（旧补丁）兜底。 */
++const GATE_MARKERS = ["registerGate(check) {"];
++const APIPROXY_MARKERS = ['exposed.add("access-gate")', 'exposed.add("web-auth")'];
++const CONNECTION_MARKERS = ["webAuthAuthed(ctx, request)"];
++
++// ---------------------------------------------------------------- 定位
++
++function findDshRoot(explicit) {
++  if (explicit) {
++    if (existsSync(join(explicit, "package.json"))) return explicit;
++    fail(`指定的 --dsh-root 不存在或缺少 package.json: ${explicit}`);
++  }
++  for (const root of CANDIDATE_DSH_ROOTS) {
++    if (existsSync(join(root, "package.json"))) return root;
++  }
++  fail("未找到 dsh 安装根。请用 --dsh-root 指定（含 package.json 的 dsh 安装目录）。");
++}
++
++function findProfileDir(explicit, dshHome) {
++  if (explicit) return explicit;
++  const home = dshHome ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh");
++  return join(home, "profiles", "web");
++}
++
++function fail(message) {
++  console.error(`错误：${message}`);
++  process.exit(2);
++}
++
++/** 依次检查候选文件里是否含任一标记；返回命中的文件路径或 undefined。 */
++function findMarked(markers, ...candidateFiles) {
++  for (const file of candidateFiles) {
++    if (!existsSync(file)) continue;
++    const src = readFileSync(file, "utf8");
++    if (markers.some((m) => src.includes(m))) return file;
++  }
++  return void 0;
++}
++
++// ---------------------------------------------------------------- 主流程
++
++const args = process.argv.slice(2);
++const dryRun = args.includes("--dry-run");
++const unpatch = args.includes("--unpatch");
++const allowFormal = args.includes("--allow-formal");
++/** 兼容 `--flag=value` 与 `--flag value` 两种写法。 */
++function optValue(name) {
++  const eq = args.find((a) => a.startsWith(`${name}=`))?.split("=").slice(1).join("=");
++  if (eq !== void 0) return eq;
++  const idx = args.indexOf(name);
++  if (idx >= 0 && idx + 1 < args.length) return args[idx + 1];
++  return void 0;
++}
++const dshRootOpt = optValue("--dsh-root");
++const profileOpt = optValue("--profile-dir");
++const dshHomeOpt = optValue("--dsh-home");
++
++const dshRoot = findDshRoot(dshRootOpt);
++const profileDir = findProfileDir(profileOpt, dshHomeOpt);
++const require = createRequire(join(dshRoot, "package.json"));
++const yaml = require("js-yaml");
++const { entryListSchema } = require("@deepseek-ai/cordis-plugin-include");
++
++// 安全闸：除显式指定 test-env* 目录外，一律视为正式环境，必须 --allow-formal 才允许写入
++// （正式安装本就应由用户在 SSH 终端手动执行，见 AGENTS.md；防止参数笔误误伤正式 profile）。
++if (!/test-env[\d-]*[\\/]/.test(profileDir.replace(/\\/g, "/")) && !allowFormal) {
++  fail(
++    `目标 profile 不是测试环境（${profileDir}），已拒绝写入。\n` +
++    "如确认要对正式 profile 安装（请先在 SSH 终端停止 dsh web），加 --allow-formal 参数。"
++  );
++}
++
++console.log(`dsh 安装根：${dshRoot}`);
++console.log(`web profile：${profileDir}`);
++
++if (unpatch) {
++  const patchFile = join(profileDir, "cordis.patch.yml");
++  const backup = patchFile + ".bak";
++  if (existsSync(backup)) {
++    cpSync(backup, patchFile);
++    console.log(`已还原 ${patchFile} ← ${backup}`);
++  } else {
++    console.log(`没有备份 ${backup}，跳过 patch 文件还原。`);
++  }
++  for (const pkg of ["dsh-host-access-gate", "dsh-client-ui-access-gate"]) {
++    const dest = join(profileDir, "node_modules", pkg);
++    if (existsSync(dest)) {
++      rmSync(dest, { recursive: true, force: true });
++      console.log(`已删除插件目录 ${dest}`);
++    } else {
++      console.log(`插件目录不存在，跳过：${dest}`);
++    }
++  }
++  console.log("\n完成。注意：门闸基础（fork 或旧补丁）仍在，如需还原官方行为请按 定制记录 回退。");
++  process.exit(0);
++}
++
++// 1) 前置校验：门闸基础（profile fork 优先，全局旧补丁兜底）
++const scoped = (pkg) => join(profileDir, "node_modules", "@deepseek-ai", pkg, "lib", "index.js");
++const globalScoped = (pkg) => join(dshRoot, "node_modules", "@deepseek-ai", pkg, "lib", "index.js");
++const gateHit = findMarked(GATE_MARKERS, scoped("dsh-host-webserver"), globalScoped("dsh-host-webserver"));
++if (!gateHit) {
++  fail(
++    "找不到带「请求门闸」的 dsh-host-webserver（registerGate）。\n" +
++    "请先构建并安装 fork：定制插件化改造/build.sh + scripts/test-env-install.sh --from-project 定制插件化改造\n" +
++    "（或对全局安装跑旧的 patch-webserver-gate.py）。缺少 registerGate 时启用鉴权会直接报错。"
++  );
++}
++const apiproxyHit = findMarked(APIPROXY_MARKERS, scoped("dsh-host-apiproxy"), globalScoped("dsh-host-apiproxy"));
++const connectionHit = findMarked(CONNECTION_MARKERS, scoped("dsh-client-connection"), globalScoped("dsh-client-connection"));
++if (!apiproxyHit || !connectionHit) {
++  fail(
++    "设置面板集成基础未完全就位（需要 apiproxy 暴露 access-gate/web-auth 命名空间 + connection 登录后放行 settings.*）。\n" +
++    "请先构建并安装 fork（定制插件化改造/build.sh + scripts/test-env-install.sh --from-project 定制插件化改造），\n" +
++    "或对全局安装跑旧的 patch-settings-integration.py。否则 GUI 里的「访问口令」卡片在 LAN 上无法读写。"
++  );
++}
++console.log(`[1/5] 门闸基础就位（webserver: ${gateHit}）✓`);
++
++// 2) 复制插件包到 profile node_modules（host 插件 + 客户端卡片插件）
++const pluginDest = join(profileDir, "node_modules", "dsh-host-access-gate");
++const clientPluginDest = join(profileDir, "node_modules", "dsh-client-ui-access-gate");
++for (const rel of PLUGIN_FILES) {
++  const src = join(PLUGIN_SRC, rel);
++  if (!existsSync(src)) fail(`插件源码缺失：${src}`);
++}
++for (const rel of CLIENT_PLUGIN_FILES) {
++  const src = join(CLIENT_PLUGIN_SRC, rel);
++  if (!existsSync(src)) fail(`客户端插件源码缺失：${src}`);
++}
++if (!dryRun) {
++  mkdirSync(join(pluginDest, "lib"), { recursive: true });
++  for (const rel of PLUGIN_FILES) {
++    cpSync(join(PLUGIN_SRC, rel), join(pluginDest, rel));
++  }
++  mkdirSync(join(clientPluginDest, "lib"), { recursive: true });
++  for (const rel of CLIENT_PLUGIN_FILES) {
++    cpSync(join(CLIENT_PLUGIN_SRC, rel), join(clientPluginDest, rel));
++  }
++}
++console.log(`[2/5] 插件包 → ${pluginDest} / ${clientPluginDest} ${dryRun ? "（--dry-run，未写入）" : "✓"}`);
++
++// 3) 合并 cordis.patch.yml（含旧行 web-auth/ui-web-auth 迁移）
++const patchFile = join(profileDir, "cordis.patch.yml");
++if (!existsSync(patchFile)) fail(`找不到 profile patch 文件：${patchFile}`);
++const current = yaml.load(readFileSync(patchFile, "utf8"), { schema: entryListSchema });
++if (!Array.isArray(current)) fail(`patch 文件必须是顶层 YAML 数组：${patchFile}`);
++
++const webserverOverride = {
++  id: "webserver",
++  config: {
++    // HTTPS 反代（caddy/nginx）在前，DSH 自身只监听回环地址；鉴权由 mode: on 强制开启。
++    host: "127.0.0.1",
++    port: { __jsExpr: "ctx.webStartup.port ?? 3080" },
++  },
++};
++
++const connectionOverride = {
++  id: "connection",
++  config: {
++    trustedHosts: {
++      __jsExpr: "ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : [process.env.DSH_WEB_TRUSTED_HOST ?? '192.168.1.100']",
++    },
++  },
++};
++
++const accessGateInsert = {
++  insert: [
++    {
++      id: "access-gate",
++      name: "dsh-host-access-gate",
++      inject: ["webServer"],
++      config: {
++        password: { __jsExpr: "process.env.DSH_ACCESS_GATE_PASSWORD ?? process.env.DSH_WEB_PASSWORD" },
++        mode: "on",
++      },
++    },
++    {
++      id: "ui-access-gate",
++      name: "dsh-client-ui-access-gate",
++    },
++  ],
++};
++
++/** 移除旧版插件行（id=web-auth / ui-web-auth），返回是否发生过移除。 */
++function dropLegacyRows(entries) {
++  const ids = new Set(["web-auth", "ui-web-auth"]);
++  let dropped = false;
++  for (const entry of entries) {
++    if (typeof entry !== "object" || entry === null) continue;
++    if (Array.isArray(entry.insert)) {
++      const before = entry.insert.length;
++      entry.insert = entry.insert.filter((i) => !(i && ids.has(i.id)));
++      if (entry.insert.length !== before) dropped = true;
++    }
++    if (typeof entry.id === "string" && ids.has(entry.id)) dropped = true;
++  }
++  return entries.filter((e) => !(typeof e === "object" && e !== null && typeof e.id === "string" && ids.has(e.id)));
++}
++
++let changed = false;
++const entries = dropLegacyRows(current);
++if (entries.length !== current.length) {
++  changed = true;
++  console.log("[3/5] 已移除旧版插件行（web-auth / ui-web-auth）");
++}
++current.length = 0;
++current.push(...entries);
++
++// 3a) webserver 监听地址覆盖
++const wsEntry = current.find((e) => typeof e === "object" && e !== null && e.id === "webserver");
++if (wsEntry) {
++  if (JSON.stringify(wsEntry.config) === JSON.stringify(webserverOverride.config)) {
++    console.log("[3/5] webserver 覆盖已存在且一致（跳过）");
++  } else {
++    fail(
++      `cordis.patch.yml 已存在 id=webserver 的覆盖且与预期不同：${JSON.stringify(wsEntry.config)}\n` +
++      "请手动合并（预期监听 127.0.0.1、端口 ctx.webStartup.port ?? 3080），或先 --unpatch 还原。"
++    );
++  }
++} else {
++  current.push(webserverOverride);
++  changed = true;
++  console.log("[3/5] 新增 webserver 覆盖：host=127.0.0.1（回环，HTTPS 反代在前）");
++}
++
++// 3a-2) connection trustedHosts 固化（启动免 --trusted-host）
++const connEntry = current.find((e) => typeof e === "object" && e !== null && e.id === "connection");
++if (connEntry) {
++  const same = JSON.stringify(connEntry.config) === JSON.stringify(connectionOverride.config);
++  const ours = JSON.stringify(connEntry.config ?? {}).includes("DSH_WEB_TRUSTED_HOST");
++  if (same) {
++    console.log("[3/5] connection trustedHosts 已固化（跳过）");
++  } else if (ours) {
++    connEntry.config = connectionOverride.config;
++    changed = true;
++    console.log("[3/5] connection trustedHosts 已收敛为无端口 host（任意端口放行）");
++  } else {
++    fail(
++      `cordis.patch.yml 已存在 id=connection 的覆盖且非本脚本托管结构：${JSON.stringify(connEntry.config)}\n` +
++      "请手动合并，或先 --unpatch 还原。"
++    );
++  }
++} else {
++  current.push(connectionOverride);
++  changed = true;
++  console.log("[3/5] 固化 connection trustedHosts（免 --trusted-host；DSH_WEB_TRUSTED_HOST 可覆盖默认 IP）");
++}
++
++// 3b) access-gate 插件行 + 设置卡片客户端插件行（合并进同一条 insert，杜绝重复）
++const insertEntry = current.find((e) => typeof e === "object" && e !== null && Array.isArray(e.insert));
++const hasRow = (id) =>
++  insertEntry?.insert.some((i) => i?.id === id) ||
++  current.some((e) => typeof e === "object" && e !== null && e.id === id);
++if (insertEntry) {
++  if (!hasRow("access-gate")) {
++    insertEntry.insert.push(accessGateInsert.insert[0]);
++    changed = true;
++    console.log("[3/5] 追加 access-gate 插件行（口令取 DSH_ACCESS_GATE_PASSWORD，兼容 DSH_WEB_PASSWORD）");
++  } else {
++    console.log("[3/5] access-gate 挂载已存在（跳过）");
++  }
++  if (!hasRow("ui-access-gate")) {
++    insertEntry.insert.push(accessGateInsert.insert[1]);
++    changed = true;
++    console.log("[3/5] 追加 ui-access-gate 设置卡片行");
++  } else {
++    console.log("[3/5] ui-access-gate 设置卡片行已存在（跳过）");
++  }
++} else {
++  current.push(accessGateInsert);
++  changed = true;
++  console.log("[3/5] 新增 access-gate + ui-access-gate 插件行");
++}
++
++if (changed && !dryRun) {
++  // 先备份再写
++  const backup = patchFile + ".bak";
++  if (!existsSync(backup)) {
++    cpSync(patchFile, backup);
++    console.log(`  已备份原 patch 文件 → ${backup}`);
++  }
++  const header = `# 本文件由 install-access-gate-plugin.mjs 管理（首次写入时备份为 cordis.patch.yml.bak）。
++# 项目：访问门禁。手动编辑请保留下列条目结构；重跑安装脚本会幂等跳过。
++`;
++  const body = yaml.dump(current, { schema: entryListSchema, noRefs: true, lineWidth: 120 });
++  writeFileSync(patchFile, header + body);
++  console.log(`  已写入 ${patchFile}`);
++} else if (changed && dryRun) {
++  console.log("  （--dry-run，未写入 patch 文件）");
++}
++
++// 4) 存量迁移：settings.yaml 旧命名空间 web-auth: → access-gate:（文本级，仅改顶层键）
++const dshHome = dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh");
++const settingsFile = join(dshHome, "settings.yaml");
++if (existsSync(settingsFile)) {
++  const raw = readFileSync(settingsFile, "utf8");
++  const hasOld = /^web-auth:\s*$/m.test(raw);
++  const hasNew = /^access-gate:\s*$/m.test(raw);
++  if (hasOld && !hasNew && !dryRun) {
++    const backup = settingsFile + ".bak";
++    if (!existsSync(backup)) {
++      cpSync(settingsFile, backup);
++      console.log(`  已备份 settings.yaml → ${backup}`);
++    }
++    const migrated = raw.replace(/^web-auth:\s*$/m, "access-gate:");
++    writeFileSync(settingsFile, migrated);
++    console.log("[4/5] settings.yaml：旧命名空间 web-auth: 已重命名为 access-gate:（口令保留）");
++  } else if (hasOld && !hasNew) {
++    console.log("[4/5] settings.yaml：检测到旧命名空间 web-auth:（--dry-run，未写入）");
++  } else {
++    console.log("[4/5] settings.yaml：无需迁移（access-gate: 已存在或没有旧 web-auth:）");
++  }
++} else {
++  console.log(`[4/5] settings.yaml 不存在，跳过迁移：${settingsFile}`);
++}
++
++// 5) 删除旧插件目录（patch 已迁移，旧插件不再挂载；目录留着只会造成困惑）
++for (const pkg of ["dsh-web-auth", "dsh-client-ui-web-auth"]) {
++  const oldDest = join(profileDir, "node_modules", pkg);
++  if (existsSync(oldDest)) {
++    if (!dryRun) {
++      rmSync(oldDest, { recursive: true, force: true });
++      console.log(`[5/5] 已删除旧插件目录 ${oldDest}`);
++    } else {
++      console.log(`[5/5] 检测到旧插件目录 ${oldDest}（--dry-run，未删除）`);
++    }
++  }
++}
++
++if (!changed) {
++  console.log("\n无变更，已是最新状态。");
++  process.exit(0);
++}
++if (dryRun) {
++  console.log("\n（--dry-run，未写入任何文件）");
++  process.exit(0);
++}
++
++console.log("\n完成。生效方式：需要重启 dsh web（后端模块已加载进进程）。");
++console.log("重启时请设置环境变量 DSH_ACCESS_GATE_PASSWORD=<口令>（旧名 DSH_WEB_PASSWORD 兼容）；");
++console.log("mode: on 下未配置口令会进入 /setup 首次设置页。");
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/install-to-test-env.sh"
+@@ -0,0 +1,36 @@
++#!/usr/bin/env bash
++# install-to-test-env.sh —— 把「访问门禁」插件装进工作区测试环境（只写 test-env*，不碰正式）。
++# 流程：
++#   1) 安装 定制插件化改造 的三个 fork（webserver 门闸 / apiproxy 命名空间 / connection 放行）
++#      到测试 profile（scripts/test-env-install.sh --from-project）；
++#   2) 用 install-access-gate-plugin.mjs 把两个新插件 + cordis.patch.yml 写入测试 profile，
++#      并对测试环境的 settings.yaml 做存量迁移。
++# 用法：TEST_ENV_INDEX=1 bash install-to-test-env.sh
++# 之后：DSH_ACCESS_GATE_PASSWORD=test123456 scripts/test-env-start.sh
++#       DSH_HOME=$PWD/test-env node test-access-gate.mjs
++set -euo pipefail
++
++HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++WS_ROOT="$(cd "$HERE/.." && pwd)"
++source "$WS_ROOT/scripts/test-env-common.sh"
++resolve_test_env
++
++echo "== 测试环境：$TEST_ENV（TEST_ENV_INDEX=${ENV_INDEX:-1}，端口 $PORT）=="
++echo "  声明状态：$(usage_status)"
++[ -d "$TEST_ENV/profiles/web/node_modules" ] || { echo "✗ 测试环境未初始化，先跑 scripts/test-env-init.sh"; exit 1; }
++
++echo "== [1/2] 安装 fork 包（webserver / apiproxy / connection）到测试 profile =="
++mkdir -p "$TEST_ENV/profiles/web/node_modules/@deepseek-ai"
++"$WS_ROOT/scripts/test-env-install.sh" --from-project 定制插件化改造
++
++echo "== [2/2] 安装访问门禁插件 + 合并 cordis.patch.yml + 迁移 settings.yaml =="
++node "$HERE/install-access-gate-plugin.mjs" \
++  --profile-dir "$TEST_ENV/profiles/web" \
++  --dsh-home "$TEST_ENV" \
++  --dsh-root /usr/lib/node_modules/@deepseek-ai/dsh
++
++echo
++echo "完成。下一步："
++echo "  DSH_ACCESS_GATE_PASSWORD=test123456 scripts/test-env-start.sh"
++echo "  DSH_HOME=$TEST_ENV node $HERE/test-access-gate.mjs"
++echo "  DSH_HOME=$TEST_ENV bash $HERE/verify.sh"
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/switch-to-https.sh"
+@@ -0,0 +1,68 @@
++#!/usr/bin/env bash
++# switch-to-https.sh —— 原子切换到「HTTPS 反代」拓扑（幂等，可重复执行）
++#
++# 拓扑变化：
++#   之前：dsh web 直接监听 0.0.0.0:3080（明文 HTTP，非安全上下文）
++#   现在：dsh web 只监听 127.0.0.1:3080（mode: on 强制登录）
++#         caddy 在 0.0.0.0:5700 提供 HTTPS（自签内部 CA）→ 反代 127.0.0.1:3080
++#
++# 关键点：先停 dsh web 再写 profile 配置——运行中的 dsh 会把 cordis.patch.yml
++# 的改动热重载并导致承载 Web 会话的进程崩溃，所以配置写入必须在进程停止后进行。
++#
++# 用法：sudo bash switch-to-https.sh [局域网IP]
++# 环境变量：DSH_HTTPS_PORT（默认 5700）、DSH_LAN_IP（默认取第一个参数或 192.168.1.100）
++set -uo pipefail
++
++PROJECT="<仓库根目录>/访问门禁"
++LAN_IP="${DSH_LAN_IP:-${1:-192.168.1.100}}"
++HTTPS_PORT="${DSH_HTTPS_PORT:-5700}"
++
++echo "== [1/5] 停掉当前 dsh web（避免配置热重载把 Web 会话搞崩）=="
++pkill -f "/usr/bin/dsh web" 2>/dev/null && sleep 3 || true
++sleep 1
++ss -tlnp 2>/dev/null | grep -q "127.0.0.1:3080 " && { echo "  仍有关联进程，强制结束"; pkill -9 -f "/usr/bin/dsh web" 2>/dev/null || true; sleep 2; }
++
++echo "== [2/5] 写入最终 profile 配置（webserver=127.0.0.1，access-gate mode: on）=="
++cd "$PROJECT"
++node install-access-gate-plugin.mjs --allow-formal
++
++echo "== [3/5] 生成/复用 10 年自签证书，写入 Caddyfile 并启动 caddy（HTTPS 0.0.0.0:${HTTPS_PORT} → 127.0.0.1:3080）=="
++mkdir -p /etc/caddy/certs
++if [ ! -f /etc/caddy/certs/dsh-web.crt ] || ! openssl x509 -in /etc/caddy/certs/dsh-web.crt -noout -checkend 2592000 >/dev/null 2>&1; then
++  openssl req -x509 -newkey rsa:2048 -nodes -days 3650     -keyout /etc/caddy/certs/dsh-web.key -out /etc/caddy/certs/dsh-web.crt     -subj "/CN=${LAN_IP}" -addext "subjectAltName=IP:${LAN_IP},DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
++  echo "  已生成 10 年自签证书（SAN: ${LAN_IP}）"
++fi
++chown -R caddy:caddy /etc/caddy/certs && chmod 640 /etc/caddy/certs/dsh-web.key
++cat > /etc/caddy/Caddyfile <<EOF
++# DSH Web GUI —— HTTPS 反向代理（caddy，自签内部 CA，浏览器首次信任一次）
++# auto_https disable_redirects：不占用 80 端口（避免与既有 Web 服务冲突）
++{
++	auto_https disable_redirects
++}
++
++https://${LAN_IP}:${HTTPS_PORT} {
++	tls /etc/caddy/certs/dsh-web.crt /etc/caddy/certs/dsh-web.key
++	reverse_proxy 127.0.0.1:3080
++}
++EOF
++caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null 2>&1 || { echo "  Caddyfile 校验失败"; exit 1; }
++systemctl enable caddy >/dev/null 2>&1 || true
++systemctl restart caddy
++echo "  caddy 已启动（${LAN_IP}:${HTTPS_PORT}）"
++
++echo "== [4/5] 启动 dsh web（回环 127.0.0.1:3080 + --trusted-host ${LAN_IP} 无端口）=="
++cd /root/.openclaw/workspace 2>/dev/null || cd /root
++nohup node /usr/bin/dsh web --trusted-host "${LAN_IP}" >/tmp/dsh-web.log 2>&1 &
++for i in $(seq 1 60); do
++  grep -q "dsh web:" /tmp/dsh-web.log 2>/dev/null && break
++  sleep 1
++done
++tail -5 /tmp/dsh-web.log
++
++echo "== [5/5] 自检 =="
++sleep 2
++cd "$PROJECT" && bash verify.sh --live || true
++
++echo
++echo "完成。新访问地址：https://${LAN_IP}:${HTTPS_PORT}/"
++echo "（自签证书，浏览器首次访问点「高级 → 继续访问」信任一次即可。）"
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/restore-formal-auth.sh"
+@@ -0,0 +1,84 @@
++#!/usr/bin/env bash
++# restore-formal-auth.sh —— 把正式 profile 的鉴权恢复为旧版「全网监听与登录鉴权」状态
++#
++# 起因：2026-08-16 开发「访问门禁」插件时，install-access-gate-plugin.mjs 的
++# 参数解析 bug（只支持 --flag=value，不支持 --flag value）导致 --profile-dir /
++# --dsh-home 未生效，误把新插件与 patch 写进了正式 profile（/root/.dsh/profiles/web）：
++#   1) cordis.patch.yml 的 insert 里被追加了 access-gate / ui-access-gate 两行；
++#   2) 旧插件目录 dsh-web-auth / dsh-client-ui-web-auth 被删除。
++# settings.yaml 未被动（口令仍在 web-auth 键下）。
++#
++# 本脚本精确还原上述两处改动（不触碰 settings.yaml、不触碰 .bak、不触碰其它 patch 条目）。
++# ⚠ 会停/起正式 dsh web —— 由用户在 SSH 终端手动执行（agent 不自启）。
++#
++# 用法：sudo bash <仓库根目录>/访问门禁/restore-formal-auth.sh
++set -uo pipefail
++
++OLD_PROJECT="<仓库根目录>/全网监听与登录鉴权"
++PROFILE="/root/.dsh/profiles/web"
++PATCH="$PROFILE/cordis.patch.yml"
++
++echo "== [1/4] 停正式 dsh web（避免配置热重载把会话搞崩）=="
++pkill -f "/usr/bin/dsh web" 2>/dev/null && sleep 3 || true
++sleep 1
++ss -tlnp 2>/dev/null | grep -q "127.0.0.1:3080 " && { echo "  仍有关联进程，强制结束"; pkill -9 -f "/usr/bin/dsh web" 2>/dev/null || true; sleep 2; }
++
++echo "== [2/4] 移除新插件目录，恢复旧插件目录 =="
++rm -rf "$PROFILE/node_modules/dsh-host-access-gate" "$PROFILE/node_modules/dsh-client-ui-access-gate"
++echo "  已删除新插件目录（dsh-host-access-gate / dsh-client-ui-access-gate）"
++mkdir -p "$PROFILE/node_modules"
++cp -a "$OLD_PROJECT/dsh-web-auth" "$PROFILE/node_modules/dsh-web-auth"
++cp -a "$OLD_PROJECT/dsh-client-ui-web-auth" "$PROFILE/node_modules/dsh-client-ui-web-auth"
++echo "  已恢复旧插件目录（dsh-web-auth / dsh-client-ui-web-auth）"
++
++echo "== [3/4] 还原 cordis.patch.yml（移除 access-gate 行，恢复 web-auth 行）=="
++[ -f "$PATCH" ] || { echo "  错误：找不到 $PATCH"; exit 1; }
++node -e '
++const { createRequire } = require("node:module");
++const fs = require("node:fs");
++const req = createRequire("/usr/lib/node_modules/@deepseek-ai/dsh/package.json");
++const yaml = req("js-yaml");
++const { entryListSchema } = req("@deepseek-ai/cordis-plugin-include");
++const file = process.argv[1];
++const current = yaml.load(fs.readFileSync(file, "utf8"), { schema: entryListSchema });
++if (!Array.isArray(current)) { console.error("patch 不是数组，中止"); process.exit(2); }
++const NEW_IDS = new Set(["access-gate", "ui-access-gate"]);
++const LEGACY = [
++  { id: "web-auth", name: "dsh-web-auth", inject: ["webServer"], config: { password: { __jsExpr: "process.env.DSH_WEB_PASSWORD" }, mode: "on" } },
++  { id: "ui-web-auth", name: "dsh-client-ui-web-auth" },
++];
++let removed = 0;
++for (const e of current) {
++  if (e && Array.isArray(e.insert)) {
++    const before = e.insert.length;
++    e.insert = e.insert.filter((i) => !(i && NEW_IDS.has(i.id)));
++    removed += before - e.insert.length;
++  }
++}
++const cleaned = current.filter((e) => !(e && typeof e.id === "string" && NEW_IDS.has(e.id)));
++const insert = cleaned.find((e) => e && Array.isArray(e.insert));
++if (insert) {
++  for (const row of LEGACY) {
++    if (!insert.insert.some((i) => i && i.id === row.id)) insert.insert.push(row);
++  }
++} else {
++  cleaned.push({ insert: LEGACY });
++}
++const header = "# 本文件由 install-auth-plugin.mjs 管理（首次写入时备份为 cordis.patch.yml.bak）。\n# 项目：全网监听与登录鉴权。手动编辑请保留下列条目结构；重跑安装脚本会幂等跳过。\n";
++fs.writeFileSync(file, header + yaml.dump(cleaned, { schema: entryListSchema, noRefs: true, lineWidth: 120 }));
++console.log("  已还原 patch：移除 " + removed + " 行新条目，恢复 web-auth / ui-web-auth 挂载行");
++' "$PATCH" || exit 1
++
++echo "== [4/4] 按原方式重启正式 dsh web =="
++cd /
++nohup node /usr/bin/dsh web --trusted-host 192.168.1.100 > /tmp/dsh-web.log 2>&1 &
++for i in $(seq 1 60); do
++  grep -q "dsh web:" /tmp/dsh-web.log 2>/dev/null && break
++  sleep 1
++done
++tail -5 /tmp/dsh-web.log
++
++echo
++echo "还原完成。验证："
++echo "  bash <仓库根目录>/全网监听与登录鉴权/verify.sh --live"
++echo "（口令未变：/root/.dsh/settings.yaml 中 web-auth.password；重启用旧会话失效属正常）"
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/test-access-gate.mjs"
+@@ -0,0 +1,246 @@
++#!/usr/bin/env node
++/**
++ * test-access-gate.mjs — 独立集成测试（不启动 dsh，不碰真实会话）
++ *
++ * 用真实代码做黑盒验证：
++ *   - 导入安装包/测试环境里的 dsh-host-webserver（需含「请求门闸」registerGate，
++ *     来自 定制插件化改造 的 fork 或旧的安装包补丁）；
++ *   - 导入 profile node_modules 里的 dsh-host-access-gate 插件（真实副本）；
++ *   - 场景 A（普通鉴权）：挂载 webserver(127.0.0.1:0) + auth(mode:on, 显式口令)，
++ *     跑登录/401/302/WebSocket 全流程；
++ *   - 场景 B（首次设置）：额外挂载真实 dsh-settings-file（临时 YAML），
++ *     auth(mode:on, 无口令) → 进入首次设置模式：全部跳 /setup、短口令被拒、
++ *     设置口令后写入 settings.yaml（access-gate 命名空间）、用新口令登录成功。
++ *
++ * 用法：node test-access-gate.mjs
++ * 退出码：0 = 全部通过；1 = 有失败项。
++ */
++import { pathToFileURL } from "node:url";
++import { createRequire } from "node:module";
++import os from "node:os";
++import { join } from "node:path";
++import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
++
++const FAIL = [];
++const PASS = [];
++
++function check(label, ok, detail = "") {
++  if (ok) PASS.push(label);
++  else FAIL.push(`${label}${detail ? ` —— ${detail}` : ""}`);
++  console.log(`  [${ok ? "PASS" : "FAIL"}] ${label}${detail ? `（${detail}）` : ""}`);
++}
++
++const DSH_ROOT = process.env.DSH_ROOT ?? "/usr/lib/node_modules/@deepseek-ai/dsh";
++const WEBSERVER_PATH = join(DSH_ROOT, "node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js");
++const SETTINGS_FILE_PATH = join(DSH_ROOT, "node_modules/@deepseek-ai/dsh-settings-file/lib/index.js");
++const profileDir = process.env.DSH_PROFILE ?? join(process.env.DSH_HOME ?? join(os.homedir(), ".dsh"), "profiles/web");
++const AUTH_PLUGIN_PATH = join(profileDir, "node_modules/dsh-host-access-gate/lib/index.js");
++
++const TEST_PASSWORD = "test-pass-123";
++
++const { Context } = await import(pathToFileURL(join(DSH_ROOT, "node_modules/@deepseek-ai/cordis/lib/index.js")));
++const { default: WebServer } = await import(pathToFileURL(WEBSERVER_PATH));
++const { default: SettingsFile } = await import(pathToFileURL(SETTINGS_FILE_PATH));
++const { Config: AuthConfig, apply: authApply, inject: authInject, name: authName } = await import(pathToFileURL(AUTH_PLUGIN_PATH));
++const auth = { name: authName, inject: authInject, Config: AuthConfig, apply: authApply };
++
++const require = createRequire(join(DSH_ROOT, "package.json"));
++const { WebSocket: WsClient, WebSocketServer } = require("ws");
++
++/** Boot one isolated test server: webserver + optional settings + auth. */
++async function bootServer({ password, mountSettings = false, settingsPath }) {
++  const ctx = new Context();
++  if (mountSettings) {
++    const f = ctx.plugin(SettingsFile, { path: settingsPath });
++    await f;
++  }
++  const webFiber = ctx.plugin(WebServer, { host: "127.0.0.1", port: 0 });
++  await webFiber;
++  for (let i = 0; i < 50 && ctx.webServer?.port === void 0; i++) await new Promise((r) => setTimeout(r, 50));
++  const port = ctx.webServer?.port;
++  if (port === void 0) throw new Error("webserver 未监听（port 未解析）");
++  const authConfig = { mode: "on" };
++  if (password !== void 0) authConfig.password = password;
++  const authFiber = ctx.plugin(auth, authConfig);
++  await authFiber;
++  return { ctx, port, authFiber, webFiber };
++}
++
++// ---------------------------------------------------------------- 场景 A：普通鉴权
++console.log("== 场景 A：普通鉴权（显式口令）==");
++{
++  const { ctx, port } = await bootServer({ password: TEST_PASSWORD });
++  const base = `http://127.0.0.1:${port}`;
++  console.log(`测试服务已监听：${base}`);
++  ctx.webServer.registerFallback(async (req, res) => {
++    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
++    res.end("<html><body>SPA-INDEX</body></html>");
++  });
++  ctx.webServer.register({
++    kind: "prefix",
++    path: "/api",
++    handler: async (req, res) => {
++      res.writeHead(200, { "content-type": "application/json" });
++      res.end(JSON.stringify({ ok: true, path: new URL(req.url ?? "/", "http://x").pathname }));
++    },
++  });
++  const wss = new WebSocketServer({ noServer: true });
++  ctx.webServer.registerUpgrade({
++    path: "/api/events.mux",
++    handler: (req, socket, head) => {
++      wss.handleUpgrade(req, socket, head, (ws) => {
++        ws.send("hello-authed");
++        ws.close();
++      });
++    },
++  });
++
++  let cookie = "";
++  {
++    const res = await fetch(`${base}/`, { redirect: "manual" });
++    check("A 未登录 GET / → 302 跳转登录页", res.status === 302 && (res.headers.get("location") ?? "").startsWith("/login"), `status=${res.status}`);
++  }
++  {
++    const res = await fetch(`${base}/login`, { redirect: "manual" });
++    const body = await res.text();
++    check("A GET /login → 200 且包含口令表单", res.status === 200 && body.includes("访问口令") && body.includes("type=\"password\""), `status=${res.status}`);
++  }
++  {
++    const res = await fetch(`${base}/api/ping`, { redirect: "manual" });
++    const body = await res.text();
++    check("A 未登录 GET /api/ping → 401 JSON", res.status === 401 && body.includes("unauthorized"), `status=${res.status}`);
++  }
++  {
++    const res = await fetch(`${base}/login`, {
++      method: "POST",
++      redirect: "manual",
++      headers: { "content-type": "application/x-www-form-urlencoded" },
++      body: "password=wrong-password",
++    });
++    const setCookie = res.headers.get("set-cookie") ?? "";
++    check("A 错误口令 → 302 回登录页且不种 Cookie", res.status === 302 && (res.headers.get("location") ?? "").includes("error=wrong") && !setCookie.includes("dsh_session="), `status=${res.status}`);
++  }
++  {
++    const res = await fetch(`${base}/login`, {
++      method: "POST",
++      redirect: "manual",
++      headers: { "content-type": "application/x-www-form-urlencoded" },
++      body: `password=${encodeURIComponent(TEST_PASSWORD)}`,
++    });
++    const setCookie = res.headers.get("set-cookie") ?? "";
++    cookie = (setCookie.match(/dsh_session=[^;]+/) ?? [""])[0];
++    check("A 正确口令 → 302 到 / 且种 Cookie", res.status === 302 && res.headers.get("location") === "/" && cookie.startsWith("dsh_session="), `status=${res.status}`);
++  }
++  {
++    const res = await fetch(`${base}/`, { redirect: "manual", headers: { cookie } });
++    const body = await res.text();
++    check("A 带 Cookie GET / → 200 正常返回 SPA", res.status === 200 && body.includes("SPA-INDEX"), `status=${res.status}`);
++  }
++  {
++    const res = await fetch(`${base}/api/ping`, { redirect: "manual", headers: { cookie } });
++    const body = await res.text();
++    check("A 带 Cookie GET /api/ping → 200 JSON", res.status === 200 && body.includes('"ok":true'), `status=${res.status}`);
++  }
++  // WebSocket：等待第一个终态（message / error / close / timeout）
++  const wsTry = (ws) => new Promise((resolve) => {
++    let done = false;
++    const finish = (result) => {
++      if (done) return;
++      done = true;
++      resolve(result);
++    };
++    ws.once("message", (data) => finish({ kind: "message", data: String(data) }));
++    ws.once("error", (err) => finish({ kind: "error", message: String(err?.message ?? err) }));
++    ws.once("close", (code, reason) => finish({ kind: "close", code, reason: String(reason) }));
++    setTimeout(() => finish({ kind: "timeout" }), 3000);
++  });
++  {
++    const ws = new WsClient(`ws://127.0.0.1:${port}/api/events.mux`);
++    const result = await wsTry(ws);
++    check("A 未登录 WebSocket 升级被拒绝", result.kind === "error" || (result.kind === "close" && result.reason.includes("403")), JSON.stringify(result));
++    try { ws.terminate(); } catch {}
++  }
++  {
++    const ws = new WsClient(`ws://127.0.0.1:${port}/api/events.mux`, { headers: { cookie } });
++    const result = await wsTry(ws);
++    check("A 带 Cookie WebSocket 升级成功并收到消息", result.kind === "message" && result.data === "hello-authed", JSON.stringify(result));
++    try { ws.terminate(); } catch {}
++  }
++}
++
++// ---------------------------------------------------------------- 场景 B：首次设置
++console.log("\n== 场景 B：首次设置（无任何口令）==");
++{
++  const tmpHome = mkdtempSync(join(os.tmpdir(), "dsh-access-gate-test-"));
++  const settingsPath = join(tmpHome, "settings.yaml");
++
++  let server;
++  try {
++    server = await bootServer({ password: void 0, mountSettings: true, settingsPath });
++    const base = `http://127.0.0.1:${server.port}`;
++    server.ctx.webServer.registerFallback(async (req, res) => {
++      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
++      res.end("<html><body>SPA2</body></html>");
++    });
++
++    {
++      const res = await fetch(`${base}/`, { redirect: "manual" });
++      check("B 无口令时 GET / → 302 到 /setup", res.status === 302 && (res.headers.get("location") ?? "").startsWith("/setup"), `status=${res.status} loc=${res.headers.get("location")}`);
++    }
++    {
++      const res = await fetch(`${base}/setup`, { redirect: "manual" });
++      const body = await res.text();
++      check("B GET /setup → 200 首次设置页（无任何安装码输入框）", res.status === 200 && body.includes("首次设置") && !body.includes("安装码"), `status=${res.status}`);
++    }
++    {
++      const res = await fetch(`${base}/api/ping`, { redirect: "manual" });
++      check("B 无口令时 /api → 401 JSON", res.status === 401, `status=${res.status}`);
++    }
++    {
++      const res = await fetch(`${base}/setup`, {
++        method: "POST",
++        redirect: "manual",
++        headers: { "content-type": "application/x-www-form-urlencoded" },
++        body: "password=abc&confirm=abc",
++      });
++      check("B 过短口令被拒绝", res.status === 302 && (res.headers.get("location") ?? "").includes("error=short"), `status=${res.status} loc=${res.headers.get("location")}`);
++    }
++    {
++      const res = await fetch(`${base}/setup`, {
++        method: "POST",
++        redirect: "manual",
++        headers: { "content-type": "application/x-www-form-urlencoded" },
++        body: "password=first-setup-pass&confirm=first-setup-pass",
++      });
++      check("B 设置口令 → 302 到 /login", res.status === 302 && res.headers.get("location") === "/login", `status=${res.status} loc=${res.headers.get("location")}`);
++    }
++    {
++      const saved = existsSync(settingsPath) ? readFileSync(settingsPath, "utf8") : "";
++      check("B 口令已写入 settings.yaml（access-gate 命名空间）", saved.includes("access-gate") && saved.includes("first-setup-pass"), saved.length > 0 ? "settings.yaml 已生成" : "settings.yaml 缺失");
++    }
++    {
++      const res = await fetch(`${base}/`, { redirect: "manual" });
++      check("B 设置完成后 GET / → 302 到 /login", res.status === 302 && (res.headers.get("location") ?? "").startsWith("/login"), `status=${res.status} loc=${res.headers.get("location")}`);
++    }
++    {
++      const res = await fetch(`${base}/login`, {
++        method: "POST",
++        redirect: "manual",
++        headers: { "content-type": "application/x-www-form-urlencoded" },
++        body: "password=first-setup-pass",
++      });
++      const setCookie = res.headers.get("set-cookie") ?? "";
++      const cookie = (setCookie.match(/dsh_session=[^;]+/) ?? [""])[0];
++      const res2 = await fetch(`${base}/`, { redirect: "manual", headers: { cookie } });
++      const body = await res2.text();
++      check("B 用新口令登录成功并访问 SPA", res.status === 302 && cookie.startsWith("dsh_session=") && res2.status === 200 && body.includes("SPA2"), `login=${res.status} home=${res2.status}`);
++    }
++  } finally {
++    rmSync(tmpHome, { recursive: true, force: true });
++  }
++}
++
++// ---------------------------------------------------------------- 收尾
++console.log(`\n结果：${PASS.length} 通过 / ${FAIL.length} 失败`);
++for (const f of FAIL) console.log(`  FAIL: ${f}`);
++process.exit(FAIL.length === 0 ? 0 : 1);
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/verify.sh"
+@@ -0,0 +1,152 @@
++#!/usr/bin/env bash
++# 验证「访问门禁」插件是否就绪。
++# 用法：
++#   bash verify.sh              # 静态检查 + 独立集成测试（不需要重启 dsh）
++#   bash verify.sh --live       # 额外对运行中服务做 curl 检查（需已重启生效）
++# 环境变量：DSH_HOME（默认 ~/.dsh）、DSH_HTTPS_PORT（默认 5700）、DSH_LAN_IP（默认 192.168.1.100）
++set -u
++
++DSH_ROOT="/usr/lib/node_modules/@deepseek-ai/dsh"
++DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
++PROFILE="$DSH_HOME/profiles/web"
++HERE="$(cd "$(dirname "$0")" && pwd)"
++FAIL=0
++LIVE=0
++[ "${1:-}" = "--live" ] && LIVE=1
++
++echo "== 1) 门闸基础（fork 优先，全局旧补丁兜底）=="
++WEBSERVER_PROFILE="$PROFILE/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js"
++APIPROXY_PROFILE="$PROFILE/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/index.js"
++CONNECTION_PROFILE="$PROFILE/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js"
++WEBSERVER_GLOBAL="$DSH_ROOT/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js"
++APIPROXY_GLOBAL="$DSH_ROOT/node_modules/@deepseek-ai/dsh-host-apiproxy/lib/index.js"
++CONNECTION_GLOBAL="$DSH_ROOT/node_modules/@deepseek-ai/dsh-client-connection/lib/index.js"
++find_marked() { # <marker> <file>...
++  local m="$1"; shift
++  local f
++  for f in "$@"; do
++    [ -f "$f" ] && grep -q "$m" "$f" && { echo "$f"; return 0; }
++  done
++  return 1
++}
++WS_HIT="$(find_marked "registerGate(check) {" "$WEBSERVER_PROFILE" "$WEBSERVER_GLOBAL")"
++if [ -n "$WS_HIT" ]; then
++  echo "  [PASS] webserver 门闸钩子（registerGate）就位：$WS_HIT"
++else
++  echo "  [FAIL] 找不到带 registerGate 的 webserver（先构建安装 fork）"; FAIL=1
++fi
++AP_HIT="$(find_marked 'exposed.add("access-gate")' "$APIPROXY_PROFILE" "$APIPROXY_GLOBAL")"
++if [ -n "$AP_HIT" ]; then
++  echo "  [PASS] apiproxy 已暴露 access-gate 命名空间：$AP_HIT"
++else
++  echo "  [FAIL] apiproxy 未暴露 access-gate（fork 需重建）"; FAIL=1
++fi
++CN_HIT="$(find_marked "webAuthAuthed(ctx, request)" "$CONNECTION_PROFILE" "$CONNECTION_GLOBAL")"
++if [ -n "$CN_HIT" ]; then
++  echo "  [PASS] connection 已登录（webAuth 会话）时放行 settings.*：$CN_HIT"
++else
++  echo "  [FAIL] connection 围栏未放行"; FAIL=1
++fi
++for f in "$WS_HIT" "$AP_HIT" "$CN_HIT"; do
++  if [ -n "$f" ]; then
++    node --check "$f" >/dev/null 2>&1 && echo "  [PASS] 语法检查通过：$(basename "$(dirname "$(dirname "$f")")")" || { echo "  [FAIL] 语法检查失败：$f"; FAIL=1; }
++  fi
++done
++
++echo "== 2) 插件已装入 profile =="
++for PKG in dsh-host-access-gate dsh-client-ui-access-gate; do
++  if [ -f "$PROFILE/node_modules/$PKG/package.json" ] && [ -f "$PROFILE/node_modules/$PKG/lib/index.js" ]; then
++    echo "  [PASS] $PKG 在位"
++  else
++    echo "  [FAIL] $PKG 未安装（先跑 node install-access-gate-plugin.mjs）"; FAIL=1
++  fi
++done
++if ! node --check "$PROFILE/node_modules/dsh-host-access-gate/lib/index.js" >/dev/null 2>&1; then
++  echo "  [FAIL] dsh-host-access-gate 语法检查失败"; FAIL=1
++fi
++if ! node --check "$PROFILE/node_modules/dsh-client-ui-access-gate/lib/client.js" >/dev/null 2>&1; then
++  echo "  [FAIL] 客户端卡片 bundle 语法检查失败"; FAIL=1
++fi
++echo "  [PASS] 插件语法检查通过"
++for OLD in dsh-web-auth dsh-client-ui-web-auth; do
++  if [ -d "$PROFILE/node_modules/$OLD" ]; then
++    echo "  [WARN] 旧插件目录仍在（可手动删除）：$OLD"
++  fi
++done
++
++echo "== 3) cordis.patch.yml 条目 =="
++PATCH="$PROFILE/cordis.patch.yml"
++if grep -q "host: 127.0.0.1" "$PATCH" && grep -q "ctx.webStartup.port ?? 3080" "$PATCH"; then
++  echo "  [PASS] webserver 覆盖：回环 127.0.0.1（HTTPS 反代在前），端口沿用 webStartup ?? 3080"
++else
++  echo "  [FAIL] webserver 覆盖缺失"; FAIL=1
++fi
++if grep -Eq "mode: ('on'|\"on\"|on)" "$PATCH"; then
++  echo "  [PASS] access-gate 强制鉴权 mode: on（回环监听下也要求登录）"
++else
++  echo "  [FAIL] access-gate 缺少 mode: on"; FAIL=1
++fi
++if grep -q "id: access-gate" "$PATCH" && grep -q "name: dsh-host-access-gate" "$PATCH" && grep -q "DSH_ACCESS_GATE_PASSWORD" "$PATCH"; then
++  echo "  [PASS] access-gate 插件行已挂载（口令取 DSH_ACCESS_GATE_PASSWORD，兼容旧名）"
++else
++  echo "  [FAIL] access-gate 插件行缺失"; FAIL=1
++fi
++if grep -q "id: ui-access-gate" "$PATCH" && grep -q "name: dsh-client-ui-access-gate" "$PATCH"; then
++  echo "  [PASS] ui-access-gate 设置卡片行已挂载"
++else
++  echo "  [FAIL] ui-access-gate 设置卡片行缺失"; FAIL=1
++fi
++if grep -q 'id: connection' "$PATCH" && grep -q "DSH_WEB_TRUSTED_HOST" "$PATCH"; then
++  echo "  [PASS] connection trustedHosts 已固化（启动无需 --trusted-host）"
++else
++  echo "  [FAIL] connection trustedHosts 固化缺失"; FAIL=1
++fi
++if grep -q "id: web-auth" "$PATCH" || grep -q "id: ui-web-auth" "$PATCH"; then
++  echo "  [FAIL] patch 仍含旧版插件行（web-auth / ui-web-auth），请重跑安装脚本迁移"; FAIL=1
++else
++  echo "  [PASS] patch 无旧版插件行残留"
++fi
++if [ "$(grep -c 'id: access-gate' "$PATCH")" -gt 1 ] || [ "$(grep -c 'id: ui-access-gate' "$PATCH")" -gt 1 ]; then
++  echo "  [FAIL] patch 条目存在重复（应各只有一处）"; FAIL=1
++else
++  echo "  [PASS] patch 条目无重复"
++fi
++[ -f "$PATCH.bak" ] && echo "  [PASS] patch 备份存在 $PATCH.bak" || echo "  [WARN] 缺少 patch 备份"
++
++echo "== 4) 独立集成测试（真实 webserver + 真实插件，loopback:0）=="
++if node "$HERE/test-access-gate.mjs"; then
++  echo "  [PASS] 集成测试全部通过"
++else
++  echo "  [FAIL] 集成测试有失败项"; FAIL=1
++fi
++
++echo "== 5) 可复现检查：安装脚本 dry-run（应为幂等）=="
++node "$HERE/install-access-gate-plugin.mjs" --dry-run >/dev/null 2>&1 && echo "  [PASS] install-access-gate-plugin.mjs 幂等（dry-run 通过）" || { echo "  [FAIL] 安装脚本 dry-run 失败"; FAIL=1; }
++
++if [ "$LIVE" -eq 1 ]; then
++  echo "== 6) 运行中服务（需已切换 HTTPS 反代并重启）=="
++  HTTPS_PORT="${DSH_HTTPS_PORT:-5700}"
++  LAN_IP="${DSH_LAN_IP:-192.168.1.100}"
++  BASE="https://$LAN_IP:$HTTPS_PORT"
++  CODE=$(curl -sk -o /dev/null -w "%{http_code}" "$BASE/")
++  LOC=$(curl -sk -o /dev/null -w "%{redirect_url}" "$BASE/")
++  if [ "$CODE" = "302" ] && echo "$LOC" | grep -q "/login"; then
++    echo "  [PASS] HTTPS 反代未登录访问已跳转登录页（$CODE → $LOC）"
++  elif [ "$CODE" = "302" ] && echo "$LOC" | grep -q "/setup"; then
++    echo "  [PASS] 首次设置模式：未登录访问跳转 /setup（$CODE → $LOC）"
++  else
++    echo "  [WARN] HTTPS 未登录访问未跳转（status=$CODE）—— 可能尚未切换或鉴权未启用"
++  fi
++  CODE_API=$(curl -sk -o /dev/null -w "%{http_code}" "$BASE/api/anything")
++  [ "$CODE_API" = "401" ] && echo "  [PASS] 未登录 /api → 401" || echo "  [WARN] 未登录 /api → $CODE_API（预期 401）"
++  ss -tlnp 2>/dev/null | grep -q "127.0.0.1:3080 " && echo "  [PASS] dsh web 只监听回环 127.0.0.1:3080（明文 HTTP 不再暴露）" || echo "  [WARN] 未见 dsh 回环监听"
++  ss -tlnp 2>/dev/null | grep -Eq "(:$HTTPS_PORT |\\*:$HTTPS_PORT )" && echo "  [PASS] HTTPS 反代监听 0.0.0.0:$HTTPS_PORT" || echo "  [WARN] 未见 HTTPS 反代监听 $HTTPS_PORT"
++fi
++
++echo
++if [ "$FAIL" -eq 0 ]; then
++  echo "结论：访问门禁文件全部就绪；重启 dsh web 后生效（首次运行请按启动日志提示设置访问口令）。"
++else
++  echo "结论：存在失败项，请检查。"
++fi
++exit "$FAIL"
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/README.md"
+@@ -0,0 +1,140 @@
++# 访问门禁（Access Gate）—— DSH 登录鉴权插件（思路库）
++
++> 原「全网监听与登录鉴权」定制项目**插件化改造**后的正式形态：
++> 把「改安装包补丁 + 手写插件」升级为**源码维护的正式 DSH 插件**
++> （后端 `dsh-host-access-gate` + 前端卡片 `dsh-client-ui-access-gate`），
++> 升级免疫、可维护、可测试。旧项目的补丁脚本（patch-*.py）已退役——
++> 门闸钩子 / 命名空间暴露 / 登录放行由 [定制插件化改造](../../定制插件化改造/)
++> 的 fork 包提供。
++
++---
++
++## 1. 要解决的问题
++
++`dsh web` 默认只监听 `127.0.0.1:3080`；直接监听 `0.0.0.0` 又被启动器硬性拒绝
++（官方警告：会暴露远程代码执行）。目标是让局域网内其他设备能安全访问 Web GUI：
++
++1. 有**口令登录**（避免把「远程代码执行面」裸奔）；
++2. 走 **HTTPS**（彻底解决浏览器「非安全上下文」问题，如 `crypto.randomUUID`）。
++
++## 2. 架构（与旧版的关系）
++
++```
++局域网设备 ──HTTPS(自签)──▶ 0.0.0.0:5700（caddy 反向代理）
++                                │ 未登录 → /login；首次无口令 → /setup
++                                ▼
++                          127.0.0.1:3080（dsh web，只监听回环）
++                                ├─ 路由分发：/api/*（RPC 网关）、/plugins/*/client.js
++                                ├─ 回退座：SPA dist（frontend-static）
++                                └─ WebSocket 升级：/api/events.mux、/api/events.host
++```
++
++| 组件 | 旧版（全网监听与登录鉴权） | 本插件（访问门禁） |
++|---|---|---|
++| 请求门闸钩子 `registerGate` | `patch-webserver-gate.py` 打安装包 | **fork** `dsh-host-webserver`（profile 同名覆盖） |
++| 设置命名空间暴露 | `patch-settings-integration.py` 打安装包 | **fork** `dsh-host-apiproxy`：`exposed.add('access-gate')` |
++| settings.* 登录放行 | 同上（connection） | **fork** `dsh-client-connection`：`webAuthAuthed` |
++| 鉴权后端插件 | `dsh-web-auth`（手写 ESM） | **`dsh-host-access-gate`**（改名规范化） |
++| 设置入口 | 「设置 → 插件」独立标签页 `settings.plugins.tab` | **「设置 → 插件 → 插件配置」卡片** `settings.plugin.item`（开发规范 §2.5） |
++| 口令存储键 | settings.yaml `web-auth:` | settings.yaml **`access-gate:`**（安装脚本自动迁移旧键） |
++| 环境变量 | `DSH_WEB_PASSWORD` | `DSH_ACCESS_GATE_PASSWORD`（兼容旧名） |
++
++## 3. 命名对照（重命名清单）
++
++| 位置 | 旧名 | 新名 |
++|---|---|---|
++| 项目文件夹 | 全网监听与登录鉴权/ | **访问门禁/** |
++| 后端插件包 | `dsh-web-auth` | **`dsh-host-access-gate`** |
++| 前端插件包 | `dsh-client-ui-web-auth` | **`dsh-client-ui-access-gate`** |
++| cordis 插件 id | `web-auth` / `ui-web-auth` | **`access-gate`** / **`ui-access-gate`** |
++| settings 命名空间 | `web-auth` | **`access-gate`** |
++| 会话 Cookie | `dsh_session` | `dsh_session`（不变） |
++| webAuth 服务名 | `webAuth` | `webAuth`（不变，connection fork 契约） |
++| 环境变量 | `DSH_WEB_PASSWORD` | `DSH_ACCESS_GATE_PASSWORD`（旧名兼容兜底） |
++
++## 4. 方案要点
++
++| 项 | 值 |
++|---|---|
++| 对外访问 | `https://<IP>:5700/`（caddy；**10 年自签证书**，浏览器首次信任一次；只认 https 前缀） |
++| dsh 监听 | `127.0.0.1:3080`（仅回环，明文 HTTP 不再暴露） |
++| 登录 | `/login` 输入访问口令（`mode: on` 强制） |
++| 首次启动 | 未设置任何口令时所有页面跳 `/setup`，由用户**自行设置**访问口令（不生成、不打印） |
++| 修改口令 | GUI「设置 → 插件 → 插件配置 → 访问口令」卡片（保存后旧会话立即失效） |
++| 会话 | Cookie `dsh_session`（HMAC-SHA256、HttpOnly、SameSite=Strict、默认 7 天） |
++| 未登录行为 | 页面/静态资源 → 302 /login；`/api/*` → 401 JSON；WebSocket 升级 → 403 |
++| 口令来源（优先级） | config.password > settings 命名空间 `access-gate.password` > `DSH_ACCESS_GATE_PASSWORD`（兼容 `DSH_WEB_PASSWORD`）> passwordFile |
++| 限速 | 每来源 IP（识别 X-Forwarded-For）10 次/10 分钟错误尝试后锁定登录 |
++| 版本 | dsh `0.1.0-rc.6`；fork 构建自 定制插件化改造 |
++
++## 5. 安装 / 测试 / 回退
++
++```bash
++# 0) 构建依赖的 fork（apiproxy 已含 access-gate 命名空间暴露）
++cd ../定制插件化改造 && pnpm --filter "@deepseek-ai/dsh-host-apiproxy" build && cd ..
++
++# 1) 测试环境（不碰正式）
++bash install-to-test-env.sh                 # 装 fork + 新插件 + patch 进 test-env（3090）
++DSH_ACCESS_GATE_PASSWORD=test123456 scripts/test-env-start.sh
++DSH_HOME=$PWD/test-env node test-access-gate.mjs    # 独立集成测试（17 项）
++DSH_HOME=$PWD/test-env bash verify.sh               # 静态 + 集成 + 幂等检查
++
++# 2) 正式环境（⚠ 会停/起正式 dsh，需用户在 SSH 终端手动执行）
++bash switch-to-https.sh <局域网IP>          # 原子：停 dsh → 装插件写配置 → 起 caddy → 起 dsh → 自检
++
++# 回退
++node install-access-gate-plugin.mjs --unpatch   # 还原 cordis.patch.yml.bak + 删除插件目录
++```
++
++## 6. 升级应对策略
++
++DSH 升级/重装只可能覆盖全局安装包；本项目的依赖全部在 `$DSH_HOME`（profile 插件 +
++fork 同名覆盖）+ 系统服务（caddy），**天然升级免疫**。若上游 API 契约变化
++（registerGate 签名、settings 事件名、client bundle 格式），按
++`升级后重打补丁指南.md` 适配：改 fork 源码 → rebuild → test-env 验证。
++
++## 7. 关键代码位置
++
++- 门闸钩子：`定制插件化改造/packages/dsh-host-webserver/src/index.ts`（`registerGate`）
++- 命名空间暴露：`定制插件化改造/packages/dsh-host-apiproxy/src/api-proxy.ts`
++  （`exposedNamespaces()`：`access-gate` + 兼容 `web-auth`）
++- 登录放行：`定制插件化改造/packages/dsh-client-connection/src/index.ts`
++  （`webAuthAuthed`，消费 `webAuth` 服务）
++- 鉴权插件：`packages/dsh-host-access-gate/lib/index.js`（登录/首次设置/会话/限速/命名空间）
++- 前端卡片：`packages/dsh-client-ui-access-gate/lib/client.js`
++  （`settings.plugin.item` 注册 + AccessGateCard 组件）
++- 安装/迁移：`install-access-gate-plugin.mjs`（含旧 `web-auth` 行与口令键迁移）
++
++## 8. 经验与避坑
++
++### 8.1 参数解析与正式环境防护（本次最大教训）
++
++`--profile-dir test-env/profiles/web` 这类**空格分隔参数**曾被解析为 `--flag=value`
++形式而漏读 → 脚本回退到默认正式 profile，**误写正式环境**。修复：
++① 参数解析同时支持两种写法；② 增加安全闸：目标 profile 不是 `test-env*` 目录时
++**拒绝写入**，必须显式 `--allow-formal`。正式环境的任何安装/还原脚本，一律
++封装后**交用户在 SSH 终端执行**（agent 不自启 dsh）。
++
++### 8.2 配置热重载会崩掉运行中的 Web 会话（沿用旧项目教训）
++
++运行中的 dsh web 会热重载 `cordis.patch.yml`：服务存活时改写该文件会把承载
++GUI/agent 会话的进程搞崩。所有配置改动必须「先停 → 写 → 再启动」原子化。
++
++### 8.3 非安全上下文问题用 HTTPS 整体解决
++
++明文 HTTP（局域网 IP）是非安全上下文：`crypto.randomUUID` 等浏览器 API 不可用。
++用 caddy/nginx 反代 + 自签证书 + `--trusted-host` 一次解决，不逐个 polyfill。
++
++### 8.4 设置写路径的 RPC 契约
++
++客户端设置卡片保存走 `api.settings.mutate({ns, ops:[{op:"set",path:[field],value}]})`
++（带 expectedRevision），不是 `settings.update`。改口令落盘后 host 端 `onChange`
++轮换 HMAC key → 旧会话立即失效（实测：旧 Cookie 302、新口令登录成功）。
++
++### 8.5 其它沿用旧项目的避坑
++
++- caddy 默认占 80 端口：Caddyfile 加 `auto_https disable_redirects`；
++- `tls internal` 只签配置的 host：用真实 IP 访问（127.0.0.1 会 SNI 不匹配）；
++- 同端口无法同时收 HTTP 与 HTTPS：直接 `https://` 前缀访问，不做跳转端口；
++- 端口与 dsh 解耦：trustedHosts 用无端口 host，改端口只动 Caddyfile；
++- 首次启动不生成/打印任何随机口令，只提示用户去 `/setup` 设置。
+
++++ "b/\350\256\277\351\227\256\351\227\250\347\246\201/\345\215\207\347\272\247\345\220\216\351\207\215\346\211\223\350\241\245\344\270\201\346\214\207\345\215\227.md"
+@@ -0,0 +1,55 @@
++# 升级后重打补丁指南 —— 访问门禁
++
++> 「访问门禁」插件**升级免疫**：DSH 升级只覆盖全局安装包，而本项目全部依赖都在
++> `$DSH_HOME`（profile 插件 + fork 同名覆盖）与系统服务（caddy）。升级后通常
++> **什么都不用重打**，只需按 §2 重验；仅当上游 API 契约变化时才需按 §3 适配。
++
++## 1. 依赖清单（升级后核对）
++
++| 依赖 | 位置 | 升级后状态 |
++|---|---|---|
++| `dsh-host-access-gate` / `dsh-client-ui-access-gate` | `$DSH_HOME/profiles/web/node_modules/` | 免疫（误删则重跑 install-access-gate-plugin.mjs） |
++| fork：`dsh-host-webserver`（registerGate）、`dsh-host-apiproxy`（access-gate 暴露）、`dsh-client-connection`（登录放行） | `$DSH_HOME/profiles/web/node_modules/@deepseek-ai/` | 免疫；上游 API 变动时改 `定制插件化改造/packages/*/src` 重建 |
++| `cordis.patch.yml`（webserver=127.0.0.1、access-gate mode:on、connection trustedHosts） | `$DSH_HOME/profiles/web/` | 免疫 |
++| caddy HTTPS 反代 | `/etc/caddy/Caddyfile` + systemd | 免疫 |
++
++## 2. 升级后的一键重验
++
++```bash
++cd <仓库根目录>/访问门禁
++
++# 1) 确认插件与配置还在（幂等；缺失自动补齐，重复执行安全）
++node install-access-gate-plugin.mjs --allow-formal
++
++# 2) 静态 + 独立集成测试
++bash verify.sh
++
++# 3) 重启正式 dsh 后跑在线检查（会重启，需用户在 SSH 终端执行）
++#    bash switch-to-https.sh <局域网IP>
++#    bash verify.sh --live
++```
++
++## 3. 上游 API 契约变化时的适配
++
++1. 看 fork 构建输出/启动日志定位破坏点（`定制插件化改造/` 有 upstream 快照对照）；
++2. 按语义移植（对照 `定制记录/本次diff.patch` 与 fork 源码）：
++   - **webserver**（`packages/dsh-host-webserver/src/index.ts`）：`registerGate(check)`
++     门闸钩子在路由分发前执行（HTTP）与升级协商前执行（拒绝 403）；
++   - **apiproxy**（`packages/dsh-host-apiproxy/src/api-proxy.ts`）：`exposedNamespaces()`
++     加 `exposed.add('access-gate')`（`web-auth` 保留以兼容存量）；
++   - **connection**（`packages/dsh-client-connection/src/index.ts`）：受保护方法围栏加
++     `&& !(method.startsWith('settings.') && webAuthAuthed(ctx, request))`；
++   - **鉴权插件**：若 `dsh-settings` / webserver 接口变化，改 `packages/dsh-host-access-gate/`
++     （登录/首次设置/会话/限速逻辑）。
++3. 移植后：fork 用 `pnpm --filter "@deepseek-ai/<pkg>" build` 重建 → `install-to-test-env.sh`
++   装 test-env → `test-access-gate.mjs` + `verify.sh` 全绿 → 才允许正式安装。
++
++## 4. 回退（完全还原到无鉴权官方状态）
++
++```bash
++# ① 卸载插件（还原 cordis.patch.yml.bak + 删除插件目录）
++node install-access-gate-plugin.mjs --unpatch --allow-formal
++# ② 移除 fork（拷回安装时的 .bak，或删目录回退全局官方版）
++# ③ 停 caddy（systemctl disable --now caddy）——若不再需要 HTTPS 入口
++# ④ 重启 dsh web
++```
+

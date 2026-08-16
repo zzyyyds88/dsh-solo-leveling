@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+/**
+ * verify-defaults.mjs — dsh-defaults 统一插件验证脚本
+ *
+ * 对运行中的 DSH 实例做黑盒验证：
+ *   1) dsh-defaults 设置命名空间已注册并暴露（settings.describe）；
+ *   2) 设置写入 → 持久化 → 读取回环（settings.mutate / describe）；
+ *   3) 目录选择器默认目录生效（host.listDirectory 无路径 → 配置目录）；
+ *   4) pi-ai 第三方供应商注册且思考强度菜单正常（llm.models）；
+ *   5) 前端设置标签页 bundle 可被服务端提供（/plugins/.../client.js）。
+ *
+ * 用法：
+ *   node verify-defaults.mjs                        # 验证 http://127.0.0.1:3090（测试环境默认）
+ *   node verify-defaults.mjs --base http://127.0.0.1:3090 --password test123456
+ * 退出码：0 = 全部通过；1 = 有失败项。
+ */
+import { randomUUID } from "node:crypto";
+
+const args = process.argv.slice(2);
+const base = (args.find((a) => a.startsWith("--base=")) ?? "--base=http://127.0.0.1:3090").split("=")[1];
+const password = (args.find((a) => a.startsWith("--password=")) ?? "--password=test123456").split("=")[1];
+
+const FAIL = [];
+const PASS = [];
+const check = (label, ok, detail = "") => {
+  if (ok) PASS.push(label);
+  else FAIL.push(`${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  [${ok ? "PASS" : "FAIL"}] ${label}${detail ? `（${detail}）` : ""}`);
+};
+
+// 登录拿会话 cookie（web-auth 门闸；官方基线无门闸时直接调用）
+let cookie;
+try {
+  const loginRes = await fetch(`${base}/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password }),
+    redirect: "manual",
+  });
+  cookie = loginRes.headers.get("set-cookie")?.split(";")[0];
+  const noGate = loginRes.status === 404 || loginRes.status === 405;
+  check("登录（门闸）", !!cookie || noGate, `HTTP ${loginRes.status}${cookie ? "" : noGate ? "（无门闸，直接调用）" : "（无 cookie！）"}`);
+} catch {
+  check("登录（门闸）", true, "无 /login 端点（官方基线无鉴权），跳过");
+}
+const call = async (method, payload) => {
+  const res = await fetch(`${base}/api/${method}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+    body: JSON.stringify({ type: "client-request", rpcId: randomUUID(), method, payload }),
+  });
+  if (!res.ok) throw new Error(`${method}: HTTP ${res.status}`);
+  return (await res.json()).result;
+};
+
+console.log(`== 验证目标：${base} ==`);
+
+// 1) 命名空间暴露与注册
+const describe = await call("settings.describe", {});
+const ns = describe.value?.namespaces?.find((n) => n.ns === "dsh-defaults");
+check("dsh-defaults 命名空间已暴露并注册", !!ns, ns ? JSON.stringify(ns.value) : "未在 describe 中");
+const nsSchemaDict = ns?.schema?.refs?.[String(ns.schema.uid)]?.dict ?? {};
+check(
+  "schema 含两个字段",
+  "defaultWorkingDirectory" in nsSchemaDict && "defaultRetryCount" in nsSchemaDict,
+  Object.keys(nsSchemaDict).join(","),
+);
+
+// 2) 写入回环：临时改值 → 读回 → 验证目录默认值 → 还原
+let retryCount = ns?.value?.defaultRetryCount ?? 5;
+let workDir = ns?.value?.defaultWorkingDirectory ?? "";
+const probeRetry = retryCount === 5 ? 7 : 5;
+if (ns) {
+  const m = await call("settings.mutate", {
+    ns: "dsh-defaults",
+    ops: [
+      { op: "set", path: ["defaultRetryCount"], value: probeRetry },
+      { op: "set", path: ["defaultWorkingDirectory"], value: "/home/user/Projects" },
+    ],
+  });
+  check("settings.mutate 写入成功", m.ok === true);
+  const d2 = await call("settings.describe", {});
+  const ns2 = d2.value.namespaces.find((n) => n.ns === "dsh-defaults");
+  check(
+    "写入回读一致",
+    ns2?.value?.defaultRetryCount === probeRetry && ns2?.value?.defaultWorkingDirectory === "/home/user/Projects",
+    JSON.stringify(ns2?.value),
+  );
+}
+
+// 3) 目录选择器默认目录（写入状态下验证，再还原）
+const dir = await call("host.listDirectory", {});
+check("目录选择器默认目录生效", dir.value?.path === "/home/user/Projects", `path=${dir.value?.path}`);
+
+// 还原设置
+if (ns) {
+  await call("settings.mutate", {
+    ns: "dsh-defaults",
+    ops: [
+      { op: "set", path: ["defaultRetryCount"], value: retryCount },
+      workDir === "" ? { op: "unset", path: ["defaultWorkingDirectory"] } : { op: "set", path: ["defaultWorkingDirectory"], value: workDir },
+    ],
+  });
+}
+
+// 4) pi-ai 供应商 + 思考强度
+const models = await call("llm.models", {});
+const tr = models.value?.groups?.find((g) => g.id === "tokenrhythm");
+check("pi-ai 第三方供应商已注册", !!tr, JSON.stringify(models.value?.failures ?? []));
+const efforts = tr?.models?.[0]?.reasoning?.efforts?.map((e) => e.id) ?? [];
+check("思考强度菜单含 off/low/medium/high", ["off", "low", "medium", "high"].every((l) => efforts.includes(l)), efforts.join(","));
+
+// 5) 前端设置标签页 bundle
+const bundleRes = await fetch(`${base}/plugins/dsh-client-ui-defaults/client.js`, { headers: cookie ? { cookie } : {} });
+const bundleText = await bundleRes.text();
+check("设置标签页 bundle 可提供", bundleRes.status === 200 && bundleText.includes("dsh-defaults"), `HTTP ${bundleRes.status}`);
+
+console.log(`\n${PASS.length} 项通过，${FAIL.length} 项失败`);
+process.exit(FAIL.length === 0 ? 0 : 1);
