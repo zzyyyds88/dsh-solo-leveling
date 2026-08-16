@@ -28,7 +28,7 @@
 | `dsh-web-auth`（[kitty-eu-org](https://github.com/kitty-eu-org/dsh-web-auth)） | 后端 | 登录门闸：首次 `/setup` 设口令、会话 Cookie + 限速 | profile 挂载 |
 | `dsh-client-ui-web-auth` | 前端 | 「设置 → 插件 → 访问口令」独立标签页（改口令后旧会话立即失效） | profile 挂载 |
 | `dsh-host-access-gate` | 后端 | **访问门禁**：登录门闸（首次 `/setup` 设口令、会话 Cookie + 限速、`access-gate` 口令命名空间）；由 `dsh-web-auth` 改名规范化，正式形态见 `dsh-AccessGate/` | profile 挂载 |
-| `dsh-client-ui-access-gate` | 前端 | 「设置 → 插件 → 插件配置 → 访问口令」**卡片**（`settings.plugin.item`，样式同官方网页搜索卡片）；由 `dsh-client-ui-web-auth` 改名 + 标签页改卡片 | profile 挂载 |
+| `dsh-client-ui-access-gate` | 前端 | 「设置 → 插件 → 插件配置 → 访问门禁」**卡片**（`settings.plugin.item`，样式同官方网页搜索卡片）：改访问口令 + 配置 HTTPS 反代参数（局域网地址/端口）；由 `dsh-client-ui-web-auth` 改名 + 标签页改卡片 | profile 挂载 |
 | `dsh-mobile-adapt` | 前端 | 移动端适配 | profile 挂载 |
 | `deepseek-pet`（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT，收录） | 前端 | **网页桌宠**：随任务/工具调用/上下文占用/活跃会话自动切换表情（思考/编码/等待批准/多会话忙碌等），支持拖动、缩放、折叠、批准/提问气泡；**增强**：WebAudio 音效（完成琶音/出错安慰/戳音）、edge-tts 离线语音（23 条原创台词）、长按摸头、双击静音、三击诊断、纸屑庆祝、音量持久化 | profile 挂载（`deepseek-pet/install-to-test-env.sh` / 正式 `dsh plugin add`） |
 | `@zzyyyds88/dsh-task-suite-all`（`dsh-task-suite/`，自 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) v0.1.17 抽取） | 前端聚合 | **精选 Web UI 插件集（一个包装齐）**：任务看板（五列 + cron 定时跑 + 真实会话执行）、实时令牌统计（TPS/LLM 耗时/上下文/缓存命中/输入输出 token）、实时吞吐统计（流式估算）、Git 图谱（分支泳道 + 提交历史）、右侧面板（文件树 + 多标签预览 + SCM stage/unstage/discard）、图像理解（describe_image 工具 + 配置卡）、设置中心、皮肤中心 + 11 款皮肤 | 聚合包 cordis.patch.yml 汇总子包行；皮肤互斥走 HOME 层 managed 区段（皮肤中心热切换，无需重启） |
@@ -91,7 +91,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 | `dsh-llm-pi-ai` | `llm.models` 中手写模型带 off/low/medium/high 强度菜单；未声明 retryPolicy 的供应商按 `defaultRetryCount` 重试 |
 | `dsh-defaults` + `dsh-client-ui-defaults` | 设置 → 插件 → 插件配置 →「默认值」卡片可读写；改默认工作目录后选择器即时定位；重试默认对所有供应商生效（`node dsh-defaults/verify-defaults.mjs` 一键验证） |
 | `dsh-web-auth` + `dsh-client-ui-web-auth` | 首次 `/setup` 设口令；设置 → 插件 → 访问口令可改口令 |
-| `dsh-host-access-gate` + `dsh-client-ui-access-gate`（访问门禁） | 首次 `/setup` 设口令；设置 → 插件 → 插件配置 →「访问口令」**卡片**改口令；`settings.describe`（登录后）含 `access-gate` 命名空间 |
+| `dsh-host-access-gate` + `dsh-client-ui-access-gate`（访问门禁） | 首次 `/setup` 设口令；设置 → 插件 → 插件配置 →「访问门禁」卡片改口令 + 配置反代参数（lanHost/httpsPort）；`settings.describe`（登录后）含 `access-gate` 命名空间 |
 | `deepseek-pet` | 页面右下角出现桌宠角色；`deepseek-pet/verify.sh --live` 一键验证（boot 清单含 `deepseek-pet` 条目 + `/plugins/deepseek-pet/client.js` 可加载） |
 | `dsh-task-suite`（`@zzyyyds88/*` 全家桶） | 侧边栏「任务看板」、输入框下方实时统计、输入框上方 Git 分支选择器、右侧「预览 / 文件/变更」面板、对话提到图片可走 describe_image、设置 → 插件 → 插件配置 Web UI 组（含 Image understanding 卡）+ 皮肤中心；`dsh-task-suite/verify.sh --live` 一键验证（boot 清单 8 插件 + 皮肤行 + bundle 路由）；皮肤热切换：`POST /api/skin-center/apply {"skin":"<id>"}` |
 
