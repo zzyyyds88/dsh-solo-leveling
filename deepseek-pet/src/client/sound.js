@@ -70,15 +70,42 @@ export function setVolume(value) {
 }
 
 let audioCtx = null
+let lastAudioError = null
 
-function ensureAudio() {
-  if (!audioCtx) {
-    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)() } catch {}
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    try { audioCtx.resume() } catch {}
+/** 诊断：最近一次音频错误（供三击诊断面板展示）。 */
+export function audioError() {
+  return lastAudioError
+}
+
+/** 创建（不 resume）AudioContext。若已存在则原样返回。 */
+function createAudioContext() {
+  if (audioCtx) return audioCtx
+  try { audioCtx = new (window.AudioContext || window.webkitAudioContext)() } catch (error) {
+    lastAudioError = `create: ${String(error?.message ?? error)}`
   }
   return audioCtx
+}
+
+function ensureAudio() {
+  createAudioContext()
+  if (audioCtx && audioCtx.state === 'suspended') {
+    try { audioCtx.resume() } catch (error) {
+      lastAudioError = `resume: ${String(error?.message ?? error)}`
+    }
+  }
+  return audioCtx
+}
+
+/** 诊断：当前音频状态（供三击诊断面板展示）。 */
+export function audioState() {
+  return {
+    state: audioCtx ? audioCtx.state : 'uncreated',
+    muted: settings.muted,
+    total: settings.total,
+    voice: settings.voice,
+    sfx: settings.sfx,
+    celebrate: settings.celebrate,
+  }
 }
 
 /**
@@ -168,12 +195,15 @@ export function unlockAudio() {
 let unlockArmed = false
 
 /**
- * 全局手势解锁：页面任意一次用户交互（pointerdown/keydown/touchstart）即
- * 创建并 resume AudioContext。浏览器要求音频上下文必须在用户手势中解锁，
- * 而任务完成庆祝发生在后台（非手势上下文）——若用户只发消息、没点过桌宠，
- * 完成音效/语音会静默。挂载时调用一次，幂等。
+ * 全局手势解锁：挂载时**立即预热创建** AudioContext（即使无手势也存在，
+ * 避免任务完成瞬间在非手势上下文首次创建而被浏览器强制 suspended）；
+ * 页面任意一次用户交互（pointerdown/keydown/touchstart）再 resume 解锁。
+ * 浏览器要求音频上下文必须经用户手势 resume 才能出声，而完成庆祝发生在
+ * 后台（非手势上下文）——若用户只是旁观、没点过页面，预热创建 + 手势
+ * resume 是唯一可靠路径。挂载时调用一次，幂等。
  */
 export function armAutoplayUnlock() {
+  createAudioContext() // 预热：页面加载即有 ctx（可能 suspended）
   if (unlockArmed) return
   unlockArmed = true
   const unlock = () => {
@@ -232,7 +262,8 @@ export async function speakVoice(key) {
     source.connect(gain).connect(ctx.destination)
     source.start()
     return true
-  } catch {
+  } catch (error) {
+    lastAudioError = `speak: ${String(error?.message ?? error)}`
     return false
   }
 }

@@ -6,7 +6,7 @@ import {
   stateFromSnapshot, streamFromSnapshot,
 } from './pet-state.js'
 import {
-  armAutoplayUnlock, beep, getVolume, isMuted, playCelebrate, playPoke, playSad,
+  armAutoplayUnlock, audioError, audioState, beep, getVolume, isMuted, playCelebrate, playPoke, playSad,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.js'
 
@@ -575,13 +575,17 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
   /** 诊断面板内容。 */
   const diagLines = useMemo(() => {
     const running = runningSessions.length + (focusedSession?.running ? 1 : 0)
+    const audio = audioState()
+    const audioErr = audioError()
     return [
       ['会话', `${(list.ids ?? []).length} 个`],
       ['运行中', `${running} 个`],
       ['上下文', `${Math.round(contextRatio * 100)}%`],
       ['状态', effectiveVisual.kind],
-      ['音量', `${Math.round((getVolume() ?? 1) * 100)}%`],
+      ['音频', audio.state === 'running' ? 'running ✓' : audio.state === 'suspended' ? 'suspended（点一下解锁）' : '未创建'],
       ['静音', muted ? '是' : '否'],
+      ['音量', `${Math.round((audio.total ?? 1) * 100)}%`],
+      ...(audioErr ? [['音频错误', audioErr]] : []),
     ]
   }, [runningSessions.length, focusedSession?.running, list.ids, contextRatio, effectiveVisual.kind, muted])
 
