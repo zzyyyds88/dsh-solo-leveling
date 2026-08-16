@@ -6,7 +6,9 @@
 #   2) 用 install-access-gate-plugin.mjs 把两个新插件 + cordis.patch.yml 写入测试 profile，
 #      并对测试环境的 settings.yaml 做存量迁移。
 # 用法：TEST_ENV_INDEX=1 bash install-to-test-env.sh（环境统一在 test-envs/ 下）
-# 之后：DSH_ACCESS_GATE_PASSWORD=test123456 scripts/test-env-start.sh
+# 之后：scripts/test-env-start.sh
+#       （启动后首次访问 http://127.0.0.1:<PORT> 自动进 /setup 设置访问口令；
+#        不预置口令——历史版本曾在 settings.yaml 预置 test123456，已清除）
 #       DSH_HOME=$PWD/test-envs/test-env-1 node test-access-gate.mjs
 set -euo pipefail
 
@@ -34,6 +36,7 @@ node "$HERE/install-access-gate-plugin.mjs" \
 
 echo
 echo "完成。下一步："
-echo "  DSH_ACCESS_GATE_PASSWORD=test123456 scripts/test-env-start.sh"
+echo "  scripts/test-env-start.sh"
+echo "  （启动后首次访问会自动进 /setup 设置访问口令；不预置口令）"
 echo "  DSH_HOME=$TEST_ENV node $HERE/test-access-gate.mjs"
 echo "  DSH_HOME=$TEST_ENV bash $HERE/verify.sh"

@@ -90,10 +90,13 @@ EOF
 # 注意：不继承正式 profile 的 cordis.patch.yml（含 access-gate 鉴权挂载）。
 []
 EOF
-  # 只写最小测试设置（正式环境的 settings.yaml 不复制，避免口令/密钥泄露进测试环境）
+  # 只写最小测试设置（正式环境的 settings.yaml 不复制，避免口令/密钥泄露进测试环境）。
+  # 注意：不预置任何口令——基线 cordis.patch.yml 为空（无门闸），预置 web-auth/access-gate
+  # 口令会让后续装 access-gate 时跳过「首次 /setup 设置口令」流程（历史污染，已清除）。
+  # 装 access-gate 后首次访问 http://127.0.0.1:<PORT> 会自动进 /setup 由用户设置口令。
   cat > "$TEST_ENV/settings.yaml" <<'EOF'
-web-auth:
-  password: test123456
+# 测试环境最小设置：无预置口令（正式口令/密钥不复制）。
+# 基线无门闸（cordis.patch.yml 为空）；装 access-gate 后首次访问 /setup 设置口令。
 EOF
   mkdir -p "$TEST_ENV/storages" "$TEST_ENV/sessions"
 fi

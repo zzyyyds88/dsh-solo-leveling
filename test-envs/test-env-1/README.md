@@ -78,7 +78,7 @@ bash dsh-AccessGate/install-to-test-env.sh           # 完整安装流程
 
 # 3. 重启测试实例并验证
 scripts/test-env-stop.sh && scripts/test-env-start.sh
-# 浏览器访问对应端口（基线从正式克隆；临时装 web-auth 后口令 test123456）
+# 浏览器访问对应端口（基线从正式克隆；不预置口令，装 access-gate 后首次访问 /setup 设置）
 node dsh-AccessGate/test-access-gate.mjs             # 黑盒验证
 
 # 4. 验证完成 → 向用户提交验收；用户验收通过后（USAGE.md 验收状态=已验收），

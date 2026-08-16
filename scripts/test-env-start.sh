@@ -36,7 +36,7 @@ echo $! > "$TEST_ENV/dsh-web.pid"
 for _ in $(seq 1 30); do
   if curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/"; then
     echo "✓ 已就绪：http://127.0.0.1:$PORT （PID $(cat "$TEST_ENV/dsh-web.pid")）"
-    echo "  测试口令：test123456（$TEST_ENV/settings.yaml 中 web-auth.password）"
+    echo "  基线无预置口令；装 access-gate 后首次访问会自动进 /setup 设置口令"
     exit 0
   fi
   sleep 1

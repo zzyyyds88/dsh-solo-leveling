@@ -11,14 +11,16 @@
  *
  * 用法：
  *   node verify-defaults.mjs                        # 验证 http://127.0.0.1:3090（测试环境默认）
- *   node verify-defaults.mjs --base http://127.0.0.1:3090 --password test123456
+ *   node verify-defaults.mjs --base http://127.0.0.1:3090 --password <已设口令>
+ *     （基线无门闸时无需口令；装 access-gate 后需传首次 /setup 设置的口令）
  * 退出码：0 = 全部通过；1 = 有失败项。
  */
 import { randomUUID } from "node:crypto";
 
 const args = process.argv.slice(2);
 const base = (args.find((a) => a.startsWith("--base=")) ?? "--base=http://127.0.0.1:3090").split("=")[1];
-const password = (args.find((a) => a.startsWith("--password=")) ?? "--password=test123456").split("=")[1];
+// 不预置默认口令：基线无门闸时登录请求 404/405 即视为无门闸；有门闸时显式传 --password
+const password = (args.find((a) => a.startsWith("--password=")) ?? "").split("=")[1];
 
 const FAIL = [];
 const PASS = [];

@@ -76,7 +76,7 @@
 
 # 1) 测试环境（不碰正式）
 bash install-to-test-env.sh                 # 装 fork + 新插件 + patch 进 test-env（3090）
-DSH_ACCESS_GATE_PASSWORD=test123456 scripts/test-env-start.sh
+scripts/test-env-start.sh                   # 启动后首次访问自动进 /setup 设置口令（不预置口令）
 DSH_HOME=$PWD/test-env node test-access-gate.mjs    # 独立集成测试（17 项）
 DSH_HOME=$PWD/test-env bash verify.sh               # 静态 + 集成 + 幂等检查
 

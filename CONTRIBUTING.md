@@ -157,7 +157,7 @@ Config schema / 打包分发三方式 / Web UI 使用）+ 本工作区约定（G
 | 命令 | 作用 |
 |---|---|
 | `scripts/test-env-init.sh` | 初始化/重建（默认从正式 profile 克隆基线；`--from <种子>` 从已验证目录克隆） |
-| `scripts/test-env-start.sh [--port 3090]` | 启动测试实例（测试口令 test123456） |
+| `scripts/test-env-start.sh [--port 3090]` | 启动测试实例（基线无预置口令；装 access-gate 后首次访问 /setup 设置） |
 | `scripts/test-env-stop.sh` | 按 PID 文件精确停止 |
 | `scripts/test-env-status.sh` | 状态：实例 / 端口 / 已装插件 |
 | `scripts/test-env-install.sh <包目录>…` | 把已构建插件装进测试 profile（自动 .bak 备份） |
@@ -168,7 +168,7 @@ Config schema / 打包分发三方式 / Web UI 使用）+ 本工作区约定（G
 cd dsh-AccessGate && ./build.sh && cd ..          # 1. 构建（或 dsh-Moresettings）
 scripts/test-env-install.sh --from-project dsh-AccessGate   # 2. 装进测试环境
 scripts/test-env-stop.sh && scripts/test-env-start.sh      # 3. 重启测试实例（TEST_ENV_INDEX 选择环境）
-# 浏览器 http://127.0.0.1:3090 验证（口令 test123456）
+# 浏览器 http://127.0.0.1:3090 验证（装 access-gate 后首次访问自动进 /setup 设置口令）
 # 4. 全部通过后，正式安装脚本才允许由用户在 SSH 终端手动执行
 ```
 
