@@ -66,6 +66,30 @@ else
   echo "== 从正式 profile 克隆基线：$FORMAL_PROFILE =="
   mkdir -p "$TEST_ENV/profiles"
   cp -a "$FORMAL_PROFILE" "$PROFILE"
+  # 剥离正式环境的装配清单：package.json 重置为官方基线 bundles（不继承正式的
+  # @linxin666/dsh-web-ui-all 聚合 bundle——含 remote-web-ui 等会引用 fork 特有
+  # 路径、与测试基线冲突的插件）。node_modules 里的包保留，供 install 脚本按需挂载。
+  cat > "$PROFILE/package.json" <<'EOF'
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app"
+      ]
+    }
+  }
+}
+EOF
+  # 剥离正式环境鉴权挂载：cordis.patch.yml 重置为官方空模板（正式 patch 挂着
+  # access-gate 门闸，不剥离会导致测试环境一启动就要密码）。
+  cat > "$PROFILE/cordis.patch.yml" <<'EOF'
+# 测试环境基线：官方空 patch（无任何挂载；测试插件由 install-to-test-env.sh 挂载）。
+# 注意：不继承正式 profile 的 cordis.patch.yml（含 access-gate 鉴权挂载）。
+[]
+EOF
   # 只写最小测试设置（正式环境的 settings.yaml 不复制，避免口令/密钥泄露进测试环境）
   cat > "$TEST_ENV/settings.yaml" <<'EOF'
 web-auth:
