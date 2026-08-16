@@ -40,8 +40,10 @@
 * @module dsh-host-access-gate
 */
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, extname, join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import z from "@deepseek-ai/schemastery";
 import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
@@ -535,6 +537,144 @@ function makeSetupHandler(state, limiter) {
 	};
 }
 //#endregion
+//#region lib/types/reverse-proxy.js
+/** POST /access-gate/restart —— 设置卡「重启」按钮：先回响应，再停 caddy、退出 dsh。
+ * 直接 kill 进程（不做脚本式重启），由机器各自的 supervisor（systemd/docker/PM2）
+ * 按配置拉起 dsh；dsh 重启后插件自动重新确保反向代理运行。 */
+const RESTART_PATH = "/access-gate/restart";
+
+function makeRestartHandler(state) {
+	return async (req, res) => {
+		if (req.method !== "POST") {
+			res.writeHead(405);
+			res.end();
+			return;
+		}
+		if (state.password === void 0 || state.key === void 0 || !sessionFromRequest(req, state.key)) {
+			res.writeHead(401, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+			res.end(JSON.stringify({ ok: false, error: { code: "unauthorized", message: "login required" } }));
+			return;
+		}
+		res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+		res.end(JSON.stringify({ ok: true, message: "restart requested: dsh web + caddy will exit; supervisor brings dsh back up" }));
+		setTimeout(() => {
+			stopReverseProxy();
+			setTimeout(() => process.exit(0), 250);
+		}, 300);
+	};
+}
+
+// ---- 反向代理自动运行（settings 配置过 lanHost/httpsPort 后，启动 dsh 即自动确保 caddy）----
+const CADDY_FILE = "/etc/caddy/Caddyfile";
+const CERT_FILE = "/etc/caddy/certs/dsh-web.crt";
+const KEY_FILE = "/etc/caddy/certs/dsh-web.key";
+/** 无 systemd 环境下由本插件拉起的 caddy 子进程（restart/退出时回收）。 */
+let caddyChild = void 0;
+
+function hasSystemd() {
+	return existsSync("/run/systemd/system");
+}
+
+/** 启动时调用：读取反代参数，非空则确保证书/Caddyfile/caddy 就绪。失败不阻塞 DSH 本体。 */
+function ensureReverseProxy(ctx, state) {
+	try {
+		const s = state.readSettings?.() ?? {};
+		const lanHost = typeof s.lanHost === "string" ? s.lanHost.trim() : "";
+		const httpsPort = Number(s.httpsPort);
+		if (lanHost.length === 0 || !Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535) {
+			return; // 未配置反代（默认不开启）
+		}
+		const targetPort = Number(process.env.DSH_WEB_PORT ?? "") || ctx.webServer?.port || 3080;
+		ensureCert(lanHost);
+		const changed = ensureCaddyfile(lanHost, httpsPort, targetPort);
+		ensureCaddyRunning(changed);
+		console.log(`[dsh-host-access-gate] 反向代理已就绪：https://${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}`);
+	} catch (error) {
+		console.error("[dsh-host-access-gate] 反向代理自动启动失败（不影响 DSH 本体）:", error instanceof Error ? error.message : String(error));
+	}
+}
+
+/** 自签证书：SAN 匹配当前地址且有效期充足则复用，否则重新生成。 */
+function ensureCert(lanHost) {
+	mkdirSync("/etc/caddy/certs", { recursive: true });
+	const isIp = /^[0-9.]+$/.test(lanHost);
+	const sanSpec = isIp
+		? `subjectAltName=IP:${lanHost},DNS:localhost,IP:127.0.0.1`
+		: `subjectAltName=DNS:${lanHost},DNS:localhost,IP:127.0.0.1`;
+	let need = !existsSync(CERT_FILE) || !existsSync(KEY_FILE);
+	if (!need) {
+		need = spawnSync("openssl", ["x509", "-in", CERT_FILE, "-noout", "-checkend", "2592000"]).status !== 0;
+		if (!need) {
+			const san = spawnSync("openssl", ["x509", "-in", CERT_FILE, "-noout", "-ext", "subjectAltName"], { encoding: "utf8" }).stdout ?? "";
+			const pat = isIp ? new RegExp(`IP( Address)?:${lanHost}`) : new RegExp(`DNS:${lanHost}`);
+			if (!pat.test(san)) need = true;
+		}
+	}
+	if (need) {
+		spawnSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "3650", "-keyout", KEY_FILE, "-out", CERT_FILE, "-subj", `/CN=${lanHost}`, "-addext", sanSpec], { stdio: "ignore" });
+		console.log(`[dsh-host-access-gate] 已生成自签证书（SAN: ${lanHost}）`);
+	}
+	try {
+		chmodSync(KEY_FILE, 0o640);
+	} catch { /* 非 root / 只读，忽略 */ }
+}
+
+/** Caddyfile：内容与当前参数一致时跳过（幂等），否则重写并返回 true（需要重载）。 */
+function ensureCaddyfile(lanHost, httpsPort, targetPort) {
+	const content = `# DSH Web GUI —— HTTPS 反向代理（caddy，自签内部 CA，浏览器首次信任一次）
+# auto_https disable_redirects：不占用 80 端口（避免与既有 Web 服务冲突）
+{
+	auto_https disable_redirects
+}
+
+https://${lanHost}:${httpsPort} {
+	tls ${CERT_FILE} ${KEY_FILE}
+	reverse_proxy 127.0.0.1:${targetPort}
+}
+`;
+	const prev = existsSync(CADDY_FILE) ? readFileSync(CADDY_FILE, "utf8") : "";
+	if (prev === content) return false;
+	writeFileSync(CADDY_FILE, content);
+	console.log(`[dsh-host-access-gate] Caddyfile 已更新（${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}）`);
+	return true;
+}
+
+/** 确保 caddy 在跑：systemd 优先（start/reload），无 systemd 则 spawn 子进程。 */
+function ensureCaddyRunning(changed) {
+	if (hasSystemd()) {
+		const active = spawnSync("systemctl", ["is-active", "caddy"]).status === 0;
+		if (!active) {
+			spawnSync("systemctl", ["start", "caddy"]);
+			console.log("[dsh-host-access-gate] caddy 已启动（systemd）");
+		} else if (changed) {
+			spawnSync("systemctl", ["reload", "caddy"]);
+			console.log("[dsh-host-access-gate] caddy 已重载（systemd）");
+		}
+	} else if (!caddyChild || caddyChild.exitCode !== null) {
+		caddyChild = spawn("caddy", ["run", "--config", CADDY_FILE], { stdio: "ignore" });
+		caddyChild.on("error", (err) => console.warn("[dsh-host-access-gate] caddy 子进程启动失败:", err.message));
+		console.log(`[dsh-host-access-gate] caddy 子进程已启动（PID ${caddyChild.pid}）`);
+	} else if (changed) {
+		caddyChild.kill("SIGHUP");
+		console.log("[dsh-host-access-gate] caddy 子进程已重载（SIGHUP）");
+	}
+}
+
+/** 「重启」按钮：停掉 caddy（systemd stop 或 kill 子进程）。 */
+function stopReverseProxy() {
+	try {
+		if (hasSystemd()) {
+			spawnSync("systemctl", ["stop", "caddy"]);
+			console.log("[dsh-host-access-gate] caddy 已停止（systemd）");
+		} else if (caddyChild && caddyChild.exitCode === null) {
+			caddyChild.kill("SIGTERM");
+			console.log(`[dsh-host-access-gate] caddy 子进程已停止（PID ${caddyChild.pid}）`);
+		}
+	} catch (error) {
+		console.warn("[dsh-host-access-gate] 停止 caddy 失败:", error instanceof Error ? error.message : String(error));
+	}
+}
+//#endregion
 //#region lib/types/index.js
 /**
 * Mount the auth gate, routes, settings namespace, and webAuth service.
@@ -560,15 +700,16 @@ function apply(ctx, config) {
 	// settings 命名空间：GUI 设置面板（access-gate 卡片）与 /setup 页写口令的落点。
 	// onChange 在每个写之后重算口令并轮换 key；清除口令且无任何后备口令时，
 	// 回到「首次设置」模式（/setup 页），绝不出现无鉴权裸奔。
+	// 反向代理参数（lanHost/httpsPort）默认空 = 未启用；填写后插件启动时自动
+	// 确保 caddy 反代运行（无需手动跑 switch-to-https.sh）。
 	installSettingsSection(ctx, SETTINGS_NS, z.object({
 		password: z.string().role("secret"),
-		// 反向代理参数（供 switch-to-https.sh 生成 Caddyfile / 固化 trusted-host 使用）
-		lanHost: z.string().default("192.168.1.100"),
-		httpsPort: z.natural().min(1).max(65535).default(5700)
+		lanHost: z.string().default(""),
+		httpsPort: z.union([z.const(""), z.natural().min(1).max(65535)]).default("")
 	}), {
 		password: fallbackPassword ?? "",
-		lanHost: "192.168.1.100",
-		httpsPort: 5700
+		lanHost: "",
+		httpsPort: ""
 	}, {
 		setSource: (get) => {
 			state.readSettings = get;
@@ -650,13 +791,23 @@ function apply(ctx, config) {
 		path: SETUP_PATH,
 		handler: makeSetupHandler(state, limiter)
 	}), "access-gate: /setup route");
+	ctx.effect(() => ctx.webServer.register({
+		kind: "exact",
+		path: RESTART_PATH,
+		handler: makeRestartHandler(state)
+	}), "access-gate: /access-gate/restart route");
 
-	// settings 提供方就绪后挂上引用（供 /setup 写入）
+	// settings 提供方就绪后挂上引用（供 /setup 写入）；同时延迟启动反向代理
+	// ensure（等 webServer.port 与 settings 命名空间就绪），配置过反代参数即
+	// 自动确保 caddy 运行——启动命令保持不变（npx @deepseek-ai/dsh web）。
 	ctx.inject(["settings"], (sctx) => {
 		state.settings = sctx.settings;
 		sctx.effect(() => () => {
 			state.settings = void 0;
 		});
+		setTimeout(() => {
+			ensureReverseProxy(ctx, state);
+		}, 1200);
 	});
 }
 

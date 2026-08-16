@@ -31,9 +31,6 @@ window.__ModuleLoader__.load({
 		const NS = "dsh-client-ui-access-gate";
 		/** Minimum password length, kept in sync with the host plugin. */
 		const MIN_PASSWORD_LENGTH = 6;
-		/** Fallback defaults, kept in sync with the host plugin's schema defaults. */
-		const DEFAULT_LAN_HOST = "192.168.1.100";
-		const DEFAULT_HTTPS_PORT = 5700;
 		/** Required services (cordis fiber inject). */
 		const inject = [
 			"slots",
@@ -58,8 +55,8 @@ window.__ModuleLoader__.load({
 				return {
 					available: ready,
 					writable: snapshot.writable,
-					lanHost: ready ? (snapshot.value?.lanHost ?? DEFAULT_LAN_HOST) : DEFAULT_LAN_HOST,
-					httpsPort: ready ? (snapshot.value?.httpsPort ?? DEFAULT_HTTPS_PORT) : DEFAULT_HTTPS_PORT
+					lanHost: ready ? (snapshot.value?.lanHost ?? "") : "",
+					httpsPort: ready ? (snapshot.value?.httpsPort ?? "") : ""
 				};
 			}
 			/**
@@ -98,11 +95,13 @@ window.__ModuleLoader__.load({
 			const [open, setOpen] = react.useState(false);
 			const [password, setPassword] = react.useState("");
 			const [confirm, setConfirm] = react.useState("");
-			const [lanDraft, setLanDraft] = react.useState(DEFAULT_LAN_HOST);
-			const [portDraft, setPortDraft] = react.useState(String(DEFAULT_HTTPS_PORT));
+			// 反代参数默认空 = 不开启（未配置时插件不启动反代）
+			const [lanDraft, setLanDraft] = react.useState("");
+			const [portDraft, setPortDraft] = react.useState("");
 			const [message, setMessage] = react.useState("");
 			const [kind, setKind] = react.useState("ok");
 			const [saving, setSaving] = react.useState(false);
+			const [restarting, setRestarting] = react.useState(false);
 			const disabled = !state.available || !state.writable;
 			const storedLan = state.available ? state.lanHost : void 0;
 			const storedPort = state.available ? state.httpsPort : void 0;
@@ -123,12 +122,7 @@ window.__ModuleLoader__.load({
 			const save = async () => {
 				const lanHost = lanDraft.trim();
 				const httpsPort = Number.parseInt(portDraft.trim(), 10);
-				if (lanHost.length === 0) {
-					setKind("err");
-					setMessage(t("hostEmpty"));
-					return;
-				}
-				if (!Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535) {
+				if (lanHost.length > 0 && (!Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535)) {
 					setKind("err");
 					setMessage(t("portInvalid"));
 					return;
@@ -145,8 +139,11 @@ window.__ModuleLoader__.load({
 						return;
 					}
 				}
+				// lanHost 空 = 未启用反代（保存空值清除配置）；非空才保存端口
+				const proxyLan = lanHost.length > 0 ? lanHost : "";
+				const proxyPort = lanHost.length > 0 ? httpsPort : "";
 				setSaving(true);
-				const ok = await props.save({ password, lanHost, httpsPort });
+				const ok = await props.save({ password, lanHost: proxyLan, httpsPort: proxyPort });
 				setSaving(false);
 				if (ok) {
 					setKind("ok");
@@ -157,6 +154,24 @@ window.__ModuleLoader__.load({
 					setKind("err");
 					setMessage(t("saveFailed"));
 				}
+			};
+			const restart = async () => {
+				if (!window.confirm(t("restartConfirm"))) return;
+				setRestarting(true);
+				try {
+					const res = await fetch("/access-gate/restart", { method: "POST" });
+					if (res.ok) {
+						setKind("ok");
+						setMessage(t("restartSent"));
+					} else {
+						setKind("err");
+						setMessage(t("restartFailed"));
+					}
+				} catch {
+					setKind("err");
+					setMessage(t("restartFailed"));
+				}
+				setRestarting(false);
 			};
 			const discard = () => {
 				if (storedLan !== void 0) setLanDraft(storedLan);
@@ -181,6 +196,7 @@ window.__ModuleLoader__.load({
 			const hintStyle = { color: "var(--dsw-alias-label-tertiary)", margin: 0, fontSize: "12px", lineHeight: "1.6" };
 			const buttonStyle = { border: 0, borderRadius: "8px", background: "var(--dsw-alias-brand-primary)", color: "#fff", height: "32px", padding: "0 18px", fontSize: "13px", fontWeight: 600, cursor: "pointer" };
 			const ghostButtonStyle = { border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "8px", background: "transparent", color: "var(--dsw-alias-label-primary)", height: "32px", padding: "0 18px", fontSize: "13px", cursor: "pointer" };
+			const dangerButtonStyle = { border: "1px solid var(--dsw-alias-label-error, #f87171)", borderRadius: "8px", background: "transparent", color: "var(--dsw-alias-label-error, #f87171)", height: "32px", padding: "0 18px", fontSize: "13px", cursor: "pointer" };
 			const messageStyle = { margin: "10px 0 0", fontSize: "12px", lineHeight: "1.6", color: kind === "ok" ? "var(--dsw-alias-label-success, #4ade80)" : "var(--dsw-alias-label-error)" };
 			const readOnlyStyle = { color: "var(--dsw-alias-label-tertiary)", fontSize: "12px", margin: "8px 0 0" };
 			return (0, react_jsx_runtime.jsxs)("li", {
@@ -259,10 +275,11 @@ window.__ModuleLoader__.load({
 								]
 							}),
 							(0, react_jsx_runtime.jsxs)("div", {
-								style: { display: "flex", gap: "10px", marginTop: "8px" },
+								style: { display: "flex", gap: "10px", marginTop: "8px", flexWrap: "wrap" },
 								children: [
 									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: save, disabled: disabled || saving, style: buttonStyle, children: t("saveLabel") }),
-									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: discard, disabled: disabled || saving || !dirty, style: ghostButtonStyle, children: t("discard") })
+									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: discard, disabled: disabled || saving || !dirty, style: ghostButtonStyle, children: t("discard") }),
+									(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: restart, disabled: disabled || saving || restarting, style: dangerButtonStyle, children: t("restart") })
 								]
 							}),
 							message === "" ? null : (0, react_jsx_runtime.jsx)("p", { role: "status", style: messageStyle, children: message })
@@ -273,7 +290,7 @@ window.__ModuleLoader__.load({
 		}
 		const zh = {
 			title: "访问门禁",
-			description: "配置 Web 界面登录口令与 HTTPS 反向代理参数（局域网地址 / 端口）。口令保存后旧会话失效；反代参数在重跑切换脚本后生效。",
+			description: "配置 Web 界面登录口令与 HTTPS 反向代理（caddy）。口令保存后旧会话失效；填写反代参数后保存并点「重启」，dsh 与 caddy 会自动退出，由系统拉起后反代自动运行（启动命令不变）。",
 			passwordSection: "访问口令",
 			passwordLabel: "新访问口令（至少 6 位，留空 = 不修改）",
 			passwordPlaceholder: "输入新口令",
@@ -283,26 +300,29 @@ window.__ModuleLoader__.load({
 			confirmHint: "两次输入需保持一致。",
 			proxySection: "HTTPS 反向代理",
 			lanHostLabel: "局域网地址 / 域名",
-			lanHostPlaceholder: "例如 192.168.1.100",
-			lanHostHint: "HTTPS 反代（caddy）绑定的地址，也是浏览器访问地址；切换脚本读取此项生成 Caddyfile 与 --trusted-host。",
+			lanHostPlaceholder: "例如 192.168.1.100（留空 = 不启用）",
+			lanHostHint: "HTTPS 反代（caddy）绑定的地址，也是浏览器访问地址；留空不启用反代。填写并保存后，启动 dsh 即自动确保 caddy 反代运行，无需手动跑脚本。",
 			httpsPortLabel: "HTTPS 端口",
 			httpsPortPlaceholder: "例如 5700",
-			httpsPortHint: "caddy 对外 HTTPS 端口（1-65535），默认 5700；改动后重跑 switch-to-https.sh 并重启 caddy 生效。",
+			httpsPortHint: "caddy 对外 HTTPS 端口（1-65535）。改动后保存并点「重启」生效。",
 			saveLabel: "保存",
 			discard: "放弃",
+			restart: "重启",
+			restartConfirm: "将立即退出 dsh 与 caddy（不做重启），由系统按各自配置拉起；确定继续？",
+			restartSent: "已发出重启请求：dsh 与 caddy 正在退出，系统拉起后生效。",
+			restartFailed: "重启请求失败：可能未登录或权限不足。",
 			unsaved: "未保存",
 			readOnly: "当前设置不可写。",
 			tooShort: "口令至少需要 6 位。",
 			mismatch: "两次输入的口令不一致。",
-			saved: "已保存：反向代理参数已更新。",
-			savedWithPassword: "已保存：口令已更新，旧会话已失效，请重新登录；反代参数已更新。",
+			saved: "已保存：反代参数已更新（启用或关闭），点「重启」后生效。",
+			savedWithPassword: "已保存：口令已更新，旧会话已失效，请重新登录；反代参数点「重启」后生效。",
 			saveFailed: "保存失败：可能已被其它修改覆盖或权限不足，请重试。",
-			portInvalid: "HTTPS 端口必须是 1-65535 的整数。",
-			hostEmpty: "局域网地址不能为空。"
+			portInvalid: "HTTPS 端口必须是 1-65535 的整数。"
 		};
 		const en = {
 			title: "Access Gate",
-			description: "Configure the web GUI login password and the HTTPS reverse-proxy parameters (LAN host / port). A saved password invalidates all sessions; proxy parameters take effect after re-running the switch script.",
+			description: "Configure the web GUI login password and the HTTPS reverse proxy (caddy). A saved password invalidates all sessions; after filling in proxy parameters, save and press Restart — dsh and caddy exit and the system brings dsh back up with the proxy running automatically (start command unchanged).",
 			passwordSection: "Access password",
 			passwordLabel: "New access password (6+ chars, leave empty to keep)",
 			passwordPlaceholder: "Enter new password",
@@ -312,22 +332,25 @@ window.__ModuleLoader__.load({
 			confirmHint: "Both entries must match.",
 			proxySection: "HTTPS reverse proxy",
 			lanHostLabel: "LAN host / domain",
-			lanHostPlaceholder: "e.g. 192.168.1.100",
-			lanHostHint: "The address the HTTPS reverse proxy (caddy) binds and the browser visits; the switch script reads this to generate the Caddyfile and --trusted-host.",
+			lanHostPlaceholder: "e.g. 192.168.1.100 (empty = disabled)",
+			lanHostHint: "The address the HTTPS reverse proxy (caddy) binds and the browser visits; empty disables the proxy. Once saved, starting dsh automatically ensures caddy runs — no script needed.",
 			httpsPortLabel: "HTTPS port",
 			httpsPortPlaceholder: "e.g. 5700",
-			httpsPortHint: "The caddy external HTTPS port (1-65535), default 5700; re-run switch-to-https.sh and restart caddy after changing.",
+			httpsPortHint: "The caddy external HTTPS port (1-65535). Save and press Restart after changing.",
 			saveLabel: "Save",
 			discard: "Discard",
+			restart: "Restart",
+			restartConfirm: "This exits dsh and caddy immediately (no restart orchestration); the system brings dsh back up per its own setup. Continue?",
+			restartSent: "Restart requested: dsh and caddy are exiting; the system will bring dsh back up.",
+			restartFailed: "Restart request failed: maybe not signed in or not permitted.",
 			unsaved: "Unsaved",
 			readOnly: "Settings are not writable.",
 			tooShort: "The password needs at least 6 characters.",
 			mismatch: "The two entries do not match.",
-			saved: "Saved: reverse-proxy parameters updated.",
-			savedWithPassword: "Saved: password changed and all old sessions are invalid — please sign in again; proxy parameters updated.",
+			saved: "Saved: proxy parameters updated (enabled or disabled); press Restart to apply.",
+			savedWithPassword: "Saved: password changed and all old sessions are invalid — please sign in again; proxy parameters apply after Restart.",
 			saveFailed: "Save failed: possibly overwritten concurrently or not permitted. Retry.",
-			portInvalid: "The HTTPS port must be an integer between 1 and 65535.",
-			hostEmpty: "The LAN host must not be empty."
+			portInvalid: "The HTTPS port must be an integer between 1 and 65535."
 		};
 		/**
 		* Mount the card into the Plugins settings section's 插件配置 area.
