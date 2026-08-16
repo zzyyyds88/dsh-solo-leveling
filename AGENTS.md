@@ -72,10 +72,12 @@ scripts/test-env-init.sh --force                # 重建基线（DSH 升级后�
    后端插件需重启，风险高不优先）→ 实施 → 语法校验（`node --check`）→
    **test-env 验证** → 记录变更/回退。
 3. 涉及构建/安装包时读 `dsh-AccessGate/README.md` 与 `dsh-Moresettings/README.md`
-   （同包名覆盖原理、tsdown 工具链、fork 参考实现）；fork 源码归位在
-   `dsh-AccessGate/packages/`（webserver / apiproxy / connection）与
-   `dsh-Moresettings/packages/`（picker / llm / llm-deepseek / pi-ai / client-picker），
-   共享 fork `dsh-host-apiproxy` 以 AccessGate 为源码归属。
+   （同包名覆盖原理、tsdown 工具链、fork 参考实现）；**每个项目自包含**：fork 源码
+   只在本项目 `packages/` 内（`dsh-AccessGate/packages/`：webserver / apiproxy /
+   connection；`dsh-Moresettings/packages/`：picker / llm / llm-deepseek / pi-ai /
+   apiproxy 本地副本 / client-picker），脚本不得跨项目引用；apiproxy 两项目各维护
+   一份同源码副本（均含 access-gate + dsh-defaults 两个命名空间暴露，同包名覆盖
+   时任一生效两项目设置卡片皆可用）。
 4. 提交信息用 Conventional Commits（`type(scope): subject`），避免 emoji；
    **有意义的改动即 git 提交**，禁止把 node_modules / 测试环境 / 密钥提交入库。
 5. 根 README 第 5 节项目清单、[PLUGINS.md](PLUGINS.md)（插件总览：使用/更新/维护）、
