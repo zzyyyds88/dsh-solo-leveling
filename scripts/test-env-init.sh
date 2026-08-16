@@ -41,7 +41,7 @@ if [ -d "$PROFILE/node_modules" ]; then
   fi
   echo "== 删除旧测试环境 =="
   # 保留说明文件（test-env-1/README.md 等 git 跟踪的文档），重建后放回
-  local readme=""
+  readme=""
   if [ -f "$TEST_ENV/README.md" ]; then
     readme="$(mktemp)"
     cp "$TEST_ENV/README.md" "$readme"
