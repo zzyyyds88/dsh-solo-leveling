@@ -62,6 +62,12 @@
 
 ## 2. 公开插件的使用方法
 
+> **本仓库全部自研/收录插件已是标准插件包**（`dsh.bundle.patch` 声明包内
+> `cordis.patch.yml` 挂载清单），安装 = `dsh plugin --profile web add ./<pkg>.tgz`，
+> 详见 [docs/标准安装.md](docs/标准安装.md)。安装器（install-*-plugin.mjs）已同步
+> 为标准安装 + 收敛用户层残留行；**不要再手工向用户层 cordis.patch.yml 写插件行**
+> （与 bundle 层重复挂载会 `duplicate loader entry id` 崩溃）。
+
 安装方式（按插件类型选一）：
 
 ```bash

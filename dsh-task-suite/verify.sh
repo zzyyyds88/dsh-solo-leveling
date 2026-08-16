@@ -42,12 +42,12 @@ if [ -d "$SCOPE/dsh-skins/skins" ] && [ "$(ls "$SCOPE/dsh-skins/skins" | wc -l)"
 else
   echo "  [FAIL] dsh-skins/skins 皮肤资产不足（应先 pnpm --filter @zzyyyds88/dsh-skins build）"; FAIL=1
 fi
-# 皮肤符号链接
-SKIN_LINK="$(ls "$SCOPE" 2>/dev/null | grep '^dsh-client-ui-skin-' | grep -v center | head -1)"
-if [ -n "$SKIN_LINK" ] && [ -L "$SCOPE/$SKIN_LINK" ]; then
-  echo "  [PASS] 皮肤符号链接：$SKIN_LINK → $(readlink "$SCOPE/$SKIN_LINK")"
+# 皮肤包在位（标准安装：皮肤为真实依赖目录，非符号链接）
+SKIN_COUNT="$(ls "$SCOPE" 2>/dev/null | grep -c '^dsh-client-ui-skin-' || true)"
+if [ "$SKIN_COUNT" -ge 1 ]; then
+  echo "  [PASS] 皮肤包在位（$SKIN_COUNT 款依赖目录）"
 else
-  echo "  [WARN] 无皮肤符号链接（SKIN=null 安装或未启用皮肤，可接受）"
+  echo "  [WARN] 无皮肤包（SKIN=null 安装或未启用皮肤，可接受）"
 fi
 
 echo "== 2) client bundle 语法检查 =="
@@ -63,20 +63,20 @@ else
   FAIL=1
 fi
 
-echo "== 3) cordis.patch.yml 条目 =="
+echo "== 3) 标准安装状态（bundles 挂载）=="
 PATCH="$PROFILE/cordis.patch.yml"
 HOME_PATCH="$TEST_ENV/cordis.patch.yml"
-MISSING=0
-for row in $PATCH_ROWS; do
-  if grep -q "id: $row" "$PATCH"; then :; else
-    echo "  [FAIL] patch 缺行：$row"; MISSING=1
-  fi
-done
-[ "$MISSING" -eq 0 ] && echo "  [PASS] 聚合包 8 行全部挂载（含 describe-image）" || FAIL=1
-if grep -q "name: '@zzyyyds88/" "$PATCH"; then
-  echo "  [PASS] patch 行引用 @zzyyyds88 包名"
+# 标准插件包安装：聚合包进 profile bundles（其 dsh.bundle.patch 汇总 8 行挂载），
+# 用户层 patch 不应再有 @zzyyyds88 行（残留会 duplicate 崩溃）
+if node -e "const p=require('$PROFILE/package.json'); process.exit((p.dsh?.profile?.bundles ?? []).includes('@zzyyyds88/dsh-task-suite-all')?0:1)" 2>/dev/null; then
+  echo "  [PASS] 聚合包 @zzyyyds88/dsh-task-suite-all 已进 profile bundles（标准挂载）"
 else
-  echo "  [FAIL] patch 行未引用 @zzyyyds88 包名"; FAIL=1
+  echo "  [FAIL] 聚合包不在 profile bundles（标准安装：pnpm -r pack → dsh plugin add）"; FAIL=1
+fi
+if grep -Eq "^\s*name: '?@zzyyyds88|^\s*- id: @zzyyyds88" "$PATCH" 2>/dev/null; then
+  echo "  [FAIL] 用户层 patch 仍有 @zzyyyds88 残留行（标准安装下应无）"; FAIL=1
+else
+  echo "  [PASS] 用户层 patch 无 @zzyyyds88 残留行"
 fi
 # 皮肤互斥由 HOME 层 cordis.patch.yml 的 dsh-skin managed 区段管理（与 skin-center 一致）
 if [ -f "$HOME_PATCH" ] && grep -q "dsh-skin managed" "$HOME_PATCH"; then
@@ -93,12 +93,17 @@ if [ "$LIVE" -eq 1 ]; then
     echo "  [FAIL] 服务未就绪：$BASE/ （先 scripts/test-env-start.sh）"; FAIL=1
   else
     echo "  [PASS] 服务可达：$BASE/"
+    # 门闸检测：未登录 302 → boot/bundle 检查需登录态（浏览器登录后可见）
+    ROOT_CODE="$(curl -s -o /dev/null --max-time 3 -w '%{http_code}' "$BASE/" || true)"
+    GATED=0; [ "$ROOT_CODE" = "302" ] && GATED=1
     HTML="$(curl -s --max-time 8 "$BASE/")"
     # 每个套件插件的 bundle URL 都应出现在 __DSH_BOOT__ 中
     BOOT_MISSING=0
     for pkg in dsh-task-suite-all dsh-client-ui-task-board dsh-live-stats dsh-client-ui-git-graph dsh-client-ui-aionui-panel dsh-client-ui-web-ui-settings dsh-tool-describe-image dsh-client-ui-skin-center; do
       if echo "$HTML" | grep -q "/plugins/@zzyyyds88/$pkg/client.js"; then
         echo "  [PASS] boot 含 $pkg"
+      elif [ "$GATED" -eq 1 ]; then
+        echo "  [WARN] boot 检查需登录态（门闸 302，登录后浏览器加载）"
       else
         echo "  [FAIL] boot 缺 $pkg（刷新页面复查）"; BOOT_MISSING=1
       fi
@@ -110,15 +115,19 @@ if [ "$LIVE" -eq 1 ]; then
       SKIN_PKG="dsh-client-ui-skin-${SKIN_ACTIVE#ui-skin-}"
       if echo "$HTML" | grep -q "/plugins/@zzyyyds88/$SKIN_PKG/client.js"; then
         echo "  [PASS] boot 含启用皮肤 $SKIN_PKG"
+      elif [ "$GATED" -eq 1 ]; then
+        echo "  [WARN] boot 含启用皮肤检查需登录态（门闸）"
       else
         echo "  [FAIL] boot 缺启用皮肤 $SKIN_PKG"; FAIL=1
       fi
     fi
-    # bundle 可加载（HTTP 200/304；dsh-skins 载体无 client bundle，跳过）
+    # bundle 可加载（HTTP 200/304/302；302=门闸需登录态；dsh-skins 载体无 client bundle，跳过）
     for pkg in $PACKAGES; do
       [ "$pkg" = "dsh-skins" ] && continue
       code="$(curl -s -o /dev/null --max-time 5 -w "%{http_code}" "$BASE/plugins/@zzyyyds88/$pkg/client.js")"
-      if echo "$code" | grep -qE "200|304"; then :; else
+      if echo "$code" | grep -qE "200|304"; then :; elif [ "$code" = "302" ]; then
+        echo "  [WARN] /plugins/@zzyyyds88/$pkg/client.js 需登录态（302）"
+      else
         echo "  [FAIL] /plugins/@zzyyyds88/$pkg/client.js → HTTP $code"; FAIL=1
       fi
     done

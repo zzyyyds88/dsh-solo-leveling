@@ -33,12 +33,12 @@ else
   echo "  [FAIL] 语法检查失败（先 bash build.sh 重建）"; FAIL=1
 fi
 
-echo "== 2) cordis.patch.yml 条目 =="
-PATCH="$PROFILE/cordis.patch.yml"
-if grep -q "id: mobile-adapt" "$PATCH" && grep -q "name: dsh-mobile-adapt" "$PATCH"; then
-  echo "  [PASS] mobile-adapt 插件行已挂载（id + name）"
+echo "== 2) 标准安装状态（bundles 挂载）=="
+BUNDLES="$PROFILE/package.json"
+if node -e "const p=require('$BUNDLES'); process.exit((p.dsh?.profile?.bundles ?? []).includes('dsh-mobile-adapt')?0:1)" 2>/dev/null; then
+  echo "  [PASS] dsh-mobile-adapt 已进 profile bundles（标准挂载）"
 else
-  echo "  [FAIL] mobile-adapt 插件行缺失（install-to-test-env.sh 会自动补）"; FAIL=1
+  echo "  [FAIL] dsh-mobile-adapt 不在 profile bundles（标准安装：npm pack → dsh plugin add）"; FAIL=1
 fi
 
 echo "== 3) 产物一致性（src 与 lib 是否同步）=="

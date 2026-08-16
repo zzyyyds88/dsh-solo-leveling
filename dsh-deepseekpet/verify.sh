@@ -30,17 +30,17 @@ else
   echo "  [FAIL] client bundle 语法检查失败（先 node scripts/build.mjs 重建）"; FAIL=1
 fi
 
-echo "== 2) cordis.patch.yml 条目 =="
+echo "== 2) 标准安装状态（bundles 挂载）=="
 PATCH="$PROFILE/cordis.patch.yml"
-if grep -q "id: deepseek-pet" "$PATCH" && grep -q "name: deepseek-pet" "$PATCH"; then
-  echo "  [PASS] deepseek-pet 插件行已挂载（id + name）"
+if node -e "const p=require('$PROFILE/package.json'); process.exit((p.dsh?.profile?.bundles ?? []).includes('deepseek-pet')?0:1)" 2>/dev/null; then
+  echo "  [PASS] deepseek-pet 已进 profile bundles（标准挂载）"
 else
-  echo "  [FAIL] deepseek-pet 插件行缺失（先跑 bash install-to-test-env.sh）"; FAIL=1
+  echo "  [FAIL] deepseek-pet 不在 profile bundles（标准安装：npm pack → dsh plugin add）"; FAIL=1
 fi
-if [ "$(grep -c 'id: deepseek-pet' "$PATCH")" -gt 1 ]; then
-  echo "  [FAIL] patch 条目存在重复（应只有一处）"; FAIL=1
+if grep -q "id: deepseek-pet" "$PATCH"; then
+  echo "  [FAIL] 用户层 patch 仍有 deepseek-pet 残留行（标准安装下应无，否则 duplicate 崩溃）"; FAIL=1
 else
-  echo "  [PASS] patch 条目无重复"
+  echo "  [PASS] 用户层 patch 无 deepseek-pet 残留行"
 fi
 [ -f "$PATCH.bak" ] && echo "  [PASS] patch 备份存在 $PATCH.bak" || echo "  [WARN] 缺少 patch 备份"
 
@@ -70,10 +70,13 @@ if [ "$LIVE" -eq 1 ]; then
     else
       echo "  [WARN] index 未在 __DSH_BOOT__ 中看到 deepseek-pet（可能是 HMR/缓存，刷新后复查）"
     fi
-    if curl -s -o /dev/null --max-time 5 -w "%{http_code}" "$BASE/plugins/deepseek-pet/client.js" | grep -qE "200|304"; then
+    BCODE="$(curl -s -o /dev/null --max-time 5 -w "%{http_code}" "$BASE/plugins/deepseek-pet/client.js" || true)"
+    if echo "$BCODE" | grep -qE "200|304"; then
       echo "  [PASS] /plugins/deepseek-pet/client.js 可加载"
+    elif [ "$BCODE" = "302" ]; then
+      echo "  [WARN] client.js 需要登录态（HTTP 302，门闸拦截；浏览器登录后自动加载）"
     else
-      echo "  [FAIL] /plugins/deepseek-pet/client.js 不可加载（插件未生效，重启后复查）"; FAIL=1
+      echo "  [FAIL] /plugins/deepseek-pet/client.js 不可加载（HTTP $BCODE）"; FAIL=1
     fi
   fi
 else

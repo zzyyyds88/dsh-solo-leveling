@@ -81,25 +81,25 @@ done
 
 echo "== 3) cordis.patch.yml 条目 =="
 PATCH="$PROFILE/cordis.patch.yml"
+BUNDLES_JSON="$PROFILE/package.json"
+in_bundles() { node -e "const p=require('$BUNDLES_JSON'); process.exit((p.dsh?.profile?.bundles ?? []).includes('$1')?0:1)" 2>/dev/null; }
 if grep -q "host: 127.0.0.1" "$PATCH" && grep -q "ctx.webStartup.port ?? 3080" "$PATCH"; then
   echo "  [PASS] webserver 覆盖：回环 127.0.0.1（HTTPS 反代在前），端口沿用 webStartup ?? 3080"
 else
   echo "  [FAIL] webserver 覆盖缺失"; FAIL=1
 fi
-if grep -Eq "mode: ('on'|\"on\"|on)" "$PATCH"; then
-  echo "  [PASS] access-gate 强制鉴权 mode: on（回环监听下也要求登录）"
+# access-gate 插件行已由标准安装承担（bundles 挂载，包内 cordis.patch.yml 含 mode: on 与口令表达式）
+if in_bundles dsh-host-access-gate && in_bundles dsh-client-ui-access-gate; then
+  echo "  [PASS] access-gate / ui-access-gate 已进 profile bundles（标准挂载）"
 else
-  echo "  [FAIL] access-gate 缺少 mode: on"; FAIL=1
+  echo "  [FAIL] access-gate 插件未标准安装（npm pack → dsh plugin add）"; FAIL=1
 fi
-if grep -q "id: access-gate" "$PATCH" && grep -q "name: dsh-host-access-gate" "$PATCH" && grep -q "DSH_ACCESS_GATE_PASSWORD" "$PATCH"; then
-  echo "  [PASS] access-gate 插件行已挂载（口令取 DSH_ACCESS_GATE_PASSWORD，兼容旧名）"
+# 包内挂载清单校验（mode: on + 口令表达式）
+GATE_PATCH="$PROFILE/node_modules/dsh-host-access-gate/cordis.patch.yml"
+if [ -f "$GATE_PATCH" ] && grep -q "DSH_ACCESS_GATE_PASSWORD" "$GATE_PATCH" && grep -q "mode: 'on'" "$GATE_PATCH"; then
+  echo "  [PASS] access-gate 包内挂载清单：mode: on + 口令取 DSH_ACCESS_GATE_PASSWORD"
 else
-  echo "  [FAIL] access-gate 插件行缺失"; FAIL=1
-fi
-if grep -q "id: ui-access-gate" "$PATCH" && grep -q "name: dsh-client-ui-access-gate" "$PATCH"; then
-  echo "  [PASS] ui-access-gate 设置卡片行已挂载"
-else
-  echo "  [FAIL] ui-access-gate 设置卡片行缺失"; FAIL=1
+  echo "  [FAIL] access-gate 包内挂载清单异常（缺 mode: on 或口令表达式）"; FAIL=1
 fi
 if grep -q 'id: connection' "$PATCH" && grep -q "DSH_WEB_TRUSTED_HOST" "$PATCH"; then
   echo "  [PASS] connection trustedHosts 已固化（启动无需 --trusted-host）"
@@ -111,10 +111,10 @@ if grep -q "id: web-auth" "$PATCH" || grep -q "id: ui-web-auth" "$PATCH"; then
 else
   echo "  [PASS] patch 无旧版插件行残留"
 fi
-if [ "$(grep -c 'id: access-gate' "$PATCH")" -gt 1 ] || [ "$(grep -c 'id: ui-access-gate' "$PATCH")" -gt 1 ]; then
-  echo "  [FAIL] patch 条目存在重复（应各只有一处）"; FAIL=1
+if grep -q "id: access-gate" "$PATCH" || grep -q "id: ui-access-gate" "$PATCH"; then
+  echo "  [FAIL] 用户层 patch 仍有 access-gate/ui-access-gate 残留行（标准安装下应无，否则 duplicate 崩溃）"; FAIL=1
 else
-  echo "  [PASS] patch 条目无重复"
+  echo "  [PASS] 用户层 patch 无 access-gate/ui-access-gate 残留行"
 fi
 [ -f "$PATCH.bak" ] && echo "  [PASS] patch 备份存在 $PATCH.bak" || echo "  [WARN] 缺少 patch 备份"
 
