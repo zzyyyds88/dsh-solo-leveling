@@ -50,6 +50,9 @@ scripts/test-env-init.sh --force                # 重建基线（DSH 升级后�
 
 0. **开发必须遵从 [docs/开发规范.md](docs/开发规范.md)**（上游官方要点 + 本工作区
    约定 + 完成定义）；上游原文存档在 `docs/上游开发规范/`。
+   **插件配置入口一律用「设置 → 插件 → 插件配置」区独立卡片
+   （`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页**，
+   详见开发规范 §2.5。
 1. 先调研：`dsh-plugin` 主题 / awesome-dsh-plugin / Oh-My-DSH 找现成方案；
    开发基础以 <https://deepseek-harness.github.io/deepseek-harness/develop/basic/> 为准。
 2. 每个项目：先写思路库 README → 定位链路（前端 bundle 实时读盘刷新即生效；
