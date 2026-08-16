@@ -31,13 +31,18 @@
 
 ```bash
 scripts/test-env-status.sh                      # 状态：实例/端口/已装插件
+scripts/test-env-reset.sh                       # 恢复官方基线（幂等；--check 检查残留）
 scripts/test-env-install.sh --from-project <项目>  # 装已构建插件进测试 profile
 scripts/test-env-stop.sh && scripts/test-env-start.sh   # 重启测试实例（端口 3090）
 scripts/test-env-init.sh --force                # 重建基线（DSH 升级后适配）
 ```
 
-- 测试实例：`DSH_HOME=…/test-env`，端口 **3090**，口令 `test123456`
-  （test-env/settings.yaml）。正式实例端口 **3080**，永远别碰。
+- **环境恢复纪律（强制）**：测试环境的默认状态是**官方基线**（`test-env-reset.sh`
+  重建：官方 bundles + 空 patch + 空 settings + 空 node_modules）。**每次打包测试
+  完成后（无论成败）必须运行 `test-env-stop.sh && test-env-reset.sh` 恢复官方
+  基线**，保证下一次测试从干净的官方行为开始；安装前也先 `--check` 确认基线。
+- 测试实例：`DSH_HOME=…/test-env`，端口 **3090**；官方基线无鉴权，临时挂载
+  web-auth 后口令 `test123456`（test-env/settings.yaml）。正式实例端口 **3080**，永远别碰。
 - 用 `test-env-stop.sh` 停实例（按 PID 文件精确停止），不要 pkill -f 模糊匹配
   （模式含自身命令行会误杀自己）。
 
