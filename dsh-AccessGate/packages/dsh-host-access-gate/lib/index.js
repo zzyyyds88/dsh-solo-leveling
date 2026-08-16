@@ -599,39 +599,34 @@ function makeRestartHandler(state) {
 			return;
 		}
 		res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-		res.end(JSON.stringify({ ok: true, message: "restart requested: dsh web + caddy will exit; supervisor brings dsh back up" }));
+		res.end(JSON.stringify({ ok: true, message: "restart requested: this instance's dsh web + caddy exit; supervisor brings dsh back up" }));
 		setTimeout(() => {
-			stopReverseProxy();
+			stopCaddy(); // 只停本实例的 caddy，其它实例/系统 caddy 不受影响
 			setTimeout(() => process.exit(0), 250);
 		}, 300);
 	};
 }
 
-// ---- 反向代理自动运行（settings 配置过 lanHost/httpsPort 后，启动 dsh 即自动确保 caddy）----
-// 多实例共存：每个 dsh 实例写自己的 Caddyfile 片段 /etc/caddy/sites.d/dsh-<port>.conf，
-// 主 Caddyfile `import /etc/caddy/sites.d/*.conf` 合并加载全部片段 —— 不同实例各自
-// 反代、互不覆盖。证书按地址命名（同地址不同端口共享，不同地址各自证书）。
-const CADDY_FILE = "/etc/caddy/Caddyfile";
-const SITES_DIR = "/etc/caddy/sites.d";
-/** 无 systemd 环境下由本插件拉起的 caddy 子进程（restart/退出时回收）。 */
-let caddyChild = void 0;
+// ---- 反向代理自动运行（每实例独立 caddy，完全内置、互不影响）----
+// 每个 dsh 实例 spawn 自己的 caddy 子进程：配置/证书/pid 全部在 $DSH_HOME/caddy/
+// 下（各实例 DSH_HOME 不同 → 天然隔离）。caddy 二进制内置在插件包 bin/caddy
+// （打包时放入，见 README），不依赖系统安装。restart 按钮只杀自己的 caddy +
+// 退出本实例，其它实例与系统 caddy 完全不受影响。
 
-function hasSystemd() {
-	return existsSync("/run/systemd/system");
+/** 本实例 caddy 目录（$DSH_HOME/caddy）。 */
+function caddyDir() {
+	return join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "caddy");
 }
-
+/** 包内内置 caddy 二进制（打包时放入 bin/caddy）。 */
+function caddyBin() {
+	return join(dirname(fileURLToPath(import.meta.url)), "..", "bin", "caddy");
+}
 /** lanHost → 证书文件名（IP/域名安全化）。 */
 function certBaseName(lanHost) {
-	const safe = String(lanHost).replace(/[^A-Za-z0-9.-]/g, "_");
-	return `dsh-${safe}`;
+	return `dsh-${String(lanHost).replace(/[^A-Za-z0-9.-]/g, "_")}`;
 }
 
-/** 本实例的 Caddyfile 片段路径（按实例监听端口命名，多实例互不覆盖）。 */
-function siteFragmentPath(targetPort) {
-	return join(SITES_DIR, `dsh-${targetPort}.conf`);
-}
-
-/** 启动时调用：读反代参数，非空 → 写本实例片段；空 → 删除本实例片段（关闭反代）。 */
+/** 启动时调用：读反代参数，非空 → 确保本实例 caddy 运行；空 → 停掉本实例 caddy。 */
 function ensureReverseProxy(ctx, state) {
 	try {
 		const s = state.readSettings?.() ?? {};
@@ -639,14 +634,19 @@ function ensureReverseProxy(ctx, state) {
 		const httpsPort = Number(s.httpsPort);
 		const targetPort = Number(process.env.DSH_WEB_PORT ?? "") || ctx.webServer?.port || 3080;
 		const configured = lanHost.length > 0 && Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort < 65536;
-		ensureMainCaddyfile();
-		const changed = configured
-			? syncSiteFragment(lanHost, httpsPort, targetPort)
-			: removeSiteFragment(targetPort);
 		if (!configured) {
-			if (changed) ensureCaddyRunning(true);
-			return; // 未配置反代（默认不开启；有旧片段则已删除）
+			const pid = readCaddyPid();
+			if (pid > 0 && isAlive(pid)) {
+				stopCaddy();
+				console.log("[dsh-host-access-gate] 反向代理已关闭（未配置反代参数）");
+			}
+			return; // 未配置反代（默认不开启）
 		}
+		if (!existsSync(caddyBin())) {
+			console.error("[dsh-host-access-gate] 未找到内置 caddy 二进制（bin/caddy）。请重新打包安装（打包前放入 caddy 二进制），反代未启动。");
+			return;
+		}
+		const changed = writeCaddyConfig(lanHost, httpsPort, targetPort);
 		ensureCaddyRunning(changed);
 		console.log(`[dsh-host-access-gate] 反向代理已就绪：https://${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}`);
 	} catch (error) {
@@ -654,60 +654,36 @@ function ensureReverseProxy(ctx, state) {
 	}
 }
 
-/** 主 Caddyfile：确保是 import 全部片段的聚合结构（幂等，首次写入）。 */
-function ensureMainCaddyfile() {
-	const main = `# DSH Web GUI —— HTTPS 反向代理（caddy，自签内部 CA，浏览器首次信任一次）
-# 每个 dsh 实例一个片段：/etc/caddy/sites.d/dsh-<端口>.conf（由插件自动管理）
-# auto_https disable_redirects：不占用 80 端口（避免与既有 Web 服务冲突）
+/** 写本实例 Caddyfile + 证书（幂等：内容一致返回 false，无需重启 caddy）。 */
+function writeCaddyConfig(lanHost, httpsPort, targetPort) {
+	const dir = caddyDir();
+	mkdirSync(join(dir, "certs"), { recursive: true });
+	const base = certBaseName(lanHost);
+	const certFile = join(dir, "certs", `${base}.crt`);
+	const keyFile = join(dir, "certs", `${base}.key`);
+	ensureCert(lanHost, certFile, keyFile);
+	const content = `# dsh instance on 127.0.0.1:${targetPort} — managed by dsh-host-access-gate (embedded caddy)
 {
+	admin off
 	auto_https disable_redirects
 }
 
-import /etc/caddy/sites.d/*.conf
-`;
-	const prev = existsSync(CADDY_FILE) ? readFileSync(CADDY_FILE, "utf8") : "";
-	if (prev.trim() === main.trim()) return;
-	mkdirSync(SITES_DIR, { recursive: true });
-	writeFileSync(CADDY_FILE, main);
-	console.log("[dsh-host-access-gate] 主 Caddyfile 已初始化为 import 聚合结构");
-}
-
-/**
-* 写/更新本实例反代片段（幂等：内容一致则跳过）。返回 true = 配置变化需重载 caddy。
-* 证书按地址命名（同地址不同端口共享证书）。
-*/
-function syncSiteFragment(lanHost, httpsPort, targetPort) {
-	mkdirSync(SITES_DIR, { recursive: true });
-	const base = certBaseName(lanHost);
-	const certFile = `/etc/caddy/certs/${base}.crt`;
-	const keyFile = `/etc/caddy/certs/${base}.key`;
-	ensureCert(lanHost, certFile, keyFile);
-	const content = `# dsh instance on 127.0.0.1:${targetPort} — auto-managed by dsh-host-access-gate
 https://${lanHost}:${httpsPort} {
 	tls ${certFile} ${keyFile}
 	reverse_proxy 127.0.0.1:${targetPort}
 }
 `;
-	const frag = siteFragmentPath(targetPort);
-	const prev = existsSync(frag) ? readFileSync(frag, "utf8") : "";
+	const caddyfile = join(dir, "Caddyfile");
+	const prev = existsSync(caddyfile) ? readFileSync(caddyfile, "utf8") : "";
 	if (prev === content) return false;
-	writeFileSync(frag, content);
-	console.log(`[dsh-host-access-gate] 反代片段已更新：${frag}（${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}）`);
+	writeFileSync(caddyfile, content);
+	console.log(`[dsh-host-access-gate] Caddyfile 已更新（${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}）`);
 	return true;
 }
 
-/** 删除本实例反代片段（关闭反代时调用）。返回 true = 删除了片段需重载。 */
-function removeSiteFragment(targetPort) {
-	const frag = siteFragmentPath(targetPort);
-	if (!existsSync(frag)) return false;
-	rmSync(frag, { force: true });
-	console.log(`[dsh-host-access-gate] 反代片段已删除：${frag}（反代关闭）`);
-	return true;
-}
-
-/** 自签证书（按地址命名文件）：SAN 匹配且有效期充足则复用，否则重新生成。 */
+/** 自签证书（本实例 caddy/certs/）：SAN 匹配且有效期充足则复用，否则重新生成。 */
 function ensureCert(lanHost, certFile, keyFile) {
-	mkdirSync("/etc/caddy/certs", { recursive: true });
+	mkdirSync(dirname(certFile), { recursive: true });
 	const isIp = /^[0-9.]+$/.test(lanHost);
 	const sanSpec = isIp
 		? `subjectAltName=IP:${lanHost},DNS:localhost,IP:127.0.0.1`
@@ -726,46 +702,66 @@ function ensureCert(lanHost, certFile, keyFile) {
 		console.log(`[dsh-host-access-gate] 已生成自签证书（SAN: ${lanHost}）`);
 	}
 	try {
-		// caddy 服务以 caddy 用户运行：key 需 caddy 可读（chown 失败则放宽到 644 兜底）
-		spawnSync("chown", ["caddy:caddy", certFile, keyFile]);
-		chmodSync(keyFile, 0o640);
+		chmodSync(keyFile, 0o600);
 	} catch { /* 非 root / 只读，忽略 */ }
 }
 
-/** 确保 caddy 在跑：systemd 优先（start/reload），无 systemd 则 spawn 子进程。 */
-function ensureCaddyRunning(changed) {
-	if (hasSystemd()) {
-		const active = spawnSync("systemctl", ["is-active", "caddy"]).status === 0;
-		if (!active) {
-			spawnSync("systemctl", ["start", "caddy"]);
-			console.log("[dsh-host-access-gate] caddy 已启动（systemd）");
-		} else if (changed) {
-			spawnSync("systemctl", ["reload", "caddy"]);
-			console.log("[dsh-host-access-gate] caddy 已重载（systemd）");
-		}
-	} else if (!caddyChild || caddyChild.exitCode !== null) {
-		caddyChild = spawn("caddy", ["run", "--config", CADDY_FILE], { stdio: "ignore" });
-		caddyChild.on("error", (err) => console.warn("[dsh-host-access-gate] caddy 子进程启动失败:", err.message));
-		console.log(`[dsh-host-access-gate] caddy 子进程已启动（PID ${caddyChild.pid}）`);
-	} else if (changed) {
-		caddyChild.kill("SIGHUP");
-		console.log("[dsh-host-access-gate] caddy 子进程已重载（SIGHUP）");
-	}
+/** pid 文件：$DSH_HOME/caddy/caddy.pid。 */
+function readCaddyPid() {
+	try {
+		return Number(readFileSync(join(caddyDir(), "caddy.pid"), "utf8").trim());
+	} catch { return 0; }
+}
+function isAlive(pid) {
+	if (!pid || pid <= 0) return false;
+	try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-/** 「重启」按钮：停掉 caddy（systemd stop 或 kill 子进程）。 */
-function stopReverseProxy() {
-	try {
-		if (hasSystemd()) {
-			spawnSync("systemctl", ["stop", "caddy"]);
-			console.log("[dsh-host-access-gate] caddy 已停止（systemd）");
-		} else if (caddyChild && caddyChild.exitCode === null) {
-			caddyChild.kill("SIGTERM");
-			console.log(`[dsh-host-access-gate] caddy 子进程已停止（PID ${caddyChild.pid}）`);
+/** 确保本实例 caddy 在跑：pid 存活且配置未变 → 不动；配置变了 → 重启；没跑 → spawn。 */
+function ensureCaddyRunning(changed) {
+	const pid = readCaddyPid();
+	if (isAlive(pid)) {
+		if (changed) {
+			stopCaddy();
+			spawnCaddy();
+			console.log("[dsh-host-access-gate] caddy 已重启（配置变更）");
+		} else {
+			console.log(`[dsh-host-access-gate] caddy 运行中（PID ${pid}）`);
 		}
-	} catch (error) {
-		console.warn("[dsh-host-access-gate] 停止 caddy 失败:", error instanceof Error ? error.message : String(error));
+		return;
 	}
+	spawnCaddy();
+}
+
+/** spawn 内置 caddy 子进程（本实例独立，admin off 避免多实例 admin 端口冲突）。 */
+function spawnCaddy() {
+	const dir = caddyDir();
+	mkdirSync(dir, { recursive: true });
+	const child = spawn(caddyBin(), ["run", "--config", join(dir, "Caddyfile"), "--adapter", "caddyfile"], {
+		cwd: dir,
+		stdio: ["ignore", "ignore", "pipe"],
+	});
+	child.stderr?.on("data", (d) => {
+		const line = String(d).trim().split("\n").filter(Boolean).at(-1);
+		if (line) console.error(`[dsh-host-access-gate] caddy: ${line}`);
+	});
+	child.on("error", (err) => console.error("[dsh-host-access-gate] caddy 子进程启动失败:", err.message));
+	child.on("exit", (code, signal) => {
+		console.log(`[dsh-host-access-gate] caddy 子进程退出（code=${code} signal=${signal}）`);
+	});
+	writeFileSync(join(dir, "caddy.pid"), String(child.pid));
+	console.log(`[dsh-host-access-gate] caddy 已启动（内置二进制，PID ${child.pid}）`);
+}
+
+/** 停掉本实例 caddy（restart 按钮 / 关闭反代）。只影响本实例，不碰系统 caddy。 */
+function stopCaddy() {
+	const pid = readCaddyPid();
+	if (pid > 0 && isAlive(pid)) {
+		try { process.kill(pid, "SIGTERM"); } catch { /* ignore */ }
+		try { process.kill(pid, "SIGKILL"); } catch { /* ignore */ }
+		console.log(`[dsh-host-access-gate] caddy 已停止（PID ${pid}）`);
+	}
+	try { rmSync(join(caddyDir(), "caddy.pid"), { force: true }); } catch { /* ignore */ }
 }
 //#endregion
 //#region lib/types/index.js

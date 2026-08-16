@@ -9,3 +9,6 @@ packages/dsh-host-webserver/lib/
 # 运行态与杂项
 *.log
 .DS_Store
+
+# 内置 caddy 二进制（39MB，打包时放入：cp /usr/bin/caddy bin/ 或 scripts/fetch 下载）
+packages/dsh-host-access-gate/bin/caddy
