@@ -27,6 +27,8 @@
 | `dsh-client-ui-defaults` | 前端 | 「设置 → 插件 → 插件配置 → 默认值」卡片：配置默认工作目录与默认重试次数，保存即生效 | profile 挂载 |
 | `dsh-web-auth`（[kitty-eu-org](https://github.com/kitty-eu-org/dsh-web-auth)） | 后端 | 登录门闸：首次 `/setup` 设口令、会话 Cookie + 限速 | profile 挂载 |
 | `dsh-client-ui-web-auth` | 前端 | 「设置 → 插件 → 访问口令」独立标签页（改口令后旧会话立即失效） | profile 挂载 |
+| `dsh-host-access-gate` | 后端 | **访问门禁**：登录门闸（首次 `/setup` 设口令、会话 Cookie + 限速、`access-gate` 口令命名空间）；由 `dsh-web-auth` 改名规范化，正式形态见 `访问门禁/` | profile 挂载 |
+| `dsh-client-ui-access-gate` | 前端 | 「设置 → 插件 → 插件配置 → 访问口令」**卡片**（`settings.plugin.item`，样式同官方网页搜索卡片）；由 `dsh-client-ui-web-auth` 改名 + 标签页改卡片 | profile 挂载 |
 | `dsh-mobile-adapt` | 前端 | 移动端适配 | profile 挂载 |
 
 > 皮肤：`@linxin666/dsh-client-ui-skin-whale-song`（其余皮肤与 `remote-web-ui`
@@ -41,7 +43,7 @@
 |---|---|---|
 | ~~修改默认工作目录~~ | Web GUI 目录选择器默认打开 `/home/user/Projects` | 已被 **dsh-defaults 统一插件**替代，原文件夹已删除 |
 | ~~思考强度与重试默认值~~ | 思考强度档位 + 默认重试 2→5 | 已被 **dsh-defaults 统一插件**替代（思考强度 fork 内建、重试设置页全局生效），原文件夹已删除 |
-| `全网监听与登录鉴权/` | caddy HTTPS 反代 + 口令门闸 | 门闸/命名空间/放行已插件化；caddy + profile 配置天然免疫；安装包补丁需重打 |
+| `全网监听与登录鉴权/` | caddy HTTPS 反代 + 口令门闸 | 门闸/命名空间/放行已 fork 化；插件本体已**插件化并更名为「访问门禁」（`访问门禁/`）**，本文件夹保留为事故回滚参照（旧版补丁脚本已退役） |
 
 ### 1.3 环境
 
@@ -79,6 +81,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 | `dsh-llm-pi-ai` | `llm.models` 中手写模型带 off/low/medium/high 强度菜单；未声明 retryPolicy 的供应商按 `defaultRetryCount` 重试 |
 | `dsh-defaults` + `dsh-client-ui-defaults` | 设置 → 插件 → 插件配置 →「默认值」卡片可读写；改默认工作目录后选择器即时定位；重试默认对所有供应商生效（`node dsh-defaults/verify-defaults.mjs` 一键验证） |
 | `dsh-web-auth` + `dsh-client-ui-web-auth` | 首次 `/setup` 设口令；设置 → 插件 → 访问口令可改口令 |
+| `dsh-host-access-gate` + `dsh-client-ui-access-gate`（访问门禁） | 首次 `/setup` 设口令；设置 → 插件 → 插件配置 →「访问口令」**卡片**改口令；`settings.describe`（登录后）含 `access-gate` 命名空间 |
 
 ## 3. 插件的更新情况
 
@@ -86,7 +89,8 @@ dsh plugin add ./<包名>-<版本>.tgz
 |---|---|---|---|---|---|
 | 八个 fork 插件（webserver / apiproxy / connection / host-directory-picker / llm / llm-deepseek / pi-ai / 退役的 client-directory-picker） | 0.1.0-rc.6 | ✅ 全部构建通过 | ✅ 全链路 + 强度菜单 + 默认目录 + 全局重试兜底 | ⏳ 待用户执行（`dsh-defaults/install-to-profile.sh`） | 同包名覆盖，升级天然免疫 |
 | `dsh-defaults` / `dsh-client-ui-defaults`（统一默认值插件） | 0.1.0-rc.6 | 源码即产物 | ✅ verify-defaults.mjs 9 项全过 | ⏳ 待用户执行 | 插件配置卡片：默认工作目录 + 对所有供应商生效的默认重试次数 |
-| `dsh-web-auth` / `dsh-client-ui-web-auth` | 0.1.0-rc.6 | 源码即产物 | ✅ | ✅（正式 profile 已挂载） | 升级免疫 |
+| `dsh-web-auth` / `dsh-client-ui-web-auth` | 0.1.0-rc.6 | 源码即产物 | ✅ | ✅（正式 profile 已挂载） | 升级免疫；**已被「访问门禁」插件化替代（`访问门禁/`），正式切换待用户执行 `switch-to-https.sh`** |
+| `dsh-host-access-gate` / `dsh-client-ui-access-gate`（访问门禁） | 0.1.0-rc.6 | 源码即产物（依赖 fork 需重建 apiproxy） | ✅ 17 项集成 + 真实实例链路（test-env 3090） | ⏳ 待用户执行（`访问门禁/switch-to-https.sh`） | 升级免疫；apiproxy fork 含 `access-gate` 命名空间暴露 |
 | `dsh-mobile-adapt` | 0.1.0-rc.6 | ✅ | ✅ | ✅ | 升级免疫 |
 | 补丁项目（默认目录 / 重试 / 鉴权安装包补丁） | 0.1.0-rc.6 | — | ✅（副本上全测） | ✅（已实施） | **升级后需重打**（幂等脚本 + `升级后重打补丁指南.md`；默认目录/重试已由 dsh-defaults 插件化替代，脚本保留兜底） |
 
@@ -114,6 +118,6 @@ dsh plugin add ./<包名>-<版本>.tgz
 | 插件/项目 | 升级后动作 | 回退方法 |
 |---|---|---|
 | fork 插件（profile 覆盖） | 通常免疫；重验即可；上游 API 变动时改 `src/` 重新构建 | 覆盖前自动 `.bak` 备份，拷回即回退 |
-| `dsh-web-auth` 等 npm 插件 | 随 profile 免疫；误删则重跑 `node install-auth-plugin.mjs` | 同脚本幂等重装 |
+| `dsh-web-auth` / `dsh-host-access-gate` 等 npm 插件 | 随 profile 免疫；误删则重跑 `node 访问门禁/install-access-gate-plugin.mjs --allow-formal`（旧版重跑 `node install-auth-plugin.mjs`） | 同脚本幂等重装 |
 | 安装包补丁（三个旧项目） | 重跑各自幂等补丁脚本 + `switch-to-https.sh` | 补丁旁 `.bak` / unpatch 说明 |
 | retryPolicy 配置 | 重跑 `patch-retry-policy.py`（apply/幂等/unpatch 全测过） | 脚本 unpatch |

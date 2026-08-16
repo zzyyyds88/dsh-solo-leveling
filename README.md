@@ -98,7 +98,10 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
   + 独立端口（**3090**），与正式实例（**3080**）完全隔离；测试实例由
   `scripts/test-env-*.sh` 管理（PID 文件精确启停，禁止 pkill -f 模糊匹配）。
 - **用户偏好（本次明确）**：首次启动**绝不自动生成/打印任何随机口令**，只提示用户自己设置；
-  UI 要**单开标签页**、按钮少而精（不要多余的清除/兜底按钮）。
+  按钮少而精（不要多余的清除/兜底按钮）。
+- **插件配置入口规范**：一律用「设置 → 插件 → 插件配置」区独立卡片
+  （`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页
+  （见 [docs/开发规范.md §2.5](docs/开发规范.md)）。
 - 当前安装：`/usr/lib/node_modules/@deepseek-ai/dsh`，版本 `0.1.0-rc.6`（升级后需更新此处）。
 
 ## 5. 项目清单
@@ -110,7 +113,7 @@ https://deepseek-harness.github.io/deepseek-harness/develop/basic/  需要以此
 |---|---|---|
 | ~~修改默认工作目录~~ | Web GUI 目录选择器默认打开 `/home/user/Projects`（替代 `/root`） | **已由 `dsh-defaults/` 统一插件替代**，原文件夹已删除 |
 | ~~思考强度与重试默认值~~ | 第三方模型可在对话框直接调思考强度（默认 off/low/medium/high，可精确声明）；默认重试次数 2→5 | **已由 `dsh-defaults/` 统一插件替代**（思考强度保持内建默认、重试次数设置页全局生效），原文件夹已删除 |
-| `全网监听与登录鉴权/` | caddy HTTPS 反代（`https://<IP>:5700`）+ 口令登录门闸（首次 `/setup` 设口令、设置面板改口令、会话 Cookie + 限速）；dsh 仅监听回环 | 已实施（含 HTTPS 切换脚本），升级后需重打 3 处安装包补丁 + 重跑 switch-to-https.sh |
+| `访问门禁/` | **登录鉴权正式插件**（原「全网监听与登录鉴权」插件化改造）：caddy HTTPS 反代（`https://<IP>:5700`）+ 口令登录门闸（首次 `/setup` 设口令、设置 → 插件 → 插件配置「访问口令」卡片、会话 Cookie + 限速）；dsh 仅监听回环；**升级免疫**（依赖 fork + profile 插件，不再打安装包补丁） | test-env 全链路验证通过（17 项集成 + 真实实例）；正式安装待用户执行 `switch-to-https.sh`；旧版（全网监听与登录鉴权/）为事故回滚参照，暂保留 |
 | `定制插件化改造/` | 把三个补丁项目改造成**源码构建 + profile 挂载的正式插件**（同包名覆盖：webserver 门闸 / apiproxy 命名空间 / connection 放行 / 目录选择器默认路径 / pi-ai 思考强度 + retryPolicy 配置化），升级免疫 | 六个 fork 构建 + 测试环境全链路验证通过；正式安装待用户执行 |
 | `dsh-defaults/` | **统一默认值插件**（合并「修改默认工作目录」+「思考强度与重试默认值」）：设置 → 插件 → 插件配置 →「默认值」卡片配置默认工作目录与默认重试次数（**对所有供应商生效**，含内置 DeepSeek），改设置即时生效无需重启 | 源码即产物 + 五个 fork；test-env 验证通过（`verify-defaults.mjs` 9 项断言）；正式安装待用户执行 `install-to-profile.sh` |
 | `test-env/` | **工作区级专用 DSH 测试环境**：独立 DSH_HOME + 端口 3090，打包测试唯一去处（脚本：`scripts/test-env-*.sh`） | 已部署（由已验证的项目级 test-env 复制，含六个 fork） |
