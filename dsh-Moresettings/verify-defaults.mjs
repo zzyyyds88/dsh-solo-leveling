@@ -80,9 +80,9 @@ check(
 );
 
 // 2) 写入回环：临时改值 → 读回 → 验证目录默认值 → 还原
-let retryCount = ns?.value?.defaultRetryCount ?? 5;
+let retryCount = ns?.value?.defaultRetryCount ?? 10;
 let workDir = ns?.value?.defaultWorkingDirectory ?? "";
-const probeRetry = retryCount === 5 ? 7 : 5;
+const probeRetry = retryCount === 10 ? 7 : 10;
 if (ns) {
   const m = await call("settings.mutate", {
     ns: "dsh-defaults",

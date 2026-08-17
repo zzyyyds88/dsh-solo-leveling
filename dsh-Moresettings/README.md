@@ -37,7 +37,7 @@ dsh-defaults/
 ```yaml
 dsh-defaults:
   defaultWorkingDirectory: ""   # 空 = 官方行为（打开 host 主目录）
-  defaultRetryCount: 5          # 所有未声明 retryPolicy 的供应商的默认重试次数
+  defaultRetryCount: 10         # 所有未声明 retryPolicy 的供应商的默认重试次数
 ```
 
 五个 fork（源码全部在本项目 `packages/` 内，其中 `dsh-host-apiproxy` 为本地副本，

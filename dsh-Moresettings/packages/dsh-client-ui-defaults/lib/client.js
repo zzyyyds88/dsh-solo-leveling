@@ -56,8 +56,8 @@ window.__ModuleLoader__.load({
 						? (snapshot.value?.defaultWorkingDirectory ?? "")
 						: "",
 					defaultRetryCount: snapshot.status === "ready"
-						? (snapshot.value?.defaultRetryCount ?? 5)
-						: 5
+						? (snapshot.value?.defaultRetryCount ?? 10)
+						: 10
 				};
 			}
 			/** Write both fields; resolves true only when the store confirms the values landed. */
@@ -87,7 +87,7 @@ window.__ModuleLoader__.load({
 			const state = props.useDshDefaultsCard((snapshot) => snapshot);
 			const [open, setOpen] = react.useState(false);
 			const [dirDraft, setDirDraft] = react.useState("");
-			const [retryDraft, setRetryDraft] = react.useState("5");
+			const [retryDraft, setRetryDraft] = react.useState("10");
 			const [message, setMessage] = react.useState("");
 			const [kind, setKind] = react.useState("ok");
 			const [saving, setSaving] = react.useState(false);

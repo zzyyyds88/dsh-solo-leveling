@@ -25,7 +25,7 @@ const Config = z.object({
   /** 目录选择器打开的默认目录；空字符串 = 官方行为（host 主目录）。 */
   defaultWorkingDirectory: z.string().default(''),
   /** 未声明 retryPolicy 的第三方供应商的默认重试次数；0 = 不重试。 */
-  defaultRetryCount: z.natural().min(0).default(5),
+  defaultRetryCount: z.natural().min(0).default(10),
 })
 
 /**
