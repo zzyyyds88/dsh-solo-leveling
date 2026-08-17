@@ -18,7 +18,6 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepare": "tsdown",
     "watch": "tsdown --watch",
     "test": "vitest run"
   },

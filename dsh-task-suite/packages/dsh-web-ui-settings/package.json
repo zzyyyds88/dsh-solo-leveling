@@ -22,7 +22,6 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepare": "tsdown",
     "watch": "tsdown --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

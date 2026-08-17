@@ -20,7 +20,6 @@
   },
   "scripts": {
     "build": "tsdown",
-    "prepare": "tsdown",
     "watch": "tsdown --watch"
   },
   "license": "Apache-2.0",
