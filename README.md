@@ -25,6 +25,30 @@
 | ![访问门禁卡片](docs/screenshots/02-accessgate-card.png) | ![默认值卡片](docs/screenshots/03-defaults-card.png) | ![桌宠](docs/screenshots/04-pet.png) | ![任务看板](docs/screenshots/05-taskboard.png) |
 -->
 
+## 快速安装
+
+前置：已安装 DSH（`dsh` CLI，版本 `0.1.0-rc.6`），DSH_HOME 为 `$HOME/.dsh`。
+
+```bash
+git clone https://github.com/zzyyyds88/dsh-solo-leveling.git
+cd dsh-solo-leveling
+```
+
+按需装单个插件（正式安装脚本会停/重启 `dsh web`，**请在 SSH 终端手动执行**；
+每个项目 README 有完整步骤与验证方法）：
+
+| 插件 | 安装入口 |
+|---|---|
+| 访问门禁（登录门闸 + HTTPS） | `node dsh-AccessGate/install-access-gate-plugin.mjs --allow-formal` |
+| 默认值（工作目录 / 重试） | `bash dsh-Moresettings/install-to-profile.sh` |
+| 手机端适配 | `bash dsh-mobile/install-to-profile.sh` |
+| 桌宠 | `node dsh-deepseekpet/install-pet-plugin.mjs --allow-formal` |
+| 任务套件（看板 / 统计 / 皮肤…） | 见 `dsh-task-suite/README.md` |
+
+> 纯插件（mobile / pet / task-suite）本质都是官方 `dsh plugin add`；access-gate 与
+> defaults 还会额外铺一层 fork（见下「分发方式」）。安装与验证细节见
+> [PLUGINS.md](PLUGINS.md) §2。
+
 **规矩文件（开工前必读）**：人类贡献指南 [CONTRIBUTING.md](CONTRIBUTING.md) ·
 AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.md](docs/开发规范.md)
 （上游原文存档 [docs/上游开发规范/](docs/上游开发规范/)）。工作区已纳入
