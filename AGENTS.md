@@ -26,6 +26,20 @@
    项目文件夹。
 6. **不把测试当正式。** 测试环境验证通过 ≠ 可以自行正式安装。正式安装脚本
    （会重启正式 dsh web 的）只能由用户在 SSH 终端执行。
+7. **插件必须符合官方安装方式。** 任何插件（自研 / fork / 收录）都必须能通过
+   **官方机制安装**：`dsh plugin --profile <name> add <包>`（内部转发 pnpm，
+   支持 npm 包 / GitHub（`github:owner/repo#sha`）/ tarball / 本地目录四种来源）。
+   包结构必须满足：
+   - `package.json` 声明 `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }`
+     （客户端插件另加 `"client": { "platform": "web", "inject": [...] }`）；
+   - 包内带 `cordis.patch.yml`（patch 行按**包名**引用插件，如
+     `- insert: [{ id: hello, name: dsh-hello-plugin }]`）；
+   - `files` 字段声明发布清单（含 `lib/` 与 `cordis.patch.yml`）；
+   - `lib/` 为**预构建产物**（npm/tarball 安装不跑构建脚本）；
+   - 走 GitHub 安装时提供自包含 `prepare` 构建脚本，并接受用户侧
+     `allowBuilds` 授权（见 `docs/上游开发规范/02-打包与安装插件.md`）。
+   禁止绕过官方机制（如手写脚本直接往 profile node_modules 拷文件）。
+   测试环境安装可沿用工作区脚本，但**正式安装必须走官方方式**。
 
 ## 测试环境速查（打包测试唯一去处）
 
