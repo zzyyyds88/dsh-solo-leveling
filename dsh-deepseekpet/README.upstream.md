@@ -1,4 +1,8 @@
-# DeepSeek Pet 插件
+# DeepSeek Pet 插件（上游原文存档）
+
+> 本文件是收录时保存的**上游 README 原文**（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT），
+> 仅作署名与历史参考**存档**；项目已脱离上游、归本仓库所有并做了大量增强，当前实现见
+> 同目录 `README.md` 与 `定制记录/变更记录.md`。
 
 DeepSeek Pet 是一个嵌入 DeepSeek Harness 网页的交互式桌宠插件。它会跟随当前任务、
 工具调用、上下文占用和活跃会话自动切换 DeepSeek 表情，并通过呼吸、弹跳、倾斜、

@@ -8,6 +8,10 @@
 > 本文件是插件总览（使用方式 / 更新情况 / 维护方案）。全部插件源码已在本仓库
 > （`dsh-AccessGate/`、`dsh-Moresettings/`、`dsh-deepseekpet/`、`dsh-mobile/`、
 > `dsh-task-suite/`）。
+>
+> **所有权与上游**：本仓库全部插件均已**脱离上游、归本仓库所有**，不再跟随任何
+> 上游仓库同步更新，源码可自由解耦；原上游署名/许可依法保留（deepseek-pet MIT、
+> task-suite Apache-2.0、maid-atelier CC BY-NC-SA 4.0 及署名链）。
 
 ---
 

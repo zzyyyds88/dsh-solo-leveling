@@ -1,9 +1,8 @@
-# deepseek-pet —— DSH 桌宠插件（收录上游）
+# deepseek-pet —— DSH 桌宠插件（本地维护）
 
-> **收录项目**：从 [keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)
-> （MIT）收录的第三方 DSH 前端插件。零改动收录——当前 DSH `0.1.0-rc.6`
-> 的客户端 API（`slots` / `sessions` / `shell.overlay` / ModuleLoader）与其
-> 完全兼容，**无需改造**，构建产物 `lib/` 直接可用。
+> **已脱离上游、归本仓库所有**：从 [keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)
+> （MIT）收录后，已在其上做了大量功能增强（音效 / 语音 / 账房 / 设置卡片等，见
+> 定制记录），**不再跟随上游同步更新**，源码可自由解耦；原 MIT 署名保留。
 >
 > 角色是一个嵌入 DeepSeek Harness 网页的交互式桌宠：跟随当前任务、工具调用、
 > 上下文占用和活跃会话自动切换表情，支持拖动、缩放、折叠、批准/提问气泡等。

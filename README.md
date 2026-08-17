@@ -65,8 +65,11 @@ cd dsh-solo-leveling
 - 贡献指南（fork 原理 / 测试环境 / 开发规范）：[CONTRIBUTING.md](CONTRIBUTING.md)
 - 许可证：[LICENSE](LICENSE)（Apache-2.0；收录的 maid-atelier 为 CC BY-NC-SA 4.0）
 
-## 致谢
+## 所有权与署名（上游已脱离）
 
-- 桌宠：[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)（MIT）
-- 任务套件（上游抽取）：[zhu1090093659/dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（Apache-2.0）
-- 皮肤 [maid-atelier](https://github.com/Small-tailqwq/dsh-deep-whale)（CC BY-NC-SA 4.0）
+本仓库所有插件均已**脱离上游、归本仓库所有**，作为自有插件集随本仓库分发与升级，
+**不再跟随任何上游仓库同步更新**；源码可自由解耦、改造。原上游署名/许可**依法保留**：
+
+- 桌宠：收录自 [keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)（MIT）
+- 任务套件：抽取自 [zhu1090093659/dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)（Apache-2.0）
+- 皮肤 [maid-atelier](https://github.com/Small-tailqwq/dsh-deep-whale)（CC BY-NC-SA 4.0，署名链见其 NOTICE）

@@ -1,10 +1,12 @@
-# dsh-task-suite —— DSH Web GUI 精选插件集（思路库）
+# dsh-task-suite —— DSH Web GUI 精选插件集（本地维护）
 
-> 从 [zhu1090093659/dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)
-> （v0.1.17，Apache-2.0）**抽取部分功能**，放到本工作区自己的仓库，scope 统一为
+> **已脱离上游、归本仓库所有**：从 [zhu1090093659/dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)
+> （v0.1.17，Apache-2.0）**抽取部分功能**后，放到本工作区自己的仓库，scope 统一为
 > **`@zzyyyds88`**，组成**一个聚合插件**（`dsh-task-suite-all`）安装即得全部功能；
 > 并加入 [Small-tailqwq/dsh-deep-whale](https://github.com/Small-tailqwq/dsh-deep-whale)
-> 的「深海女仆工坊」（maid-atelier）皮肤。
+> 的「深海女仆工坊」（maid-atelier，CC BY-NC-SA 4.0）皮肤。
+> **不再跟随上游同步更新**，源码可自由解耦；原 Apache-2.0 / CC BY-NC-SA 署名保留
+> （NOTICE / LICENSE 随包分发）。
 >
 > 覆盖用户点名要的功能：**任务看板 · 实时令牌统计 · 实时吞吐统计 · Git 图谱 ·
 > 右侧面板（预览 + 文件/变更）· 图像理解（describe_image 工具 + 配置卡）·
