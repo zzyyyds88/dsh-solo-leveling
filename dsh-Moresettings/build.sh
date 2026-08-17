@@ -8,18 +8,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# 自举构建依赖：build/tsdown.client.ts 需要 lightningcss，包内已有副本；
-# 项目根 node_modules（.gitignore 忽略）缺则建软链，保证 clone 后可直接构建。
-if [ ! -e node_modules/lightningcss ]; then
-  mkdir -p node_modules
-  ln -s "$(pwd)/packages/dsh-llm-pi-ai/node_modules/.pnpm/lightningcss@1.32.0/node_modules/lightningcss" node_modules/lightningcss
-  echo "  自举：node_modules/lightningcss → 包内 .pnpm 副本"
-fi
-
+# 自举构建依赖：全新 clone 无 node_modules，先在各 fork 包内 pnpm install 恢复
+# 构建依赖（tsdown / lightningcss / typescript，锁文件已入库），再 pnpm build。
 FORKS="dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-ai dsh-host-apiproxy"
 
 for pkg in $FORKS; do
-  echo "== 构建 $pkg（本包目录内直接构建）=="
+  echo "== 构建 $pkg =="
+  ( cd "packages/$pkg" && pnpm install --frozen-lockfile 2>/dev/null || pnpm install ) && \
   ( cd "packages/$pkg" && pnpm build )
 done
 

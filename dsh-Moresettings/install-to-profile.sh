@@ -16,7 +16,7 @@ BACKUP_SUFFIX=".pre-defaults-$(date +%Y%m%d-%H%M%S)"
 
 echo "== 0. 前置检查 =="
 [ -d "$TARGET/node_modules" ] || { echo "✗ 未找到 profile: $TARGET"; exit 1; }
-for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-pi-ai dsh-host-apiproxy; do
+for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-ai dsh-host-apiproxy; do
   [ -d "$FORKS_ROOT/$pkg/lib" ] || { echo "✗ $pkg 未构建（先 ./build.sh）"; exit 1; }
 done
 
@@ -32,7 +32,7 @@ else
 fi
 
 echo "== 2. fork 包覆盖（同包名）=="
-for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-pi-ai dsh-host-apiproxy; do
+for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-ai dsh-host-apiproxy; do
   src="$FORKS_ROOT/$pkg"
   dst="$DST/$pkg"
   if [ -d "$dst" ] && [ ! -e "$dst$BACKUP_SUFFIX" ]; then

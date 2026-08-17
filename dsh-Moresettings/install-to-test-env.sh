@@ -20,7 +20,7 @@ FORKS_ROOT="$WS_ROOT/dsh-Moresettings/packages"
 mkdir -p "$DST"
 
 echo "== 1. fork 包覆盖（同包名）=="
-for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-pi-ai dsh-host-apiproxy; do
+for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-ai dsh-host-apiproxy; do
   src="$FORKS_ROOT/$pkg"
   [ -d "$src/lib" ] || { echo "  ✗ 未构建（先 ./build.sh）：$src"; exit 1; }
   dst="$DST/$pkg"

@@ -34,3 +34,6 @@ node_modules/
 *.log
 .DS_Store
 test-envs/test-env-1/.agent-presets/
+
+# 构建缓存（tsdown 产物，勿入库）
+*.tsbuildinfo
