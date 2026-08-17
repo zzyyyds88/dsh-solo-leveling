@@ -35,7 +35,13 @@ echo "== 安装到测试 profile：$PROFILE =="
 for src in "${SRCS[@]}"; do
   [ -d "$src/lib" ] || { echo "  ✗ 未构建（无 lib/）：$src"; exit 1; }
   name="$(node -e "console.log(require('$src/package.json').name)")"
-  dst="$DST_ROOT/${name#@deepseek-ai/}"
+  # 目标目录：@deepseek-ai/*（fork 覆盖）→ node_modules/@deepseek-ai/<名>；
+  # 其余（dsh-* 标准插件）→ node_modules/<名>（切勿错放 @deepseek-ai/ 下，否则服务端读不到）
+  if [[ "$name" == @deepseek-ai/* ]]; then
+    dst="$DST_ROOT/${name#@deepseek-ai/}"
+  else
+    dst="$PROFILE/node_modules/$name"
+  fi
   if [ -d "$dst" ]; then
     rm -rf "$dst.bak"
     cp -a "$dst" "$dst.bak"

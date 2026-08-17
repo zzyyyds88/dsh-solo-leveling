@@ -106,6 +106,8 @@ window.__ModuleLoader__.load({
 			const [saving, setSaving] = react.useState(false);
 			const [restarting, setRestarting] = react.useState(false);
 			const [restartHelp, setRestartHelp] = react.useState("");
+			// 二次确认弹窗（重启后需要用户操作的地方直接放在弹窗里，可先复制再确认）
+			const [dialogOpen, setDialogOpen] = react.useState(false);
 			const disabled = !state.available || !state.writable;
 			const storedLan = state.available ? state.lanHost : void 0;
 			const storedPort = state.available ? state.httpsPort : void 0;
@@ -212,8 +214,13 @@ window.__ModuleLoader__.load({
 					setMessage(t("saveFailed"));
 				}
 			};
-			const restart = async () => {
-				if (!window.confirm(t("restartConfirm"))) return;
+			const restart = () => {
+				// 二次弹窗：确认文案 + 重启后需要用户操作的地方（systemd 提示词，可复制）
+				setDialogOpen(true);
+			};
+			const cancelRestart = () => setDialogOpen(false);
+			const confirmRestart = async () => {
+				setDialogOpen(false);
 				setRestarting(true);
 				try {
 					const res = await fetch("/access-gate/restart", { method: "POST" });
@@ -245,6 +252,7 @@ window.__ModuleLoader__.load({
 				setConfirm("");
 				setMessage("");
 				setRestartHelp("");
+				setDialogOpen(false);
 			};
 			// Card chrome: collapsible header + body + footer (styled after the
 			// official web-search PluginCard, inline styles + theme variables).
@@ -269,6 +277,11 @@ window.__ModuleLoader__.load({
 			const accessUrlStyle = { margin: "8px 0 0", fontSize: "13px", fontWeight: 600, lineHeight: "1.6", color: "var(--dsw-alias-label-success, #4ade80)" };
 			// 重启后 systemd 提示词块（可选中复制）
 			const restartHelpStyle = { margin: "10px 0 0", padding: "10px 12px", background: "var(--dsw-alias-bg-layer-1)", border: "1px dashed var(--dsw-alias-border-l2)", borderRadius: "8px", fontSize: "12px", lineHeight: "1.7", color: "var(--dsw-alias-label-secondary)", whiteSpace: "pre-wrap", wordBreak: "break-all", userSelect: "text", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
+			// 二次确认弹窗：全屏遮罩 + 居中对话框（确认文案 + systemd 提示词块 + 取消/确认按钮）
+			const overlayStyle = { position: "fixed", inset: "0", background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" };
+			const dialogStyle = { background: "var(--dsw-alias-bg-layer-3)", border: "1px solid var(--dsw-alias-border-l2)", borderRadius: "12px", padding: "18px 20px", maxWidth: "580px", width: "100%", maxHeight: "82vh", overflow: "auto", boxShadow: "0 12px 40px rgba(0,0,0,0.35)" };
+			const dialogTitleStyle = { fontSize: "15px", fontWeight: 600, margin: "0 0 6px", color: "var(--dsw-alias-label-primary)" };
+			const dialogTodoStyle = { fontSize: "12px", fontWeight: 600, margin: "12px 0 0", color: "var(--dsw-alias-label-secondary)" };
 			return (0, react_jsx_runtime.jsxs)("li", {
 				style: cardStyle,
 				children: [
@@ -374,6 +387,31 @@ window.__ModuleLoader__.load({
 							message === "" ? null : (0, react_jsx_runtime.jsx)("p", { role: "status", style: messageStyle, children: message.split("\n").map((line, i) => (0, react_jsx_runtime.jsxs)("span", { children: [line, i < message.split("\n").length - 1 ? (0, react_jsx_runtime.jsx)("br", {}) : null] }, i)) }),
 							restartHelp === "" ? null : (0, react_jsx_runtime.jsx)("pre", { style: restartHelpStyle, children: restartHelp })
 						]
+					}) : null,
+					dialogOpen ? (0, react_jsx_runtime.jsxs)("div", {
+						style: overlayStyle,
+						onClick: cancelRestart,
+						children: [
+							(0, react_jsx_runtime.jsxs)("div", {
+								role: "dialog",
+								"aria-modal": "true",
+								style: dialogStyle,
+								onClick: (event) => event.stopPropagation(),
+								children: [
+									(0, react_jsx_runtime.jsx)("h3", { style: dialogTitleStyle, children: t("restartDialogTitle") }),
+									(0, react_jsx_runtime.jsx)("p", { style: hintStyle, children: t("restartConfirm") }),
+									(0, react_jsx_runtime.jsx)("p", { style: dialogTodoStyle, children: t("restartDialogTodo") }),
+									(0, react_jsx_runtime.jsx)("pre", { style: restartHelpStyle, children: buildRestartHelp(lanDraft.trim(), Number.parseInt(portDraft.trim(), 10), accessUrl()) }),
+									(0, react_jsx_runtime.jsxs)("div", {
+										style: { display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" },
+										children: [
+											(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: cancelRestart, style: ghostButtonStyle, children: t("restartCancel") }),
+											(0, react_jsx_runtime.jsx)("button", { type: "button", onClick: confirmRestart, style: dangerButtonStyle, children: t("restartConfirmLabel") })
+										]
+									})
+								]
+							})
+						]
 					}) : null
 				]
 			});
@@ -403,6 +441,10 @@ window.__ModuleLoader__.load({
 			discard: "放弃",
 			restart: "重启",
 			restartConfirm: "将立即退出 dsh 与本实例 caddy（不做重启），由系统按各自配置拉起；确定继续？",
+			restartDialogTitle: "重启确认",
+			restartDialogTodo: "重启后需要做的事（把下面整段复制给你的 AI 助手即可）",
+			restartCancel: "取消",
+			restartConfirmLabel: "确认重启",
 			restartSent: "已发出重启请求：dsh 与本实例 caddy 正在退出，系统拉起后生效。",
 			restartHelpIntro: "提示：本实例已退出，需要有人把它重新拉起来。推荐配置 systemd 自动重启（进程退出自动拉起 + 开机自启）；或将下面整段复制给你的 AI 助手，让它代为配置：",
 			restartFailed: "重启请求失败：可能未登录或权限不足。",
@@ -442,6 +484,10 @@ window.__ModuleLoader__.load({
 			discard: "Discard",
 			restart: "Restart",
 			restartConfirm: "This exits dsh and this instance's caddy immediately (no restart orchestration); the system brings dsh back up per its own setup. Continue?",
+			restartDialogTitle: "Restart confirmation",
+			restartDialogTodo: "What to do after restart (copy the whole block to your AI assistant)",
+			restartCancel: "Cancel",
+			restartConfirmLabel: "Restart now",
 			restartSent: "Restart requested: dsh and this instance's caddy are exiting; the system will bring dsh back up.",
 			restartHelpIntro: "Note: this instance has exited and needs to be brought back up. Recommended: configure a systemd service with automatic restart (Restart=always + enable), or copy the whole block below to your AI assistant to configure it for you:",
 			restartFailed: "Restart request failed: maybe not signed in or not permitted.",
