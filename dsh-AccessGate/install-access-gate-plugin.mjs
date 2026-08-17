@@ -299,13 +299,36 @@ function readAccessGateSetting(dshHome, key) {
   return void 0;
 }
 const settingLanHost = readAccessGateSetting(dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh"), "lanHost");
-const defaultLanHost = settingLanHost && /^[A-Za-z0-9.:\-[\]]+$/.test(settingLanHost) ? settingLanHost : "192.168.1.100";
+
+/** 探测本机局域网 IPv4（os.networkInterfaces，过滤回环/内部接口）。 */
+function detectLanIps() {
+  try {
+    const nets = os.networkInterfaces();
+    const ips = [];
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name] ?? []) {
+        if (net.family === "IPv4" && !net.internal) ips.push(net.address);
+      }
+    }
+    return ips;
+  } catch { return []; }
+}
+
+// trustedHosts 默认不硬编码单一 IP：设置卡地址优先 + 本机探测到的局域网 IP（多网卡全量），
+// 运行时 DSH_WEB_TRUSTED_HOST 环境变量仍可覆盖。换机器/换网段重跑安装器即刷新。
+const hostOk = (h) => /^[A-Za-z0-9.:\-[\]]+$/.test(h);
+const defaultLanHosts = [...new Set(
+  (settingLanHost && hostOk(settingLanHost) ? [settingLanHost] : []).concat(detectLanIps().filter(hostOk))
+)];
+if (defaultLanHosts.length === 0) {
+  console.warn("  ⚠ 未探测到本机局域网 IP，trustedHosts 仅依赖 DSH_WEB_TRUSTED_HOST（否则仅回环可访问）");
+}
 
 const connectionOverride = {
   id: "connection",
   config: {
     trustedHosts: {
-      __jsExpr: `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : [process.env.DSH_WEB_TRUSTED_HOST ?? '${defaultLanHost}']`,
+      __jsExpr: `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : [process.env.DSH_WEB_TRUSTED_HOST, ${defaultLanHosts.map((h) => `'${h}'`).join(", ")}].filter(Boolean)`,
     },
   },
 };
