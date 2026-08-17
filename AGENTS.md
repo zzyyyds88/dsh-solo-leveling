@@ -66,6 +66,7 @@ scripts/test-env-init.sh --force                # 重建基线（DSH 升级后�
 # opencode 部署（正式环境，由 opencode 在 SSH 终端执行；本 agent 不执行）
 scripts/formal-reinstall.sh                     # 一键：备份→停→按依赖序装 5 插件→起→逐项 verify
 scripts/formal-reinstall.sh --no-restart        # 只装不重启；--rebuild 先重建产物；--skip-verify 跳过 verify
+scripts/check-fork-versions.sh                  # 检查 @deepseek-ai/* 同包名 fork 与全局 DSH 版本是否一致（升级前必跑）
 ```
 
 **多测试环境**（`TEST_ENV_INDEX` 选择，默认 1；所有 `test-env-*.sh` 均支持），
@@ -102,6 +103,9 @@ scripts/formal-reinstall.sh --no-restart        # 只装不重启；--rebuild �
    **插件配置入口一律用「设置 → 插件 → 插件配置」区独立卡片
    （`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页**，
    详见开发规范 §2.5。
+   **DSH 官方升级适配必须遵从 [docs/升级适配指南.md](docs/升级适配指南.md)**：
+   铁律「**官方新版已实现与本仓库相同功能 → 优先用官方、弃用对应 fork/适配层**」，
+   保留的 fork 必须重 base 到新版官方源码，详见该指南 §2 清单与 §3 流程。
 1. 先调研：`dsh-plugin` 主题 / awesome-dsh-plugin / Oh-My-DSH 找现成方案；
    开发基础以 <https://deepseek-harness.github.io/deepseek-harness/develop/basic/> 为准。
 2. 每个项目：先写思路库 README → 定位链路（前端 bundle 实时读盘刷新即生效；
@@ -123,6 +127,8 @@ scripts/formal-reinstall.sh --no-restart        # 只装不重启；--rebuild �
 
 - 当前安装：`/usr/lib/node_modules/@deepseek-ai/dsh`，版本 `0.1.0-rc.6`；
   正式 DSH_HOME：`/root/.dsh`；正式端口 3080；测试端口 3090。
+  **官方已发布 `0.1.0-rc.7`（2026-08-17，仓库结构重组为域目录）**，尚未安装/适配；
+  升级时按 [docs/升级适配指南.md](docs/升级适配指南.md) 逐项核对，铁律「优先官方」。
 - DSH 升级会覆盖安装包 → 补丁项目必须靠幂等重打脚本 + profile 插件化实现升级免疫。
 - 安装/升级只走 opencode：一键入口 `scripts/formal-reinstall.sh`；5 套 verify 统一
   「默认 test-env + `--formal` 验正式」；安装器全部幂等可重跑（见 docs/opencode-实测反馈.md）。
