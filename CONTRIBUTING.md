@@ -234,7 +234,7 @@ git pull --rebase && git push                                   # 有远端后
 
 ## 12. 升级应对（DSH 升级之后）
 
-1. 更新根 README「当前安装版本」；对比新版本差异。
+1. 更新根 README「快速安装」与 CONTRIBUTING.md §1 里的 DSH 版本号；对比新版本差异。
 2. 各补丁项目执行 `升级后重打补丁指南.md`（幂等重打脚本）。
 3. 重建测试环境基线：`scripts/test-env-init.sh --force`（从新正式 profile 克隆），
    再重装定制插件验证。
@@ -252,3 +252,34 @@ git pull --rebase && git push                                   # 有远端后
 - dsh-web-ui 全家桶（上游参考）：[zhu1090093659/dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui)
   （本地快照已删除，按 `开发备忘.md` 加速命令可重下）
 - 插件开发备忘（GitHub 加速下载等）：[开发备忘.md](开发备忘.md)
+
+## 14. 关键经验（踩坑记录）
+
+> 从已有项目沉淀的实战经验，开发前先扫一遍，避免重复踩坑。
+
+- **DSH 升级/重装会覆盖安装包**，所有直接改包内文件的补丁都会失效 → 必须配幂等重打脚本。
+- 服务端对 `/plugins/<id>/client.js` 的响应是**每请求实时读盘、`cache-control: no-cache`**，
+  改完文件浏览器刷新即生效，无需重启、不打断会话。
+- 后端插件（`dsh-host-*`）改动**需要重启 `dsh web`**，风险更高，一般不优先选。
+- **⚠ 运行中的 `dsh web` 会热重载 `cordis.patch.yml` 的改动**：在服务存活时改写该文件，
+  会触发配置热重载、把承载 Web/agent 会话的进程搞崩（表现为工具调用莫名中断/任务失败）。
+  → 所有 profile 配置改动必须**原子化**：先停服务 → 写配置 → 再启动。
+- **⚠ agent 绝不能自己重启 `dsh web`**：agent 就运行在 dsh web 进程里，一旦 pkill/重启，
+  执行中的工具调用会被中断（等于自杀）。凡需重启 dsh 的操作（停→改→起）一律封装成脚本，
+  交给用户在 SSH 终端执行。
+- **端口不要硬编码进 dsh 侧配置**：trustedHosts 固化用**无端口 host**（任意端口放行），
+  改端口只动反代（Caddyfile + `systemctl restart caddy`），与 dsh 解耦。
+- **同一端口无法同时收 HTTP 与 HTTPS**（caddy/nginx 通性）：「http 自动跳 https」只能另开端口，
+  用户明确**不要额外 http 跳转入口**——HTTPS 服务直接使用 https:// 前缀，勿自作主张加跳转端口。
+- **局域网访问优先整体上 HTTPS，不要逐个打 polyfill**：明文 HTTP 是非安全上下文，
+  `crypto.randomUUID` 等浏览器 API 不可用；用 caddy/nginx 反代 + 自签证书
+  （caddy `tls internal`）+ `--trusted-host` 一次解决，而非逐个补丁。
+- **⚠ 打包测试必须有专用测试环境**：测试实例用独立 `DSH_HOME`（`test-envs/`）+ 独立端口（**3090**），
+  与正式实例（**3080**）完全隔离；测试实例由 `scripts/test-env-*.sh` 管理（PID 文件精确启停，
+  禁止 pkill -f 模糊匹配）。
+- **用户偏好**：首次启动**绝不自动生成/打印任何随机口令**，只提示用户自己设置；按钮少而精。
+- **插件配置入口规范**：一律用「设置 → 插件 → 插件配置」区独立卡片（`settings.plugin.item`，
+  样式同官方「网页搜索」卡片），禁止独立标签页（见 [docs/开发规范.md §2.5](docs/开发规范.md)）。
+- **⚠ 客户端 bundle 里绝不能用 classList 操作 React 管理的 className**：React 会重写 className，
+  与 MutationObserver 形成死循环，实测直接把 renderer 搞崩（页面无声关闭、无报错）。改 DOM
+  标记一律用 `data-*` 属性（见 `dsh-mobile/` 踩坑记录）。
