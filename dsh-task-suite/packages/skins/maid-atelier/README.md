@@ -1,5 +1,9 @@
 # maid-atelier · 深海女仆工坊
 
+> **本地维护（已脱离上游）**：本皮肤已并入本仓库插件集（`@zzyyyds88/dsh-skins`），
+> 作为插件家族的一部分随插件一起分发/升级，**不再跟随上游 `dsh-external/dsh-deep-whale`
+> 更新**。源码可自由解耦与改造（许可 CC BY-NC-SA 4.0 不变，署名链见 NOTICE）。
+
 DeepSeek Harness Web GUI 的深海女仆工坊皮肤：双女仆背景、深海蓝蕾丝界面与 Q 版侧栏。纯展示层客户端插件——`apply()` 设置 `data-dsh-maid-atelier` 作用域、按亮/暗主题切换宫殿背景、以独立透明层挂载双女仆角色、装饰可折叠侧栏,并为加载/思考/工具运行状态预留稳定动画钩子。effect 销毁器还原全部 CSS/DOM 写入;不注入服务、不发出 Cordis 事件、不触达模型请求。
 
 ## 特性
@@ -9,6 +13,9 @@ DeepSeek Harness Web GUI 的深海女仆工坊皮肤：双女仆背景、深海�
 - Q 版侧栏角色与视口装饰、favicon
 - 着陆页角色随响应式输入框缩放;对话页移向安全边缘;轨迹/检查视图保持着陆构图
 - 素材内嵌于 client bundle(数据 URI),激活不依赖任何临时文件/远程 URL/资源服务器
+- **插件专用适配**：皮肤重映射了 260+ 个 `--dsw-*` token，另对不走 `--dsw-*` 的
+  桌宠（`--pet-blue/--pet-cyan` → periwinkle/柔金）与右侧面板（`--aion-*` token →
+  皮肤色板）做了专门覆盖，使其随皮肤一起变化
 
 ## 安装
 

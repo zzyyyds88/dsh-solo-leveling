@@ -85,6 +85,56 @@ body[data-dsh-maid-atelier][data-ds-dark-theme] {
   --dsw-specific-sidebar-fill: rgba(5, 13, 40, 0.9);
 }
 
+/* ── 插件专用适配（桌宠 + 右侧面板）──────────────────────────────────────
+   deepseek-pet 用 --pet-* 硬编码蓝青霓虹，aionui-panel 用 --aion-* 自有 token，
+   都不读 --dsw-*，皮肤主题不会自动覆盖。这里把它们的 token 映射到皮肤色板，
+   让桌宠与文件树/预览/SCM 面板跟皮肤一起变。 */
+
+/* 桌宠：蓝青霓虹 → 皮肤 periwinkle + 柔金（--pet-panel/--pet-line 已走 --dsw-*） */
+body[data-dsh-maid-atelier] [data-dsh-live2d-root] {
+  --pet-blue: var(--maid-periwinkle);
+  --pet-cyan: var(--maid-gold);
+}
+
+/* 右侧面板（aionui-panel）核心 token：映射到皮肤 --dsw-*，自动亮/暗。
+   用高特异性选择器覆盖 aionui 自己的 :root / body[data-ds-dark-theme]。 */
+body[data-dsh-maid-atelier],
+body[data-dsh-maid-atelier][data-ds-dark-theme] {
+  --aion-bg-base: var(--dsw-alias-bg-overlay);
+  --aion-bg-1: var(--dsw-alias-bg-layer-1);
+  --aion-bg-2: var(--dsw-alias-bg-layer-2);
+  --aion-bg-3: var(--dsw-alias-bg-layer-3);
+  --aion-bg-hover: var(--dsw-alias-interactive-bg-hover-solid);
+  --aion-bg-active: var(--dsw-alias-interactive-bg-active);
+  --aion-text-primary: var(--dsw-alias-label-primary);
+  --aion-text-secondary: var(--dsw-alias-label-secondary);
+  --aion-text-tertiary: var(--dsw-alias-label-tertiary);
+  --aion-text-disabled: var(--dsw-alias-label-caption);
+  --aion-primary: var(--dsw-alias-brand-primary);
+  --aion-brand: var(--maid-gold);
+  --aion-warning: var(--maid-gold);
+  --aion-border-base: var(--dsw-alias-border-l2);
+  --aion-fill-2: var(--dsw-alias-interactive-bg-hover);
+  --aion-fill-3: var(--dsw-alias-interactive-bg-active);
+  --aion-aou-6: var(--maid-periwinkle);
+}
+
+/* --aion-aou-* 是 aionui 专属的 6 阶蓝灰 ramp，需显式亮/暗。 */
+body[data-dsh-maid-atelier] {
+  --aion-aou-1: #eef1f8;
+  --aion-aou-2: #e3e8f4;
+  --aion-aou-3: #cfd7ea;
+  --aion-aou-4: #b3bfdd;
+  --aion-aou-5: #94a5cf;
+}
+body[data-dsh-maid-atelier][data-ds-dark-theme] {
+  --aion-aou-1: #1a2340;
+  --aion-aou-2: #212c4e;
+  --aion-aou-3: #2c3a62;
+  --aion-aou-4: #3a4c7d;
+  --aion-aou-5: #4c62a0;
+}
+
 body[data-dsh-maid-atelier] [id='root'] {
   position: relative;
   background: transparent;
