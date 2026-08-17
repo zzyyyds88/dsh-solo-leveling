@@ -9,6 +9,14 @@
 > `dsh-deepseekpet/`、`dsh-mobile/`、`dsh-task-suite/`）与规范文档；
 > 插件总览见 [PLUGINS.md](PLUGINS.md)。
 
+## 截图
+
+<!-- 图片就位后取消注释（图片统一放 docs/screenshots/，命名见各占位）：
+| 登录门闸 | 默认值卡片 | 桌宠 | 任务看板 | 手机端 |
+|---|---|---|---|---|
+| ![登录页](docs/screenshots/01-login.png) | ![默认值卡片](docs/screenshots/03-defaults-card.png) | ![桌宠](docs/screenshots/04-pet.png) | ![任务看板](docs/screenshots/05-taskboard.png) | ![手机端](docs/screenshots/06-mobile.png) |
+-->
+
 **规矩文件（开工前必读）**：人类贡献指南 [CONTRIBUTING.md](CONTRIBUTING.md) ·
 AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.md](docs/开发规范.md)
 （上游原文存档 [docs/上游开发规范/](docs/上游开发规范/)）。工作区已纳入
@@ -17,6 +25,34 @@ AI 代理强制红线 [AGENTS.md](AGENTS.md) · 开发规范 [docs/开发规范.
 **铁律（最高优先级）**：打包测试 / 安装 / 升级，**禁止在已经运行中的正式 DSH
 （端口 3080）强行替换**（会把正在运行的 DSH 换掉导致崩溃）——必须先在工作区级
 专用测试环境 `test-envs/test-env-1/`（独立 DSH_HOME + 端口 3090）测试通过，之后才允许安装。
+---
+
+## 分发方式：为什么走 GitHub 源码、不发 npm 包
+
+本仓库插件分两类：
+
+| 类型 | 插件 | 能否发 npm |
+|---|---|---|
+| 纯插件（标准 bundle） | `dsh-mobile-adapt`、`deepseek-pet`、`dsh-task-suite` 全家 | ✅ 能 |
+| 依赖 fork 的插件 | `dsh-AccessGate`、`dsh-Moresettings` | ❌ 不能 |
+
+`dsh-AccessGate`（登录门闸）和 `dsh-Moresettings`（默认值）依赖一批 **`@deepseek-ai/*` 同包名
+覆盖 fork**——webserver 的 `registerGate` 门闸钩子、apiproxy 的命名空间暴露、connection 的
+登录放行、目录选择器默认路径、llm 重试默认值等。这些钩子**官方上游并没有**，而且：
+
+- `@deepseek-ai/*` 这个 npm scope 归 DeepSeek 所有、个人无法发布（这些 fork 还声明了 `private: true`）；
+- 即便换个 scope 发上去，`dsh plugin add` 也只会按 `@deepseek-ai/*` 名字解析到**官方原版**
+  （不带这些钩子），fork 依然装不进去。
+
+所以 access-gate / defaults 的 fork 必须由安装脚本直接铺进 profile 的
+`node_modules/@deepseek-ai/`（同名覆盖，这是 [AGENTS.md](AGENTS.md) 红线 7 里的
+「唯一显式例外」）。与其让用户「npm 装一半纯插件 + 脚本装一半 fork」两套流程，不如
+整仓统一走 **GitHub 源码 + 各项目自带安装脚本**：clone 后跑一个脚本，fork + 纯插件 +
+配置一次装齐。**这就是本仓库不单独发 npm 的原因。**
+
+> 想让它们也能 `dsh plugin add @scope/xxx` 纯 npm 装，唯一前提是**上游化**：把上述钩子
+> PR 进 deepseek-harness 官方，届时 fork 归零、插件即可纯 npm 分发。当前未合入前维持源码分发。
+
 ---
 
 ## 1. 这是什么地方
