@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# 构建访问门禁依赖的三个 fork 包（源码全部在本项目 packages/ 内，自包含、不跨项目引用）。
+# 构建访问门禁依赖的三个 tsdown fork 包（源码全部在本项目 packages/ 内，自包含、不跨项目引用）。
 # 注：dsh-host-apiproxy 为本地副本，dsh-Moresettings/ 各自维护一份同源码 fork（互不引用）。
+#     另有第 4 个 fork dsh-client-ui-settings（远程设置卡片放行）**无需构建**——
+#     官方发布包未附 TS 源码，直接改构建产物 lib/client.js（见其 README），不在此列表。
 # 用法：./build.sh
 set -euo pipefail
 cd "$(dirname "$0")"

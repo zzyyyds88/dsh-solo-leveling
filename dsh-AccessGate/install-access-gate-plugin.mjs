@@ -154,7 +154,7 @@ if (unpatch) {
 // 1a) 安装门闸基础 fork（profile 同名覆盖，升级免疫；源码在本项目 packages/）
 //     正式 profile 若无 fork，Loader 会回退全局安装——全局 apiproxy 只暴露旧
 //     web-auth 命名空间，缺 access-gate，设置卡片将不可读写，故必须装 fork。
-const FORK_PKGS = ["dsh-host-webserver", "dsh-host-apiproxy", "dsh-client-connection"];
+const FORK_PKGS = ["dsh-host-webserver", "dsh-host-apiproxy", "dsh-client-connection", "dsh-client-ui-settings"];
 const FORKS_ROOT = join(HERE, "packages");
 let forkInstalled = 0;
 for (const pkg of FORK_PKGS) {

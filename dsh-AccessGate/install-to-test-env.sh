@@ -21,12 +21,13 @@ echo "== 测试环境：$TEST_ENV（TEST_ENV_INDEX=${ENV_INDEX:-1}，端口 $POR
 echo "  声明状态：$(usage_status)"
 [ -d "$TEST_ENV/profiles/web/node_modules" ] || { echo "✗ 测试环境未初始化，先跑 scripts/test-env-init.sh"; exit 1; }
 
-echo "== [1/2] 安装 fork 包（webserver / apiproxy / connection）到测试 profile =="
+echo "== [1/2] 安装 fork 包（webserver / apiproxy / connection / client-ui-settings）到测试 profile =="
 mkdir -p "$TEST_ENV/profiles/web/node_modules/@deepseek-ai"
 "$WS_ROOT/scripts/test-env-install.sh" \
   "$HERE/packages/dsh-host-webserver" \
   "$HERE/packages/dsh-host-apiproxy" \
-  "$HERE/packages/dsh-client-connection"
+  "$HERE/packages/dsh-client-connection" \
+  "$HERE/packages/dsh-client-ui-settings"
 
 echo "== [2/2] 安装访问门禁插件 + 合并 cordis.patch.yml + 迁移 settings.yaml =="
 node "$HERE/install-access-gate-plugin.mjs" \

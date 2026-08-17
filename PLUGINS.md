@@ -19,6 +19,7 @@
 | `dsh-host-webserver`（fork @deepseek-ai） | 后端 | `registerGate` 门闸钩子：HTTP + WebSocket 统一过闸（未登录 302/401/403） | profile 同名覆盖 |
 | `dsh-host-apiproxy`（fork @deepseek-ai） | 后端 | `exposedNamespaces` 增加 `web-auth` / `dsh-defaults` 设置命名空间 | profile 同名覆盖 |
 | `dsh-client-connection`（fork @deepseek-ai） | 客户端 | 登录后放行 `settings.*`（`webAuthAuthed`） | profile 同名覆盖 |
+| `dsh-client-ui-settings`（fork @deepseek-ai） | 前端 | 设置 scope 一律 `host` 模式：HTTPS/LAN 页面登录后设置卡片可用（官方仅回环）；匿名远程仍被服务端 401/403 拦下 | profile 同名覆盖 |
 | `dsh-host-directory-picker-browse`（fork @deepseek-ai） | 后端 | 目录选择器默认打开目录读取 `dsh-defaults.defaultWorkingDirectory`（空 = 主目录） | profile 同名覆盖 |
 | `dsh-llm`（fork @deepseek-ai） | 后端 | 注册兜底：未声明 retryPolicy 的 adapter 按 `dsh-defaults.defaultRetryCount` 兜底 | profile 同名覆盖 |
 | `dsh-llm-deepseek`（fork @deepseek-ai） | 后端 | 内置 DeepSeek 供应商未声明 retryPolicy 时按 `dsh-defaults.defaultRetryCount` 兜底 | profile 同名覆盖 |

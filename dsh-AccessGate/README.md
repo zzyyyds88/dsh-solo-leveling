@@ -4,8 +4,9 @@
 > 把「改安装包补丁 + 手写插件」升级为**源码维护的正式 DSH 插件**
 > （后端 `dsh-host-access-gate` + 前端卡片 `dsh-client-ui-access-gate`），
 > 升级免疫、可维护、可测试。旧项目的补丁脚本（patch-*.py）已退役——
-> 门闸钩子 / 命名空间暴露 / 登录放行由本项目 `packages/` 下的三个 fork 包提供
-> （`dsh-host-webserver` / `dsh-host-apiproxy` / `dsh-client-connection`）。
+> 门闸钩子 / 命名空间暴露 / 登录放行由本项目 `packages/` 下的 fork 包提供
+> （`dsh-host-webserver` / `dsh-host-apiproxy` / `dsh-client-connection` /
+> `dsh-client-ui-settings`——后者让远程 HTTPS/LAN 页面在登录后可用设置卡片，见下文 §4）。
 
 ---
 
@@ -34,6 +35,7 @@
 | 请求门闸钩子 `registerGate` | `patch-webserver-gate.py` 打安装包 | **fork** `dsh-host-webserver`（profile 同名覆盖） |
 | 设置命名空间暴露 | `patch-settings-integration.py` 打安装包 | **fork** `dsh-host-apiproxy`：`exposed.add('access-gate')` |
 | settings.* 登录放行 | 同上（connection） | **fork** `dsh-client-connection`：`webAuthAuthed` |
+| 远程页面设置卡片可用 | 官方仅回环（非回环 memory 模式，卡片隐藏） | **fork** `dsh-client-ui-settings`：scope 一律 `host` 模式（服务端强制认证） |
 | 鉴权后端插件 | `dsh-web-auth`（手写 ESM） | **`dsh-host-access-gate`**（改名规范化） |
 | 设置入口 | 「设置 → 插件」独立标签页 `settings.plugins.tab` | **「设置 → 插件 → 插件配置」卡片** `settings.plugin.item`（开发规范 §2.5） |
 | 口令存储键 | settings.yaml `web-auth:` | settings.yaml **`access-gate:`**（安装脚本自动迁移旧键） |
@@ -64,6 +66,7 @@
 | 修改口令 | GUI「设置 → 插件 → 插件配置 → 访问门禁」卡片（口令可留空不修改；保存后旧会话立即失效） |
 | 会话 | Cookie `dsh_session`（HMAC-SHA256、HttpOnly、SameSite=Strict、默认 7 天） |
 | 未登录行为 | 页面/静态资源 → 302 /login；`/api/*` → 401 JSON；WebSocket 升级 → 403 |
+| 远程设置卡片（HTTPS/LAN 页面） | 官方 `dsh-client-ui-settings` 仅回环可用（非回环走 memory 模式，绑定设置命名空间的卡片全部隐藏）；本项目 fork 放行：**登录后远程可读写全部设置卡片（含访问门禁卡）**，匿名远程仍被门闸 401 拦截（服务端强制） |
 | 口令来源（优先级） | config.password > settings 命名空间 `access-gate.password` > `DSH_ACCESS_GATE_PASSWORD`（兼容 `DSH_WEB_PASSWORD`）> passwordFile |
 | 限速 | 每来源 IP（识别 X-Forwarded-For）10 次/10 分钟错误尝试后锁定登录 |
 | 版本 | dsh `0.1.0-rc.6`；fork 源码在本项目 `packages/`（`dsh-host-apiproxy` 为本地副本，与 `dsh-Moresettings/` 各自维护一份同源码 fork） |
@@ -97,6 +100,10 @@ fork 同名覆盖）+ 系统服务（caddy），**天然升级免疫**。若上�
 （registerGate 签名、settings 事件名、client bundle 格式），按
 `升级后重打补丁指南.md` 适配：改 fork 源码 → rebuild → test-env 验证。
 
+> **注意**：`dsh-client-ui-settings` fork 直接改**构建产物** `lib/client.js`（官方发布包
+> 未附 TS 源码），无 tsdown 构建；升级后如官方 `bind` 逻辑重构，按
+> `packages/dsh-client-ui-settings/README.md` 重新套用同一行改动。
+
 ## 7. 关键代码位置
 
 - 门闸钩子：`packages/dsh-host-webserver/src/index.ts`（`registerGate`）
@@ -104,6 +111,8 @@ fork 同名覆盖）+ 系统服务（caddy），**天然升级免疫**。若上�
   （`exposedNamespaces()`：`access-gate` + 兼容 `web-auth`）
 - 登录放行：`packages/dsh-client-connection/src/index.ts`
   （`webAuthAuthed`，消费 `webAuth` 服务）
+- 远程设置卡片：`packages/dsh-client-ui-settings/lib/client.js`
+  （`SettingsScopeBinder.bind`：scope 一律 `host` 模式，见 §4 说明）
 - 鉴权插件：`packages/dsh-host-access-gate/lib/index.js`（登录/首次设置/会话/限速/命名空间）
 - 前端卡片：`packages/dsh-client-ui-access-gate/lib/client.js`
   （`settings.plugin.item` 注册 + AccessGateCard 组件）
