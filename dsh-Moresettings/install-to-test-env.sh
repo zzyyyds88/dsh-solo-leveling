@@ -49,7 +49,7 @@ case "$PROFILE" in
   "$TEST_ENV/"*) ;;
   *) echo "✗ 安全断言失败：目标 profile 不在测试环境内（$PROFILE）"; exit 1 ;;
 esac
-node "$HERE/install-defaults-plugin.mjs" --profile-dir "$PROFILE"
+node "$HERE/install-defaults-plugin.mjs" --profile-dir "$PROFILE" --dsh-home "$TEST_ENV"
 
 echo
 echo "完成。重启测试实例生效（仅测试环境，端口 3090）："

@@ -19,6 +19,8 @@
  *   node install-defaults-plugin.mjs --dry-run           # 只检查，不写入
  *   node install-defaults-plugin.mjs --unpatch           # 卸载：还原 patch 文件(.bak)并删除插件目录
  *   node install-defaults-plugin.mjs --profile-dir <路径> # 指定 profile 目录（默认 ~/.dsh/profiles/web）
+ *   node install-defaults-plugin.mjs --dsh-home <路径>    # 指定 DSH_HOME（默认从 --profile-dir 推导）
+ *   node install-defaults-plugin.mjs --allow-formal       # 显式允许写入非 test-env* profile（仅用户手动）
  *
  * 退出码：0 = 已是最新/处理完成；2 = 失败（已打印原因）。
  */
@@ -79,6 +81,10 @@ const dshRootOpt = optionValue(args, "--dsh-root", undefined);
 
 const profileDir = findProfileDir(profileOpt);
 const dshRoot = findDshRoot(dshRootOpt);
+// DSH_HOME 必须与 --profile-dir 对应（profiles/web 的父父目录），不要用 process.env.DSH_HOME——
+// 否则在 DSH_HOME=/root/.dsh 的宿主 shell 里会把 dsh plugin add 误装到正式环境。
+// 支持 --dsh-home 显式覆盖。
+const dshHome = optionValue(args, "--dsh-home", undefined) ?? dirname(dirname(profileDir));
 // js-yaml 与 cordis-plugin-include 从 dsh 安装根解析（与 dsh 自身同源，schema 一致）。
 const require = createRequire(join(dshRoot, "package.json"));
 const yaml = require("js-yaml");
@@ -125,7 +131,7 @@ if (unpatch) {
   const profileName = basename(profileDir);
   const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "dsh-defaults", "dsh-client-ui-defaults"], {
     cwd: profileDir,
-    env: { ...process.env, DSH_HOME: process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    env: { ...process.env, DSH_HOME: dshHome },
     encoding: "utf8",
   });
   if (rm.status !== 0) {
@@ -173,7 +179,7 @@ if (stdInstalled) {
   const profileName = basename(profileDir);
   const add = spawnSync("dsh", ["plugin", "--profile", profileName, "add", ...tgzs], {
     cwd: profileDir,
-    env: { ...process.env, DSH_HOME: process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    env: { ...process.env, DSH_HOME: dshHome },
     encoding: "utf8",
   });
   if (add.status !== 0) fail(`dsh plugin add 失败（exit ${add.status}）：${add.stderr ?? add.stdout}`);

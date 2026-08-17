@@ -77,7 +77,7 @@ if (ns) {
     ns: "dsh-defaults",
     ops: [
       { op: "set", path: ["defaultRetryCount"], value: probeRetry },
-      { op: "set", path: ["defaultWorkingDirectory"], value: "/home/user/Projects" },
+      { op: "set", path: ["defaultWorkingDirectory"], value: "/tmp" },
     ],
   });
   check("settings.mutate 写入成功", m.ok === true);
@@ -85,14 +85,14 @@ if (ns) {
   const ns2 = d2.value.namespaces.find((n) => n.ns === "dsh-defaults");
   check(
     "写入回读一致",
-    ns2?.value?.defaultRetryCount === probeRetry && ns2?.value?.defaultWorkingDirectory === "/home/user/Projects",
+    ns2?.value?.defaultRetryCount === probeRetry && ns2?.value?.defaultWorkingDirectory === "/tmp",
     JSON.stringify(ns2?.value),
   );
 }
 
 // 3) 目录选择器默认目录（写入状态下验证，再还原）
 const dir = await call("host.listDirectory", {});
-check("目录选择器默认目录生效", dir.value?.path === "/home/user/Projects", `path=${dir.value?.path}`);
+check("目录选择器默认目录生效", dir.value?.path === "/tmp", `path=${dir.value?.path}`);
 
 // 还原设置
 if (ns) {
