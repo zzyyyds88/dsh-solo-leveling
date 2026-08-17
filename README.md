@@ -17,13 +17,7 @@
 
 | 桌面端 | 手机端 |
 |---|---|
-| ![登录页（桌面端）](docs/screenshots/01-login.png) | ![登录页（手机端）](docs/screenshots/06-mobile.png) |
-
-<!-- 待补：访问门禁/默认值设置卡片（02/03）、桌宠（04）、任务看板（05）—— 图片放 docs/screenshots/ 后取消注释：
-| 访问门禁卡片 | 默认值卡片 | 桌宠 | 任务看板 |
-|---|---|---|---|
-| ![访问门禁卡片](docs/screenshots/02-accessgate-card.png) | ![默认值卡片](docs/screenshots/03-defaults-card.png) | ![桌宠](docs/screenshots/04-pet.png) | ![任务看板](docs/screenshots/05-taskboard.png) |
--->
+| ![登录页（桌面端）](docs/screenshots/01-login.png) | ![登录页（手机端）](docs/screenshots/02-mobile.png) |
 
 ## 快速安装
 
