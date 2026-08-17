@@ -96,6 +96,19 @@ if (!/test-env[\d-]*[\\/]/.test(profileDir.replace(/\\/g, "/")) && !args.include
   );
 }
 
+// 端口监听硬守卫（红线 4）：正式 profile 安装前必须已停 dsh web。运行中改写
+// cordis.patch.yml / settings.yaml 会触发热重载、崩掉承载会话的进程。
+function formalWebListening() {
+  const r = spawnSync("ss", ["-tlnp"], { encoding: "utf8" });
+  return /:(3080)\b/.test((r.stdout ?? "") + (r.stderr ?? ""));
+}
+if (!/test-env[\d-]*[\\/]/.test(profileDir.replace(/\\/g, "/")) && formalWebListening()) {
+  fail(
+    "检测到正式 dsh web 仍在运行（端口 3080）。请先停止服务再执行安装：\n" +
+    "  （运行中改写 cordis.patch.yml / settings.yaml 会热重载崩掉会话）"
+  );
+}
+
 const patchFile = join(profileDir, "cordis.patch.yml");
 const hostPluginDest = join(profileDir, "node_modules", "dsh-defaults");
 const clientPluginDest = join(profileDir, "node_modules", "dsh-client-ui-defaults");
