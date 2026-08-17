@@ -14,6 +14,7 @@ export const ALERT_LABELS = Object.freeze({
   celebrate: '任务完成提醒',
   error: '出错安慰',
   prompt: '提问/审批提示',
+  state: '状态语音（思考/忙碌）',
   poke: '戳一戳音效',
   headpat: '摸头音效',
 })
@@ -22,7 +23,8 @@ export const ALERT_LABELS = Object.freeze({
 const ALERT_TOGGLES = Object.freeze({
   celebrate: true, // 任务完成庆祝（琶音+语音+纸屑）
   error: true,     // 出错安慰（低音+语音）
-  prompt: true,    // 提问/审批提示（等待批准时）
+  prompt: true,    // 提问/审批提示（等待批准/回答时，提示音+语音）
+  state: true,     // 状态语音：进入思考/忙碌时播「让我想一想」「这个问题有点意思」等
   poke: true,      // 戳一戳音效
   headpat: true,   // 摸头庆祝
 })

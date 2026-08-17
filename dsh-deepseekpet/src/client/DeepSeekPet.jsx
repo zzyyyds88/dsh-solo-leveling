@@ -517,18 +517,22 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }) {
 
   // 进入等待批准/提问/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）。
   // waiting 用 effectiveVisual.promptKind 区分「审批」与「提问」，播不同台词。
+  // 分两类开关：提问/审批（prompt）走提示音+语音；思考/忙碌（state）只播状态语音。
   useEffect(() => {
     if (!petEnabled) return
     const kind = effectiveVisual.kind
     if (kind !== 'waiting' && kind !== 'approval' && kind !== 'busy' && kind !== 'thinking') return
-    if (!alertEnabled('prompt')) return
     const voiceKey = kind === 'waiting'
       ? (effectiveVisual.promptKind === 'approval' ? 'approval' : 'question')
       : kind
     const keys = VOICE_FOR_STATE[voiceKey]
     if (!keys?.length) return
+    const isPrompt = voiceKey === 'approval' || voiceKey === 'question'
+    const isState = voiceKey === 'busy' || voiceKey === 'thinking'
+    if (isPrompt && !alertEnabled('prompt')) return
+    if (isState && !alertEnabled('state')) return
     unlockAudio()
-    playPrompt()
+    if (isPrompt) playPrompt()
     speakVoice(pickVoiceKey(keys))
   }, [effectiveVisual.kind, effectiveVisual.promptKind, petEnabled])
 
