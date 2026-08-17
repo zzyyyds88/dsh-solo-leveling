@@ -25,6 +25,7 @@ test-envs/test-env-1/sessions/
 test-envs/test-env-1/storages/
 test-envs/test-env-1/dsh-web.*
 test-envs/test-env-1/pet.json
+test-envs/test-env-1/caddy/
 
 # 依赖
 node_modules/
