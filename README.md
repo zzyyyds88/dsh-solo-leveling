@@ -11,10 +11,18 @@
 
 ## 截图
 
-<!-- 图片就位后取消注释（图片统一放 docs/screenshots/，命名见各占位）：
-| 登录门闸 | 默认值卡片 | 桌宠 | 任务看板 | 手机端 |
-|---|---|---|---|---|
-| ![登录页](docs/screenshots/01-login.png) | ![默认值卡片](docs/screenshots/03-defaults-card.png) | ![桌宠](docs/screenshots/04-pet.png) | ![任务看板](docs/screenshots/05-taskboard.png) | ![手机端](docs/screenshots/06-mobile.png) |
+### 登录门闸（`dsh-AccessGate`）
+
+深蓝海底动漫风背景 + 毛玻璃登录卡片，桌面端与手机端均自适应：
+
+| 桌面端 | 手机端 |
+|---|---|
+| ![登录页（桌面端）](docs/screenshots/01-login.png) | ![登录页（手机端）](docs/screenshots/06-mobile.png) |
+
+<!-- 待补：访问门禁/默认值设置卡片（02/03）、桌宠（04）、任务看板（05）—— 图片放 docs/screenshots/ 后取消注释：
+| 访问门禁卡片 | 默认值卡片 | 桌宠 | 任务看板 |
+|---|---|---|---|
+| ![访问门禁卡片](docs/screenshots/02-accessgate-card.png) | ![默认值卡片](docs/screenshots/03-defaults-card.png) | ![桌宠](docs/screenshots/04-pet.png) | ![任务看板](docs/screenshots/05-taskboard.png) |
 -->
 
 **规矩文件（开工前必读）**：人类贡献指南 [CONTRIBUTING.md](CONTRIBUTING.md) ·
