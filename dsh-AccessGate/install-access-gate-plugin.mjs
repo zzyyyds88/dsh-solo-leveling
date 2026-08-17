@@ -314,21 +314,25 @@ function detectLanIps() {
   } catch { return []; }
 }
 
-// trustedHosts 默认不硬编码单一 IP：设置卡地址优先 + 本机探测到的局域网 IP（多网卡全量），
-// 运行时 DSH_WEB_TRUSTED_HOST 环境变量仍可覆盖。换机器/换网段重跑安装器即刷新。
+// trustedHosts 动态方案（实测 `!!js` 表达式可 require('node:fs') 读 settings.yaml）：
+// 1) 启动参数 webRuntime.trustedHosts（--trusted-host）优先；
+// 2) 否则动态读设置卡保存的 access-gate.lanHost（改地址重启即生效，无需重跑安装器）；
+// 3) 兜底 DSH_WEB_TRUSTED_HOST 环境变量 + 本机探测的局域网 IP（多网卡全量）。
 const hostOk = (h) => /^[A-Za-z0-9.:\-[\]]+$/.test(h);
 const defaultLanHosts = [...new Set(
   (settingLanHost && hostOk(settingLanHost) ? [settingLanHost] : []).concat(detectLanIps().filter(hostOk))
 )];
+const fallbackIps = defaultLanHosts.map((h) => `'${h}'`).join(", ");
+const connExpr = `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : (() => { try { const m = require('node:fs').readFileSync((process.env.DSH_HOME || '/root/.dsh') + '/settings.yaml', 'utf8').match(/lanHost[\\s]*[:=][\\s]*['"]?([A-Za-z0-9.:\\[\\]-]+)/); return [...new Set([process.env.DSH_WEB_TRUSTED_HOST, m ? m[1] : '', ${fallbackIps}].filter(Boolean))]; } catch (e) { return [...new Set([process.env.DSH_WEB_TRUSTED_HOST, ${fallbackIps}].filter(Boolean))]; } })()`;
 if (defaultLanHosts.length === 0) {
-  console.warn("  ⚠ 未探测到本机局域网 IP，trustedHosts 仅依赖 DSH_WEB_TRUSTED_HOST（否则仅回环可访问）");
+  console.warn("  ⚠ 未探测到本机局域网 IP，trustedHosts 依赖设置卡地址或 DSH_WEB_TRUSTED_HOST（否则仅回环可访问）");
 }
 
 const connectionOverride = {
   id: "connection",
   config: {
     trustedHosts: {
-      __jsExpr: `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : [process.env.DSH_WEB_TRUSTED_HOST, ${defaultLanHosts.map((h) => `'${h}'`).join(", ")}].filter(Boolean)`,
+      __jsExpr: connExpr,
     },
   },
 };
