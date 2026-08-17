@@ -46,8 +46,10 @@ const optValue = (name) => {
 const dryRun = args.includes("--dry-run");
 const unpatch = args.includes("--unpatch");
 const allowFormal = args.includes("--allow-formal");
-const dshHome = optValue("--dsh-home") ?? DSH_DEFAULT_HOME;
-const profileDir = optValue("--profile-dir") ?? join(dshHome, "profiles", "web");
+const profileDir = optValue("--profile-dir") ?? join(DSH_DEFAULT_HOME, "profiles", "web");
+// DSH_HOME 必须与 --profile-dir 对应（profiles/web 的父父目录），不要用 process.env.DSH_HOME——
+// 否则在 DSH_HOME=/root/.dsh 的宿主 shell 里会把 dsh plugin add/remove 误装到正式环境。
+const dshHome = optValue("--dsh-home") ?? dirname(dirname(profileDir));
 
 const fail = (msg) => {
   console.error(`✗ ${msg}`);

@@ -113,6 +113,9 @@ const dshHomeOpt = optValue("--dsh-home");
 
 const dshRoot = findDshRoot(dshRootOpt);
 const profileDir = findProfileDir(profileOpt, dshHomeOpt);
+// DSH_HOME 必须与 --profile-dir 对应（profiles/web 的父父目录），不要用 process.env.DSH_HOME——
+// 否则在 DSH_HOME=/root/.dsh 的宿主 shell 里会把 dsh plugin add/remove 误装到正式环境。
+const dshHome = dshHomeOpt ?? dirname(dirname(profileDir));
 const require = createRequire(join(dshRoot, "package.json"));
 const yaml = require("js-yaml");
 const { entryListSchema } = require("@deepseek-ai/cordis-plugin-include");
@@ -156,7 +159,7 @@ if (unpatch) {
   const profileName = basename(profileDir);
   const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "dsh-host-access-gate", "dsh-client-ui-access-gate"], {
     cwd: profileDir,
-    env: { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    env: { ...process.env, DSH_HOME: dshHome },
     encoding: "utf8",
   });
   if (rm.status !== 0) {
@@ -280,7 +283,7 @@ if (stdInstalled && !needUpgrade) {
     tgzs.push(join(packTmp, name));
   }
   const profileName = basename(profileDir);
-  const env = { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") };
+  const env = { ...process.env, DSH_HOME: dshHome };
   if (needUpgrade) {
     const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "dsh-host-access-gate", "dsh-client-ui-access-gate"], {
       cwd: profileDir, env, encoding: "utf8",
@@ -322,7 +325,7 @@ function readAccessGateSetting(dshHome, key) {
   } catch { /* settings.yaml 缺失/不可读 → 用默认值 */ }
   return void 0;
 }
-const settingLanHost = readAccessGateSetting(dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh"), "lanHost");
+const settingLanHost = readAccessGateSetting(dshHome, "lanHost");
 
 /** 探测本机局域网 IPv4（os.networkInterfaces，过滤回环/内部接口）。 */
 function detectLanIps() {
@@ -471,7 +474,6 @@ if (changed && !dryRun) {
 }
 
 // 4) 存量迁移：settings.yaml 旧命名空间 web-auth: → access-gate:（文本级，仅改顶层键）
-const dshHome = dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh");
 const settingsFile = join(dshHome, "settings.yaml");
 if (existsSync(settingsFile)) {
   const raw = readFileSync(settingsFile, "utf8");
