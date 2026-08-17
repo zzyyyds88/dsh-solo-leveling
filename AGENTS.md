@@ -15,7 +15,8 @@
 2. **绝不自杀式重启。** 你运行在 dsh web 进程里，**禁止 pkill/kill/重启任何
    `dsh web`**（包括自己进程树内的），执行中的工具调用会因此中断。
    需要「停→改→起」的操作一律封装成脚本（如 `install-to-profile.sh`、
-   `switch-to-https.sh`），**交用户在 SSH 终端手动执行**。
+   `switch-to-https.sh`、`scripts/formal-reinstall.sh`），**交 opencode / 用户
+   在 SSH 终端执行**（不在本 dsh web 进程内执行）。
 3. **绝不直接改产物。** 禁止修改 node_modules / 安装包里的文件（lib/*.js 等）。
    改插件 = 改源码（src/）→ 构建 → 装进 `test-env` 验证。插件源码由用户掌握
    改造方向，动手前先确认改造方案。
@@ -24,8 +25,11 @@
 5. **不创建散落文件。** 工作区根目录只允许：`README.md`、`CONTRIBUTING.md`、
    `AGENTS.md`、`scripts/`、`test-envs/`、`docs/`、项目文件夹。所有内容进对应
    项目文件夹。
-6. **不把测试当正式。** 测试环境验证通过 ≠ 可以自行正式安装。正式安装脚本
-   （会重启正式 dsh web 的）只能由用户在 SSH 终端执行。
+6. **不把测试当正式，但 opencode 可执行正式安装器。** 测试环境验证通过 ≠ 可以
+   自行正式安装。正式安装/升级统一由 **opencode 在 SSH 终端**执行（安装器本身
+   幂等可重跑，一键入口 `scripts/formal-reinstall.sh`）；本工作区 agent（运行在
+   dsh web 进程内）仍**禁止**执行会停/起正式 dsh web 的操作——停/起正式 web
+   由用户确认后交给 opencode。
 7. **插件必须符合官方安装方式。** 任何插件（自研 / fork / 收录）都必须能通过
    **官方机制安装**：`dsh plugin --profile <name> add <包>`（内部转发 pnpm，
    支持 npm 包 / GitHub（`github:owner/repo#sha`）/ tarball / 本地目录四种来源）。
@@ -58,6 +62,10 @@ scripts/test-env-reset.sh --check               # 检查环境是否已是基线
 scripts/test-env-install.sh --from-project <项目>  # 装已构建插件进测试 profile
 scripts/test-env-stop.sh && scripts/test-env-start.sh   # 重启测试实例（端口 3090）
 scripts/test-env-init.sh --force                # 重建基线（DSH 升级后适配）
+
+# opencode 部署（正式环境，由 opencode 在 SSH 终端执行；本 agent 不执行）
+scripts/formal-reinstall.sh                     # 一键：备份→停→按依赖序装 5 插件→起→逐项 verify
+scripts/formal-reinstall.sh --no-restart        # 只装不重启；--rebuild 先重建产物；--skip-verify 跳过 verify
 ```
 
 **多测试环境**（`TEST_ENV_INDEX` 选择，默认 1；所有 `test-env-*.sh` 均支持），
@@ -116,3 +124,6 @@ scripts/test-env-init.sh --force                # 重建基线（DSH 升级后�
 - 当前安装：`/usr/lib/node_modules/@deepseek-ai/dsh`，版本 `0.1.0-rc.6`；
   正式 DSH_HOME：`/root/.dsh`；正式端口 3080；测试端口 3090。
 - DSH 升级会覆盖安装包 → 补丁项目必须靠幂等重打脚本 + profile 插件化实现升级免疫。
+- 安装/升级只走 opencode：一键入口 `scripts/formal-reinstall.sh`；5 套 verify 统一
+  「默认 test-env + `--formal` 验正式」；安装器全部幂等可重跑（见 docs/opencode-实测反馈.md）。
+- 皮肤中心只保留 **maid-atelier（Abyssal Maid Atelier）**，其余皮肤源码已删除。

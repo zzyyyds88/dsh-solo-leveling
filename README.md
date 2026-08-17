@@ -22,7 +22,7 @@
 | **[默认值](dsh-Moresettings/)** | 「设置 → 插件 → 插件配置 → 默认值」卡片：默认工作目录 + 默认重试次数（对所有供应商生效） |
 | **[桌宠](dsh-deepseekpet/)** | 网页交互式桌宠：随任务 / 工具调用 / 上下文自动切换表情，可拖动缩放折叠（MIT 收录） |
 | **[手机端适配](dsh-mobile/)** | 窄屏（≤768px）：聊天区占满全宽、文件树 / 预览变抽屉、输入框 16px 防 iOS 缩放 + 安全区 |
-| **[任务套件](dsh-task-suite/)** | 一个聚合包装齐：任务看板（cron 定时跑）、实时令牌 / 吞吐统计、Git 图谱、右侧面板、图像理解、皮肤中心 + 11 款皮肤 |
+| **[任务套件](dsh-task-suite/)** | 一个聚合包装齐：任务看板（cron 定时跑）、实时令牌 / 吞吐统计、Git 图谱、右侧面板、图像理解、皮肤中心 + maid-atelier 皮肤（Abyssal Maid Atelier） |
 
 ## 快速安装
 
@@ -37,6 +37,7 @@ cd dsh-solo-leveling
 
 | 插件 | 安装入口 |
 |---|---|
+| **一键重装（推荐）** | `bash scripts/formal-reinstall.sh`（备份 → 停 → 按依赖序装 5 插件 → 起 → 逐项 verify；opencode 部署唯一入口） |
 | 访问门禁 | `node dsh-AccessGate/install-access-gate-plugin.mjs --allow-formal` |
 | 默认值 | `bash dsh-Moresettings/install-to-profile.sh` |
 | 手机端适配 | `bash dsh-mobile/install-to-profile.sh` |
@@ -62,7 +63,7 @@ cd dsh-solo-leveling
 
 - 插件总览（使用 / 更新 / 维护）：[PLUGINS.md](PLUGINS.md)
 - 贡献指南（fork 原理 / 测试环境 / 开发规范）：[CONTRIBUTING.md](CONTRIBUTING.md)
-- 许可证：[LICENSE](LICENSE)（Apache-2.0；收录的 maid-atelier 为 CC BY-NC-SA 4.0、miku 为 BSD）
+- 许可证：[LICENSE](LICENSE)（Apache-2.0；收录的 maid-atelier 为 CC BY-NC-SA 4.0）
 
 ## 致谢
 

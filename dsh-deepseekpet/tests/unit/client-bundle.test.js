@@ -66,10 +66,12 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   }
 
   plugin.apply(ctx)
-  const pet = registrations.find(entry => entry.options.id === 'deepseek-pet')
-  const settingsCard = registrations.find(entry => entry.options.name === 'settings.plugin.item')
+  const pet = registrations.find(entry => entry.options.name === 'shell.overlay')
+  const petCard = registrations.find(entry => entry.options.name === 'settings.plugin.item' && entry.options.id === 'deepseek-pet')
+  const ledgerCard = registrations.find(entry => entry.options.name === 'settings.plugin.item' && entry.options.id === 'deepseek-pet-ledger')
   assert.ok(pet, 'shell.overlay 桌宠未注册')
-  assert.ok(settingsCard, 'settings.plugin.item 设置卡片未注册')
+  assert.ok(petCard, 'settings.plugin.item「DeepSeek 桌宠」卡片未注册')
+  assert.ok(ledgerCard, 'settings.plugin.item「账房面板」卡片未注册')
   assert.equal(styles.length, 2)
 
   const listSnapshot = {
@@ -126,33 +128,44 @@ test('built dsh.client bundle registers an embedded shell overlay', async () => 
   assert.match(html, /状态/)
   assert.match(html, /1,800/) // 1000+200+100 输入相关 + 500 输出 = 1800 总 token
 
-  const cardHtml = renderToStaticMarkup(React.createElement(settingsCard.Component, { ...settingsCard.business, defaultOpen: true }))
-  // 官方 PluginCard 版式：li 卡片 → 头部按钮（名称+描述+箭头）→ 底部 放弃/保存
-  assert.match(cardHtml, /<li[^>]*dshp-card/)
-  assert.match(cardHtml, /dshp-head/)
-  assert.match(cardHtml, /DeepSeek 桌宠/)
-  assert.match(cardHtml, /dshp-description/)
-  assert.match(cardHtml, /dshp-chevron/)
-  assert.match(cardHtml, /role="switch"/)
-  assert.match(cardHtml, /桌宠开关/)
-  assert.match(cardHtml, /任务完成提醒/)
-  assert.match(cardHtml, /提问/)
-  assert.match(cardHtml, /dshp-save/)
-  assert.match(cardHtml, />保存</)
-  assert.match(cardHtml, />放弃</)
-  // 账房字段：面板开关 / 预算封顶 / 费率
-  assert.match(cardHtml, /账房面板/)
-  assert.match(cardHtml, /预算封顶/)
-  assert.match(cardHtml, /费率/)
-  assert.match(cardHtml, /输入未命中/)
-  assert.match(cardHtml, /缓存命中/)
-  assert.match(cardHtml, /缓存写入/)
-  assert.match(cardHtml, /输出/)
+  // 卡片一：DeepSeek 桌宠 —— 仅桌宠开关（下拉框），无声音控制、无账房字段
+  const petCardHtml = renderToStaticMarkup(React.createElement(petCard.Component, { ...petCard.business, defaultOpen: true }))
+  assert.match(petCardHtml, /<li[^>]*dshp-card/)
+  assert.match(petCardHtml, /dshp-head/)
+  assert.match(petCardHtml, /DeepSeek 桌宠/)
+  assert.match(petCardHtml, /dshp-description/)
+  assert.match(petCardHtml, /dshp-chevron/)
+  assert.match(petCardHtml, /桌宠开关/)
+  assert.match(petCardHtml, /<select/)          // 下拉框（用户要求下拉窗，非可选框）
+  assert.doesNotMatch(petCardHtml, /role="switch"/)
+  assert.match(petCardHtml, />开启</)
+  assert.match(petCardHtml, />关闭</)
+  assert.match(petCardHtml, /dshp-save/)
+  assert.match(petCardHtml, />保存</)
+  assert.match(petCardHtml, />放弃</)
+  // 声音/音效控制已移到三击诊断面板，设置卡片不再重复
+  assert.doesNotMatch(petCardHtml, /任务完成提醒/)
+  assert.doesNotMatch(petCardHtml, /启用声音/)
+  assert.doesNotMatch(petCardHtml, /总音量/)
+  assert.doesNotMatch(petCardHtml, /账房面板/)
+
+  // 卡片二：账房面板 —— 独立开关（下拉框）+ 预算封顶 + 费率四项
+  const ledgerCardHtml = renderToStaticMarkup(React.createElement(ledgerCard.Component, { ...ledgerCard.business, defaultOpen: true }))
+  assert.match(ledgerCardHtml, /<li[^>]*dshp-card/)
+  assert.match(ledgerCardHtml, /账房面板/)
+  assert.match(ledgerCardHtml, /账房面板开关/)
+  assert.match(ledgerCardHtml, /<select/)       // 独立开关也是下拉框
+  assert.doesNotMatch(ledgerCardHtml, /role="switch"/)
+  assert.match(ledgerCardHtml, /预算封顶/)
+  assert.match(ledgerCardHtml, /费率/)
+  assert.match(ledgerCardHtml, /输入未命中/)
+  assert.match(ledgerCardHtml, /缓存命中/)
+  assert.match(ledgerCardHtml, /缓存写入/)
+  assert.match(ledgerCardHtml, /输出/)
   // 官方 ValueField 版式：每个字段 label 行 → control 独占行
-  const fieldCount = (cardHtml.match(/class="dshp-field"/g) ?? []).length
-  assert.ok(fieldCount >= 12, `字段数不足: ${fieldCount}`)
-  assert.match(cardHtml, /dshp-control/)
-  assert.doesNotMatch(cardHtml, /rateGrid/)
+  assert.match(ledgerCardHtml, /dshp-control/)
+  assert.doesNotMatch(ledgerCardHtml, /rateGrid/)
+  assert.doesNotMatch(ledgerCardHtml, /桌宠开关/) // 已拆分到独立卡片
 
   for (const cleanup of cleanups.reverse()) cleanup()
   delete globalThis.window
@@ -209,6 +222,60 @@ test('桌宠开关关闭时组件不渲染', async () => {
     ...pet.business,
   }))
   assert.equal(html, '')
+  delete globalThis.window
+  delete globalThis.document
+})
+
+test('账房开关关闭时桌宠不显示账房信息', async () => {
+  const storage = new Map([
+    ['deepseek-pet:app', JSON.stringify({ enabled: true })],
+    ['deepseek-pet:ledger', JSON.stringify({ enabled: false, budget: 30, rates: { miss: 2, hit: 0.5, write: 2, output: 8 } })],
+  ])
+  let moduleRecord
+  globalThis.window = {
+    __ModuleLoader__: { load(record) { moduleRecord = record } },
+    localStorage: {
+      getItem(key) { return storage.get(key) ?? null },
+      setItem(key, value) { storage.set(key, String(value)) },
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent() {},
+  }
+  globalThis.document = {
+    querySelector() { return null },
+    createElement() { return { dataset: {}, textContent: '', remove() {} } },
+    head: { append() {} },
+  }
+
+  await import(`../../lib/client.js?ledger-off=${Date.now()}`)
+  const plugin = moduleRecord.factory((specifier) => {
+    if (specifier === 'react') return ReactModule
+    if (specifier === 'react/jsx-runtime') return JsxRuntime
+    throw new Error(`unexpected client external: ${specifier}`)
+  })
+  const registrations = []
+  const ctx = {
+    effect(callback) { const cleanup = callback(); return () => cleanup?.() },
+    sessions: { binding() { return undefined }, open() {} },
+    slots: {
+      inject(name, callback) { return callback() },
+      register(options, Component) {
+        registrations.push({ options, Component, business: options.inject?.() ?? {} })
+        return () => {}
+      },
+    },
+  }
+  plugin.apply(ctx)
+  const pet = registrations.find(entry => entry.options.name === 'shell.overlay')
+  const listSnapshot = { current: 'focus', ids: [], byId: {} }
+  const html = renderToStaticMarkup(React.createElement(pet.Component, {
+    useSessions: selector => selector(listSnapshot),
+    ...pet.business,
+  }))
+  assert.match(html, /DeepSeek 任务状态助手/) // 桌宠本体仍在
+  assert.doesNotMatch(html, /dsh-live2d-ledger/) // 账房面板不渲染
+  assert.doesNotMatch(html, /账房/) // 工具条账房按钮也不渲染
   delete globalThis.window
   delete globalThis.document
 })

@@ -1,20 +1,29 @@
 #!/usr/bin/env bash
-# 验证 dsh-mobile-adapt 插件是否已就绪。
+# verify.sh —— 验证 dsh-mobile-adapt 插件是否已就绪。
 # 用法：
-#   bash verify.sh              # 静态检查（插件装入 profile + patch 条目 + 语法 + 产物）
+#   bash verify.sh              # 静态检查（插件装入 profile + patch 条目 + 语法 + 产物），默认 test-env
 #   bash verify.sh --live       # 额外对运行中服务做检查（需已重启生效）
-# 环境变量：DSH_TEST_HOME（默认 test-env-1）、DSH_PORT（默认 3090）。
-# 注意：故意不用 DSH_HOME（宿主环境里它指向正式 /root/.dsh，会验错对象）。
+#   bash verify.sh --formal     # 验证正式环境（~/.dsh，端口 3080）
+# 环境变量：DSH_TEST_HOME（默认 test-env-1）、DSH_HOME（--formal 时，默认 ~/.dsh）、DSH_PORT（默认 3090）。
 set -u
 
 WS_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DSH_HOME="${DSH_TEST_HOME:-$WS_ROOT/test-envs/test-env-1}"
+LIVE=0
+FORMAL=0
+for arg in "$@"; do
+  [ "$arg" = "--live" ] && LIVE=1
+  [ "$arg" = "--formal" ] && FORMAL=1
+done
+if [ "$FORMAL" -eq 1 ]; then
+  DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+  PORT="${DSH_PORT:-3080}"
+else
+  DSH_HOME="${DSH_TEST_HOME:-$WS_ROOT/test-envs/test-env-1}"
+  PORT="${DSH_PORT:-3090}"
+fi
 PROFILE="$DSH_HOME/profiles/web"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FAIL=0
-LIVE=0
-[ "${1:-}" = "--live" ] && LIVE=1
-PORT="${DSH_PORT:-3090}"
 
 echo "== 1) 插件已装入 profile =="
 if [ -f "$PROFILE/node_modules/dsh-mobile-adapt/package.json" ] && [ -f "$PROFILE/node_modules/dsh-mobile-adapt/lib/client.js" ] && [ -f "$PROFILE/node_modules/dsh-mobile-adapt/lib/index.js" ]; then

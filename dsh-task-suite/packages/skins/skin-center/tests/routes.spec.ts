@@ -277,13 +277,13 @@ describe('skin-center routes', () => {
   it('GET /bundle/<id> serves a real skin client bundle as JavaScript', async () => {
     const { run } = stubRunner([])
     const server = await serve(makeSkinCenterRoutes({ run }))
-    const response = await call(server.port, 'GET', `${SKIN_CENTER_API_PREFIX}/bundle/qq98`)
+    const response = await call(server.port, 'GET', `${SKIN_CENTER_API_PREFIX}/bundle/maid-atelier`)
     await server.close()
     expect(response.status).toBe(200)
     // The body is the prebuilt bundle text, executable as a script (it
     // registers the factory via window.__ModuleLoader__.load).
     expect(response.raw).toContain('window.__ModuleLoader__.load')
-    expect(response.raw).toContain('@zzyyyds88/dsh-client-ui-skin-qq98')
+    expect(response.raw).toContain('@zzyyyds88/dsh-client-ui-skin-maid-atelier')
   })
 
   it('GET /bundle/<id> 404s unknown skins and missing bundles', async () => {

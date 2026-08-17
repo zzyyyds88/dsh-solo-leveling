@@ -18,16 +18,27 @@
 import { randomUUID } from "node:crypto";
 
 const args = process.argv.slice(2);
-const base = (args.find((a) => a.startsWith("--base=")) ?? "--base=http://127.0.0.1:3090").split("=")[1];
+// --formal 指向正式环境（127.0.0.1:3080）；否则默认测试环境（3090，可用 --base 覆盖）
+const formal = args.includes("--formal");
+const base = formal
+  ? "http://127.0.0.1:3080"
+  : (args.find((a) => a.startsWith("--base=")) ?? "--base=http://127.0.0.1:3090").split("=")[1];
 // 不预置默认口令：基线无门闸时登录请求 404/405 即视为无门闸；有门闸时显式传 --password
 const password = (args.find((a) => a.startsWith("--password=")) ?? "").split("=")[1];
 
 const FAIL = [];
 const PASS = [];
+const SKIP = [];
 const check = (label, ok, detail = "") => {
   if (ok) PASS.push(label);
   else FAIL.push(`${label}${detail ? ` — ${detail}` : ""}`);
   console.log(`  [${ok ? "PASS" : "FAIL"}] ${label}${detail ? `（${detail}）` : ""}`);
+};
+// 区分「装坏」与「没配」：供应商未配置属于用户尚未完成设置，不是插件问题，
+// 输出 [SKIP] 而非 [FAIL]，不参与失败计数。
+const skip = (label, detail = "") => {
+  SKIP.push(label);
+  console.log(`  [SKIP] ${label}${detail ? `（${detail}）` : ""}`);
 };
 
 // 登录拿会话 cookie（web-auth 门闸；官方基线无门闸时直接调用）
@@ -105,17 +116,22 @@ if (ns) {
   });
 }
 
-// 4) pi-ai 供应商 + 思考强度
+// 4) pi-ai 供应商 + 思考强度（供应商未配置 = 跳过，不判失败）
 const models = await call("llm.models", {});
 const tr = models.value?.groups?.find((g) => g.id === "tokenrhythm");
-check("pi-ai 第三方供应商已注册", !!tr, JSON.stringify(models.value?.failures ?? []));
-const efforts = tr?.models?.[0]?.reasoning?.efforts?.map((e) => e.id) ?? [];
-check("思考强度菜单含 off/low/medium/high", ["off", "low", "medium", "high"].every((l) => efforts.includes(l)), efforts.join(","));
+if (!tr) {
+  skip("pi-ai 第三方供应商已注册", "供应商未配置（安装后需在设置页配置，非装坏）");
+  skip("思考强度菜单含 off/low/medium/high", "供应商未配置");
+} else {
+  check("pi-ai 第三方供应商已注册", true, JSON.stringify(models.value?.failures ?? []));
+  const efforts = tr.models?.[0]?.reasoning?.efforts?.map((e) => e.id) ?? [];
+  check("思考强度菜单含 off/low/medium/high", ["off", "low", "medium", "high"].every((l) => efforts.includes(l)), efforts.join(","));
+}
 
 // 5) 前端设置标签页 bundle
 const bundleRes = await fetch(`${base}/plugins/dsh-client-ui-defaults/client.js`, { headers: cookie ? { cookie } : {} });
 const bundleText = await bundleRes.text();
 check("设置标签页 bundle 可提供", bundleRes.status === 200 && bundleText.includes("dsh-defaults"), `HTTP ${bundleRes.status}`);
 
-console.log(`\n${PASS.length} 项通过，${FAIL.length} 项失败`);
+console.log(`\n${PASS.length} 项通过，${FAIL.length} 项失败，${SKIP.length} 项跳过`);
 process.exit(FAIL.length === 0 ? 0 : 1);

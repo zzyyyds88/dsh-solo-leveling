@@ -1,21 +1,26 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ALERT_LABELS, applySoundSettings, soundSettingsSnapshot } from './sound.js'
 import { applyAppSettings, appSettingsSnapshot } from './app-settings.js'
 import { applyLedgerSettings, ledgerSettingsSnapshot } from './ledger.js'
 
 /**
  * 桌宠设置卡片 —— 挂载到「设置 → 插件 → 插件配置」区（settings.plugin.item）。
  *
+ * 按需求拆成两张**一级**卡片（不再把声音/账房塞进同一张卡片）：
+ *   1. 「DeepSeek 桌宠」—— 仅桌宠开关（下拉框，开启/关闭）。
+ *   2. 「账房面板」—— 账房开关（下拉框）+ 预算封顶 + 费率四项。
+ * 声音 / 5 个音效提醒 / 总音量 控制在**三击桌宠后的诊断面板**里，设置页不再重复。
+ *
  * 样式严格对齐官方插件卡片（PluginCard：li 圆角卡片 → 头部按钮（名称+描述+
- * 未保存药丸+箭头）→ 字段区 → 底部 放弃/保存），开关控件采用官方
- * role="switch" 轨道/滑块模式。deepseek-pet 是纯前端插件（无 host 半、
- * 无 settings 命名空间），卡片直接读写 localStorage（deepseek-pet:sound +
- * deepseek-pet:app），不引入后端依赖。
+ * 未保存药丸+箭头）→ 字段区 → 底部 放弃/保存）；开关控件改为 <select> 下拉框
+ * （用户要求「下拉窗形式」，不再用 role="switch" 可选框）。deepseek-pet 是纯前端
+ * 插件（无 host 半、无 settings 命名空间），卡片直接读写 localStorage
+ * （deepseek-pet:app + deepseek-pet:ledger），不引入后端依赖。
  */
 
 const CARD_ID = 'deepseek-pet'
+const LEDGER_CARD_ID = 'deepseek-pet-ledger'
 
-/** 卡片样式：逐条复制官方 PluginCard / fields / trajectory switch 的样式值。 */
+/** 卡片样式：逐条复制官方 PluginCard / fields 的样式值，另加下拉框样式。 */
 const CARD_CSS = `
 .dshp-card{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);border-radius:12px;list-style:none;transition:border-color .16s,background .16s}
 .dshp-card:hover{border-color:var(--dsw-alias-label-dimmed)}
@@ -45,15 +50,10 @@ const CARD_CSS = `
 .dshp-badges{align-items:center;gap:8px;display:inline-flex}
 .dshp-badge{white-space:nowrap;background:var(--dsw-alias-bg-module-platform);color:var(--dsw-alias-label-secondary);border-radius:999px;padding:1px 8px;font-size:11px;font-weight:500;line-height:17px}
 .dshp-hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:12px;line-height:1.5}
-.dshp-range{width:100%;accent-color:var(--dsw-alias-brand-primary);cursor:pointer;margin:2px 0}
-.dshp-switch{appearance:none;background:0 0;border:0;padding:0;cursor:pointer;font:inherit;color:inherit;display:inline-flex}
-.dshp-switchTrack{background:var(--dsw-alias-border-l2);width:20px;height:10px;transition:background-color .12s var(--ds-ease-in-out);border-radius:5px;flex:none;display:inline-block;position:relative}
-.dshp-switchThumb{background:var(--dsw-alias-bg-layer-1);width:6px;height:6px;transition:transform .12s var(--ds-ease-in-out);border-radius:50%;position:absolute;top:2px;left:2px}
-.dshp-switchTrack[data-on=true]{background:var(--dsw-alias-state-business-primary)}
-.dshp-switchTrack[data-on=true] .dshp-switchThumb{transform:translate(10px)}
-.dshp-switch:focus-visible{outline:1px solid var(--dsw-alias-state-business-primary);outline-offset:1px}
 .dshp-number{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:100%}
 .dshp-number:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
+.dshp-select{border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-3);height:34px;font:inherit;color:var(--dsw-alias-label-primary);border-radius:8px;padding:0 12px;font-size:13px;line-height:1.5;width:100%;cursor:pointer}
+.dshp-select:focus-visible{border-color:var(--dsw-alias-brand-primary);outline:none}
 .dshp-message{min-width:0;color:var(--dsw-alias-state-success-primary);flex:1;margin:0;font-size:12px;line-height:1.5}
 
 `
@@ -69,15 +69,13 @@ function installCardCss() {
   return () => tag.remove()
 }
 
-/** 官方 role="switch" 轨道/滑块开关（同 trajectory 工具栏样式）。 */
-function PetSwitch({ checked, onChange, label }) {
+/** 开启/关闭下拉框（用户要求「下拉窗形式」，不用可选框）。 */
+function PetSelect({ value, onChange, label }) {
   return (
-    <button type="button" role="switch" aria-checked={checked} aria-label={label}
-      className="dshp-switch" onClick={() => onChange(!checked)}>
-      <span className="dshp-switchTrack" data-on={checked || undefined} aria-hidden="true">
-        <span className="dshp-switchThumb" />
-      </span>
-    </button>
+    <select className="dshp-select" value={value} onChange={event => onChange(event.target.value)} aria-label={label}>
+      <option value="on">开启</option>
+      <option value="off">关闭</option>
+    </select>
   )
 }
 
@@ -98,85 +96,15 @@ function PetField({ label, hint, control, badge }) {
   )
 }
 
-/** 设置卡片组件。props 由槽位注册注入（hooks 为空——直接读 localStorage）。 */
-export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen)
-  const [draft, setDraft] = useState(() => draftFromSnapshot(combinedSnapshot()))
-  const [stored, setStored] = useState(() => combinedSnapshot())
-  const [message, setMessage] = useState('')
-
-  // 外部变化（诊断面板改开关 / 其它标签页）同步进 stored 与 draft
-  useEffect(() => {
-    const sync = () => {
-      const next = combinedSnapshot()
-      setStored(next)
-      setDraft(draftFromSnapshot(next))
-    }
-    window.addEventListener('storage', sync)
-    window.addEventListener('deepseek-pet:sound-changed', sync)
-    window.addEventListener('deepseek-pet:app-changed', sync)
-    window.addEventListener('deepseek-pet:ledger-changed', sync)
-    return () => {
-      window.removeEventListener('storage', sync)
-      window.removeEventListener('deepseek-pet:sound-changed', sync)
-      window.removeEventListener('deepseek-pet:app-changed', sync)
-      window.removeEventListener('deepseek-pet:ledger-changed', sync)
-    }
-  }, [])
-
-  const dirty = JSON.stringify(storedOf(draft)) !== JSON.stringify(stored)
-
-  const setEnabled = useCallback(value => {
-    setDraft(prev => ({ ...prev, enabled: value === true }))
-  }, [])
-  const toggleAlert = useCallback(key => {
-    setDraft(prev => ({ ...prev, alerts: { ...prev.alerts, [key]: !(prev.alerts[key] !== false) } }))
-  }, [])
-  const setMuted = useCallback(value => {
-    setDraft(prev => ({ ...prev, muted: value === true }))
-  }, [])
-  const setTotal = useCallback(value => {
-    setDraft(prev => ({ ...prev, total: Number(value) / 100 }))
-  }, [])
-  const setLedgerEnabled = useCallback(value => {
-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, enabled: value === true } }))
-  }, [])
-  const setLedgerBudget = useCallback(value => {
-    // 数字输入以字符串暂存草稿（允许 "0." 等中间态），保存时再解析
-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, budgetText: value } }))
-  }, [])
-  const setLedgerRate = useCallback((key, value) => {
-    setDraft(prev => ({ ...prev, ledger: { ...prev.ledger, rateText: { ...prev.ledger.rateText, [key]: value } } }))
-  }, [])
-
-  const save = useCallback(() => {
-    const normalized = storedOf(draft)
-    applyAppSettings({ enabled: normalized.enabled })
-    applySoundSettings(normalized)
-    applyLedgerSettings(normalized.ledger)
-    setStored(combinedSnapshot())
-    // applyXxx 的 persist 已各自 dispatch 对应事件，无需重复广播
-    setMessage('已保存')
-    window.setTimeout(() => setMessage(''), 1600)
-  }, [draft])
-
-  const discard = useCallback(() => {
-    setDraft(draftFromSnapshot(combinedSnapshot()))
-    setMessage('')
-  }, [])
-
-  const alerts = draft.alerts ?? ALERT_LABELS
-  const totalPercent = Math.round((draft.total ?? 1) * 100)
-  const budgetText = draft.ledger?.budgetText ?? String(draft.ledger?.budget ?? 30)
-  const rateTextOf = key => draft.ledger?.rateText?.[key] ?? String(draft.ledger?.rates?.[key] ?? 0)
-
+/** 通用卡片外壳：头部（名称+描述+未保存药丸+箭头）→ 字段区 → 底部 放弃/保存。 */
+function CardShell({ cardId, name, description, open, setOpen, dirty, message, save, discard, children }) {
   return (
-    <li className={`dshp-card${open ? ' dshp-cardOpen' : ''}`} data-plugin-card={CARD_ID}>
+    <li className={`dshp-card${open ? ' dshp-cardOpen' : ''}`} data-plugin-card={cardId}>
       <button type="button" className="dshp-head" onClick={() => setOpen(current => !current)}
-        aria-expanded={open} aria-label={`${open ? '收起' : '展开'}: DeepSeek 桌宠`}>
+        aria-expanded={open} aria-label={`${open ? '收起' : '展开'}: ${name}`}>
         <span className="dshp-headText">
-          <span className="dshp-name">DeepSeek 桌宠</span>
-          <span className="dshp-description">显示、音效与语音提醒设置</span>
+          <span className="dshp-name">{name}</span>
+          <span className="dshp-description">{description}</span>
         </span>
         {dirty && <span className="dshp-pending">未保存</span>}
         <svg className={`dshp-chevron${open ? ' dshp-chevronOpen' : ''}`} width="14" height="14"
@@ -186,28 +114,7 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
       </button>
       {open && (
         <div className="dshp-body">
-          <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声"
-            control={<PetSwitch checked={draft.enabled !== false} onChange={setEnabled} label="桌宠开关" />} />
-          <PetField label="启用声音" hint="总静音开关（工具条按钮切换）"
-            control={<PetSwitch checked={draft.muted !== true} onChange={value => setMuted(!value)} label="启用声音" />} />
-          {Object.entries(ALERT_LABELS).map(([key, label]) => (
-            <PetField key={key} label={label}
-              control={<PetSwitch checked={alerts[key] !== false} onChange={() => toggleAlert(key)} label={label} />} />
-          ))}
-          <PetField label="总音量" badge={`${totalPercent}%`}
-            control={<input className="dshp-range" type="range" min="0" max="100" value={totalPercent}
-              onChange={event => setTotal(event.target.value)} aria-label="总音量" />} />
-          <PetField label="账房面板" hint="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算，峰谷与封顶提醒"
-            control={<PetSwitch checked={draft.ledger?.enabled !== false} onChange={setLedgerEnabled} label="账房面板" />} />
-          <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
-            control={<input className="dshp-number" type="number" min="0" step="1" value={budgetText}
-              onChange={event => setLedgerBudget(event.target.value)} aria-label="预算封顶" />} />
-          <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
-          {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
-            <PetField key={key} label={label}
-              control={<input className="dshp-number" type="number" min="0" step="0.1" value={rateTextOf(key)}
-                onChange={event => setLedgerRate(key, event.target.value)} aria-label={label} />} />
-          ))}
+          {children}
           <div className="dshp-footer">
             {message && <p className="dshp-message">{message}</p>}
             <button type="button" className="dshp-discard" disabled={!dirty} onClick={discard}>放弃</button>
@@ -219,46 +126,144 @@ export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
   )
 }
 
-/** 卡片草稿 = 应用设置（桌宠开关）+ 音效设置 + 账房设置 合并快照。 */
-function combinedSnapshot() {
-  return { ...appSettingsSnapshot(), ...soundSettingsSnapshot(), ledger: ledgerSettingsSnapshot() }
+/** 卡片一：DeepSeek 桌宠 —— 仅桌宠开关（下拉框）。props 由槽位注册注入。 */
+export function DeepSeekPetSettingsCard({ defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const [draft, setDraft] = useState(() => appSettingsSnapshot())
+  const [stored, setStored] = useState(() => appSettingsSnapshot())
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const sync = () => {
+      const next = appSettingsSnapshot()
+      setStored(next)
+      setDraft(next)
+    }
+    window.addEventListener('storage', sync)
+    window.addEventListener('deepseek-pet:app-changed', sync)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('deepseek-pet:app-changed', sync)
+    }
+  }, [])
+
+  const dirty = draft.enabled !== stored.enabled
+
+  const save = useCallback(() => {
+    applyAppSettings({ enabled: draft.enabled })
+    setStored(appSettingsSnapshot())
+    setMessage('已保存')
+    window.setTimeout(() => setMessage(''), 1600)
+  }, [draft])
+
+  const discard = useCallback(() => {
+    setDraft(appSettingsSnapshot())
+    setMessage('')
+  }, [])
+
+  return (
+    <CardShell cardId={CARD_ID} name="DeepSeek 桌宠" description="桌宠显示开关"
+      open={open} setOpen={setOpen} dirty={dirty} message={message} save={save} discard={discard}>
+      <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声"
+        control={<PetSelect value={draft.enabled ? 'on' : 'off'} onChange={value => setDraft({ enabled: value === 'on' })} label="桌宠开关" />} />
+    </CardShell>
+  )
 }
 
-/** 草稿视图：账房数字字段以字符串暂存（允许 "0." 等中间态输入）。 */
-function draftFromSnapshot(snapshot) {
-  const ledger = snapshot.ledger ?? {}
-  const rates = ledger.rates ?? {}
+/** 卡片二：账房面板 —— 独立开关（下拉框）+ 预算封顶 + 费率四项。 */
+export function LedgerSettingsCard({ defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const [draft, setDraft] = useState(() => ledgerDraftFromSnapshot(ledgerSettingsSnapshot()))
+  const [stored, setStored] = useState(() => ledgerSettingsSnapshot())
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    const sync = () => {
+      const next = ledgerSettingsSnapshot()
+      setStored(next)
+      setDraft(ledgerDraftFromSnapshot(next))
+    }
+    window.addEventListener('storage', sync)
+    window.addEventListener('deepseek-pet:ledger-changed', sync)
+    return () => {
+      window.removeEventListener('storage', sync)
+      window.removeEventListener('deepseek-pet:ledger-changed', sync)
+    }
+  }, [])
+
+  const dirty = JSON.stringify(ledgerStoredOf(draft)) !== JSON.stringify(stored)
+
+  const setEnabled = useCallback(value => {
+    setDraft(prev => ({ ...prev, enabled: value === 'on' }))
+  }, [])
+  const setBudget = useCallback(value => {
+    // 数字输入以字符串暂存草稿（允许 "0." 等中间态），保存时再解析
+    setDraft(prev => ({ ...prev, budgetText: value }))
+  }, [])
+  const setRate = useCallback((key, value) => {
+    setDraft(prev => ({ ...prev, rateText: { ...prev.rateText, [key]: value } }))
+  }, [])
+
+  const save = useCallback(() => {
+    applyLedgerSettings(ledgerStoredOf(draft))
+    setStored(ledgerSettingsSnapshot())
+    setMessage('已保存')
+    window.setTimeout(() => setMessage(''), 1600)
+  }, [draft])
+
+  const discard = useCallback(() => {
+    setDraft(ledgerDraftFromSnapshot(ledgerSettingsSnapshot()))
+    setMessage('')
+  }, [])
+
+  const budgetText = draft.budgetText
+  const rateTextOf = key => draft.rateText?.[key] ?? '0'
+
+  return (
+    <CardShell cardId={LEDGER_CARD_ID} name="账房面板" description="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算"
+      open={open} setOpen={setOpen} dirty={dirty} message={message} save={save} discard={discard}>
+      <PetField label="账房面板开关" hint="关闭后桌宠旁不再显示账房信息（token / 花费 / 预算）"
+        control={<PetSelect value={draft.enabled ? 'on' : 'off'} onChange={setEnabled} label="账房面板开关" />} />
+      <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
+        control={<input className="dshp-number" type="number" min="0" step="1" value={budgetText}
+          onChange={event => setBudget(event.target.value)} aria-label="预算封顶" />} />
+      <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
+      {[['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']].map(([key, label]) => (
+        <PetField key={key} label={label}
+          control={<input className="dshp-number" type="number" min="0" step="0.1" value={rateTextOf(key)}
+            onChange={event => setRate(key, event.target.value)} aria-label={label} />} />
+      ))}
+    </CardShell>
+  )
+}
+
+/** 账房草稿视图：数字字段以字符串暂存（允许 "0." 等中间态输入）。 */
+function ledgerDraftFromSnapshot(snapshot) {
+  const rates = snapshot.rates ?? {}
   return {
-    ...snapshot,
-    ledger: {
-      ...ledger,
-      budgetText: String(ledger.budget ?? 30),
-      rateText: Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, String(value)])),
-    },
+    enabled: snapshot.enabled !== false,
+    budgetText: String(snapshot.budget ?? 30),
+    rateText: Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, String(value)])),
   }
 }
 
-/** 草稿归一化：字符串暂存解析回数值，供 dirty 比较与保存。非法输入回退原值。 */
-function storedOf(draft) {
-  const ledger = draft.ledger ?? {}
-  const parsedBudget = Number(ledger.budgetText)
-  const rates = { ...(ledger.rates ?? {}) }
-  for (const [key, text] of Object.entries(ledger.rateText ?? {})) {
+/** 账房草稿归一化：字符串暂存解析回数值，供 dirty 比较与保存。非法输入回退原值。 */
+function ledgerStoredOf(draft) {
+  const parsedBudget = Number(draft.budgetText)
+  const rates = {}
+  for (const [key, text] of Object.entries(draft.rateText ?? {})) {
     const parsed = Number(text)
     if (Number.isFinite(parsed) && parsed >= 0) rates[key] = parsed
   }
   return {
-    ...draft,
-    ledger: {
-      ...ledger,
-      budget: Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : (ledger.budget ?? 30),
-      rates,
-    },
+    enabled: draft.enabled !== false,
+    budget: Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : 30,
+    rates,
   }
 }
 
-/** 注册设置卡片到「设置 → 插件 → 插件配置」。 */
-export function registerSettingsCard(ctx) {
+/** 注册两张设置卡片到「设置 → 插件 → 插件配置」（一级并列）。 */
+export function registerSettingsCards(ctx) {
   ctx.effect(installCardCss, 'deepseek-pet: settings card styles')
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
@@ -267,4 +272,11 @@ export function registerSettingsCard(ctx) {
     label: 'DeepSeek 桌宠',
     inject: () => ({ hooks: {} }),
   }, DeepSeekPetSettingsCard))
+  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
+    name: 'settings.plugin.item',
+    id: LEDGER_CARD_ID,
+    order: 41,
+    label: '账房面板',
+    inject: () => ({ hooks: {} }),
+  }, LedgerSettingsCard))
 }

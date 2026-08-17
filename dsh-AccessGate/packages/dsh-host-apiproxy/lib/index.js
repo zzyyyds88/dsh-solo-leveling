@@ -2095,6 +2095,10 @@ function createApiProxy(ctx, defaults) {
 		exposed.add("web-auth");
 		exposed.add("access-gate");
 		exposed.add("dsh-defaults");
+		exposed.add("task-board");
+		exposed.add("live-stats");
+		exposed.add("describe-image");
+		exposed.add("skin-background");
 		return exposed;
 	}
 	/** Refuse a namespace outside the explicit configuration-client boundary. */

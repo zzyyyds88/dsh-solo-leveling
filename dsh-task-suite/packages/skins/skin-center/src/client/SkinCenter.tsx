@@ -37,7 +37,9 @@ export type SkinCenterComponentProps =
 const OFFICIAL = 'official'
 
 /** Skin ids that read the background-scrim variable and paint a backdrop. */
-const BACKDROP_SKIN_IDS = new Set(['blue-fantasy', 'whale-song'])
+// 只保留 maid-atelier（深海女仆工坊，用独立透明层挂角色、不画背景 scrim），
+// 故 backdrop 皮肤集为空；blue-fantasy / whale-song 等皮肤已删除。
+const BACKDROP_SKIN_IDS = new Set([])
 
 /**
  * Render the skin-center card: a disclosure header naming the plugin, with

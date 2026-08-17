@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 # verify.sh —— dsh-task-suite 套件验证。
 # 用法：
-#   bash verify.sh              # 静态检查（包在位 + patch 条目 + bundle 语法）
-#   bash verify.sh --live       # 额外对运行中测试实例做 HTTP 检查（需已启动）
-# 环境变量：TEST_ENV_INDEX（1-4，默认 1）
+#   bash verify.sh              # 静态检查（包在位 + patch 条目 + bundle 语法），默认 test-env
+#   bash verify.sh --live       # 额外对运行中实例做 HTTP 检查
+#   bash verify.sh --formal     # 验证正式环境（~/.dsh，端口 3080）
+# 环境变量：TEST_ENV_INDEX（1-4，默认 1）；DSH_HOME / DSH_PORT 可覆盖
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WS_ROOT="$(cd "$HERE/.." && pwd)"
-source "$WS_ROOT/scripts/test-env-common.sh"
-resolve_test_env
-PROFILE="$TEST_ENV/profiles/web"
-SCOPE="$PROFILE/node_modules/@zzyyyds88"
 LIVE=0
-[ "${1:-}" = "--live" ] && LIVE=1
+FORMAL=0
+for arg in "$@"; do
+  [ "$arg" = "--live" ] && LIVE=1
+  [ "$arg" = "--formal" ] && FORMAL=1
+done
+if [ "$FORMAL" -eq 1 ]; then
+  PROFILE="${DSH_HOME:-$HOME/.dsh}/profiles/web"
+  PORT="${DSH_PORT:-3080}"
+else
+  source "$WS_ROOT/scripts/test-env-common.sh"
+  resolve_test_env
+  PROFILE="$TEST_ENV/profiles/web"
+fi
+SCOPE="$PROFILE/node_modules/@zzyyyds88"
 FAIL=0
 
 PACKAGES="dsh-task-suite-all dsh-client-ui-task-board dsh-live-stats dsh-client-ui-git-graph dsh-client-ui-aionui-panel dsh-client-ui-web-ui-settings dsh-tool-describe-image dsh-skins dsh-client-ui-skin-center"
@@ -36,8 +46,8 @@ for pkg in $PACKAGES; do
     echo "  [FAIL] $pkg 缺失或未构建（先 bash build.sh && bash install-to-test-env.sh）"; FAIL=1
   fi
 done
-# dsh-skins 皮肤资产
-if [ -d "$SCOPE/dsh-skins/skins" ] && [ "$(ls "$SCOPE/dsh-skins/skins" | wc -l)" -ge 11 ]; then
+# dsh-skins 皮肤资产（只保留 maid-atelier）
+if [ -d "$SCOPE/dsh-skins/skins" ] && [ "$(ls "$SCOPE/dsh-skins/skins" | wc -l)" -ge 1 ]; then
   echo "  [PASS] dsh-skins 皮肤资产（$(ls "$SCOPE/dsh-skins/skins" | wc -l) 款）"
 else
   echo "  [FAIL] dsh-skins/skins 皮肤资产不足（应先 pnpm --filter @zzyyyds88/dsh-skins build）"; FAIL=1

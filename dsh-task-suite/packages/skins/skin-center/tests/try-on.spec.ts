@@ -61,14 +61,86 @@ beforeEach(() => {
   delete window.__DSH_BOOT__
 })
 
+/** A hand-built synthetic skin bundle: registers a factory that, on apply,
+ * writes the body attribute, injects a `data-plugin-css` style (as the real
+ * CSS-modules pipeline does), optionally adds chrome and a title, and cleans
+ * them all up through `ctx.effect`. Mirrors the real bundle contract so the
+ * try-on engine's switch/teardown paths stay covered without the deleted
+ * skins. @param id - skin id (also the css-module tag substring). */
+function syntheticBundle(
+  id: string,
+  pkg: string,
+  bodyAttr: string,
+  opts: { title?: string; chrome?: string[] } = {},
+): string {
+  const chrome = (opts.chrome ?? []).map(name => [
+    `      var ${name} = document.createElement('div');`,
+    `      ${name}.className = ${JSON.stringify(name)};`,
+    `      ${name}.dataset.skinChrome = ${JSON.stringify(id)};`,
+    `      document.body.appendChild(${name});`,
+  ].join('\n')).join('\n')
+  const chromeCleanup = (opts.chrome ?? []).map(name => `        ${name}.remove();`).join('\n')
+  const titleSet = opts.title === undefined ? '' : `      var prevTitle = document.title;\n      document.title = ${JSON.stringify(opts.title)};\n`
+  const titleReset = opts.title === undefined ? '' : `        if (document.title === ${JSON.stringify(opts.title)}) document.title = prevTitle;\n`
+  return [
+    'window.__ModuleLoader__.load({',
+    `  id: ${JSON.stringify(pkg)},`,
+    '  factory: (require) => {',
+    '    var module = { exports: {} };',
+    '    var exports = module.exports;',
+    '    var style = document.createElement("style");',
+    `    style.dataset.plugin = ${JSON.stringify(pkg)};`,
+    `    style.dataset.pluginCss = ${JSON.stringify(`${id}.module.css`)};`,
+    '    document.head.appendChild(style);',
+    '    exports.apply = function (ctx) {',
+    `      document.body.setAttribute(${JSON.stringify(bodyAttr)}, "");`,
+    chrome,
+    titleSet,
+    '      ctx.effect(function () { return function () {',
+    `        document.body.removeAttribute(${JSON.stringify(bodyAttr)});`,
+    chromeCleanup,
+    titleReset,
+    '      }; });',
+    '    };',
+    '    return module.exports;',
+    '  }',
+    '})',
+  ].filter(line => line !== '').join('\n')
+}
+
+/** Synthetic fixture skins standing in for the deleted skins (qq98/xp/ths).
+ * Real maid-atelier remains the one registry-backed skin. */
+const SYNTHETIC_SKINS: Record<string, { entry: SkinCenterEntry; bundle: string }> = {
+  qq98: {
+    entry: { id: 'qq98', name: 'QQ98', nameEn: 'QQ98', tagline: '', accent: '#2b7cd9', bodyAttr: 'data-dsh-retro', package: '@zzyyyds88/dsh-client-ui-skin-qq98' },
+    bundle: syntheticBundle('qq98', '@zzyyyds88/dsh-client-ui-skin-qq98', 'data-dsh-retro'),
+  },
+  xp: {
+    entry: { id: 'xp', name: 'XP', nameEn: 'XP', tagline: '', accent: '#316ac5', bodyAttr: 'data-dsh-xp', package: '@zzyyyds88/dsh-client-ui-skin-xp' },
+    bundle: syntheticBundle('xp', '@zzyyyds88/dsh-client-ui-skin-xp', 'data-dsh-xp'),
+  },
+  ths: {
+    entry: { id: 'ths', name: 'THS', nameEn: 'THS', tagline: '', accent: '#e60012', bodyAttr: 'data-dsh-ths', package: '@zzyyyds88/dsh-client-ui-skin-ths' },
+    bundle: syntheticBundle('ths', '@zzyyyds88/dsh-client-ui-skin-ths', 'data-dsh-ths', {
+      title: '同花顺 · DeepSeek 在线',
+      chrome: ['thsTitlebar', 'thsStatusbar'],
+    }),
+  },
+}
+
 const entry = (id: string): SkinCenterEntry => {
+  const synthetic = SYNTHETIC_SKINS[id]
+  if (synthetic !== undefined) return synthetic.entry
   const found = SKIN_CENTER_ENTRIES.find(candidate => candidate.id === id)
   if (found === undefined) throw new Error(`registry entry missing: ${id}`)
   return found
 }
 
-/** The real bundle text of a skin, read from its committed build artifact. */
+/** The bundle text of a skin: synthetic fixture, or the real committed build
+ * artifact (maid-atelier). */
 const bundleTextFor = (id: string): string => {
+  const synthetic = SYNTHETIC_SKINS[id]
+  if (synthetic !== undefined) return synthetic.bundle
   // Built through a variable: Vite's dev transform rewrites an INLINE
   // `new URL(<template literal>, import.meta.url)` as an asset reference,
   // which resolves to garbage under vitest's jsdom environment.
@@ -106,7 +178,7 @@ const controller = (): TryOnController => new TryOnController({
 
 describe('TryOnController skin switching', () => {
   it('keeps the active skin visible until the target bundle is ready', async () => {
-    const active = entry('whale-song')
+    const active = entry('maid-atelier')
     const target = entry('qq98')
     window.__DSH_BOOT__ = { entries: [{ id: active.package }] }
     document.body.setAttribute(active.bodyAttr, '')
@@ -168,7 +240,7 @@ describe('TryOnController skin switching', () => {
   })
 
   it('restores the original active skin after chained try-ons', async () => {
-    const active = entry('whale-song')
+    const active = entry('maid-atelier')
     window.__DSH_BOOT__ = { entries: [{ id: active.package }] }
     document.body.setAttribute(active.bodyAttr, '')
     const c = controller()
@@ -183,7 +255,7 @@ describe('TryOnController skin switching', () => {
   })
 
   it('cancels a pending chained try-on without a late remount', async () => {
-    const active = entry('whale-song')
+    const active = entry('maid-atelier')
     const first = entry('qq98')
     const second = entry('xp')
     window.__DSH_BOOT__ = { entries: [{ id: active.package }] }
@@ -210,7 +282,7 @@ describe('TryOnController skin switching', () => {
   })
 
   it('deduplicates an overlapping A -> B -> A load and keeps the newest A mounted', async () => {
-    const active = entry('whale-song')
+    const active = entry('maid-atelier')
     const first = entry('qq98')
     const second = entry('xp')
     window.__DSH_BOOT__ = { entries: [{ id: active.package }] }
@@ -252,7 +324,7 @@ describe('TryOnController skin switching', () => {
   })
 
   it('cancels an initial load before a session exists', async () => {
-    const active = entry('whale-song')
+    const active = entry('maid-atelier')
     const target = entry('qq98')
     window.__DSH_BOOT__ = { entries: [{ id: active.package }] }
     document.body.setAttribute(active.bodyAttr, '')
@@ -278,7 +350,7 @@ describe('TryOnController skin switching', () => {
   })
 
   it('switches to the official preview while another preview is loading', async () => {
-    const active = entry('whale-song')
+    const active = entry('maid-atelier')
     const first = entry('qq98')
     const pendingTarget = entry('xp')
     window.__DSH_BOOT__ = { entries: [{ id: active.package }] }

@@ -1962,6 +1962,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     /* Local fork: dsh-defaults 命名空间由 dsh-defaults 插件注册，
     GUI 设置面板需要读写它来配置默认工作目录与默认重试次数。 */
     exposed.add('dsh-defaults')
+    /* Local fork: dsh-task-suite（@zzyyyds88/*）各功能包注册的设置命名空间，
+    GUI 设置面板（登录后）需要读写它们来配置任务看板 / 实时统计 / 图像理解 / 皮肤背景。 */
+    exposed.add('task-board')
+    exposed.add('live-stats')
+    exposed.add('describe-image')
+    exposed.add('skin-background')
     return exposed
   }
 

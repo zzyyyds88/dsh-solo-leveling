@@ -4881,8 +4881,8 @@ const Config = z.object({
 /**
 * Whether the request carries a valid dsh-web-auth session (LAN settings write).
 * Local fork: the webserver gate adds real authentication on top of the trust
-* fence; an authenticated caller may read/write settings namespaces, while
-* credentials/agentPreset/host actions stay loopback-only.
+* fence; an authenticated caller may use the whole configuration plane —
+* settings, credentials, agent presets, and host actions alike.
 */
 function webAuthAuthed(ctx, request) {
 	return ctx.get("webAuth")?.isAuthenticated?.(request) === true;
@@ -4895,13 +4895,14 @@ function webAuthAuthed(ctx, request) {
 * configuration and `credentials.describe` reports whether an arbitrary
 * environment-variable name is configured and where from, which is
 * reconnaissance no anonymous caller should have. `trustedHosts` is a
-* DNS-rebinding fence, explicitly not authentication, so the whole
-* configuration plane stays loopback-same-origin until a real authentication
-* layer exists. `llm.discoverModels` belongs to that plane on both counts: it
-* carries a draft credential, and it makes the HOST issue a GET to a URL the
-* caller chose and reports back the status or the parsed body — an anonymous
-* LAN caller would have a probe for whatever the host can reach and the
-* browser cannot.
+* DNS-rebinding fence, explicitly not authentication.
+*
+* Local fork: the webserver gate adds real authentication on top of the trust
+* fence. An authenticated session (webAuthAuthed) may use every privileged
+* method over the loopback boundary — the gate already proves the caller is
+* the deployment owner, so pinning these to loopback only would break remote
+* management (credentials, agent presets, directory picker) over the HTTPS
+* reverse proxy. Anonymous callers are still refused.
 *
 * The model catalog (`llm.providers`, `llm.models`) is deliberately NOT here:
 * it carries provider ids, display names, and model lists — no endpoints,
@@ -4941,7 +4942,7 @@ function apply(ctx, config) {
 	const fetchHandler = new HostConnectionService(ctx, trustedHosts).createSharedFetchHandler(API_PATH, { async fetch(request) {
 		const pathname = new URL(request.url).pathname;
 		const method = pathname.startsWith(`/api/`) ? pathname.slice(5) : void 0;
-		if (method !== void 0 && PRIVILEGED_METHODS.has(method) && !isTrustedApiRequest(request, []) && !(method.startsWith("settings.") && webAuthAuthed(ctx, request))) return new Response("forbidden", { status: 403 });
+		if (method !== void 0 && PRIVILEGED_METHODS.has(method) && !isTrustedApiRequest(request, []) && !webAuthAuthed(ctx, request)) return new Response("forbidden", { status: 403 });
 		if (request.method === "GET" && (pathname === MUX_EVENTS_PATH || pathname === HOST_EVENTS_PATH)) return new Response("upgrade required", {
 			status: 426,
 			headers: {

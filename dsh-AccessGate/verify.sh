@@ -1,18 +1,30 @@
 #!/usr/bin/env bash
-# 验证「访问门禁」插件是否就绪。
+# verify.sh —— 验证「访问门禁」插件是否就绪。
 # 用法：
-#   bash verify.sh              # 静态检查 + 独立集成测试（不需要重启 dsh）
+#   bash verify.sh              # 静态检查 + 独立集成测试（不需要重启 dsh），默认 test-env
 #   bash verify.sh --live       # 额外对运行中服务做 curl 检查（需已重启生效）
-# 环境变量：DSH_HOME（默认 ~/.dsh）、DSH_HTTPS_PORT（默认 5700）、DSH_LAN_IP（默认 192.168.1.100）
+#   bash verify.sh --formal     # 验证正式环境（~/.dsh，端口 3080 / HTTPS 5700）
+# 环境变量：DSH_HOME（--formal 时默认 ~/.dsh）/ DSH_TEST_HOME（默认 test-env-1）、DSH_HTTPS_PORT（默认 5700）、DSH_LAN_IP（默认 192.168.1.100）
 set -u
 
 DSH_ROOT="/usr/lib/node_modules/@deepseek-ai/dsh"
-DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
-PROFILE="$DSH_HOME/profiles/web"
 HERE="$(cd "$(dirname "$0")" && pwd)"
-FAIL=0
+WS_ROOT="$(cd "$HERE/.." && pwd)"
 LIVE=0
-[ "${1:-}" = "--live" ] && LIVE=1
+FORMAL=0
+for arg in "$@"; do
+  [ "$arg" = "--live" ] && LIVE=1
+  [ "$arg" = "--formal" ] && FORMAL=1
+done
+if [ "$FORMAL" -eq 1 ]; then
+  DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+  PORT="${DSH_PORT:-3080}"
+else
+  DSH_HOME="${DSH_TEST_HOME:-$WS_ROOT/test-envs/test-env-1}"
+  PORT="${DSH_PORT:-3090}"
+fi
+PROFILE="$DSH_HOME/profiles/web"
+FAIL=0
 
 echo "== 1) 门闸基础（fork 优先，全局旧补丁兜底）=="
 WEBSERVER_PROFILE="$PROFILE/node_modules/@deepseek-ai/dsh-host-webserver/lib/index.js"

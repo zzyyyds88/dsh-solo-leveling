@@ -21,7 +21,7 @@ for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-
 done
 
 echo "== 1. 停止正式 dsh web（只停 3080 正式实例，避免误杀 test-env 等其它 dsh web 进程）=="
-PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 |\[::\]:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 |\[::\]:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
 if [ -n "$PID" ]; then
   echo "  停止正式实例（PID $PID，端口 3080）"
   kill "$PID" 2>/dev/null || true

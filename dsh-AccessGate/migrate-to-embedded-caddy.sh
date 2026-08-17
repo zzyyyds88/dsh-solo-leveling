@@ -22,7 +22,7 @@ log "  settings.yaml / cordis.patch.yml 已备份（.pre-embedded.bak）"
 
 # ---------- 1) 停正式 dsh（3080，按端口精确找 PID） ----------
 log "== 1/5 停止正式 dsh web（3080）=="
-FORMAL_PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 |\[::\]:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+FORMAL_PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 |\[::\]:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
 if [ -n "$FORMAL_PID" ]; then
   log "  停止正式实例（PID $FORMAL_PID）"
   kill "$FORMAL_PID" 2>/dev/null || true

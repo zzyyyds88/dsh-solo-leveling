@@ -101,9 +101,25 @@ function makeSkinPackage(dir: string, entry: Pick<SkinSwitchEntry, 'pkg' | 'id'>
   }))
 }
 
+/** 合成的确定性 registry 夹具：真实皮肤现在只剩 maid-atelier，纯函数测试不再
+ * 读磁盘（loadRegistry）。保留 qq98 / ths / blue-fantasy / xp 作为夹具以覆盖
+ * renderManaged / useSkin / 互斥行 / 符号链接 / 自我引用防御等逻辑。 */
+const FIXTURE_ENTRIES: Record<string, SkinSwitchEntry> = {
+  qq98: { pkg: '@zzyyyds88/dsh-client-ui-skin-qq98', id: 'ui-skin-qq98', dir: '/fixture/skins/qq98', bundleWired: false },
+  ths: { pkg: '@zzyyyds88/dsh-client-ui-skin-ths', id: 'ui-skin-ths', dir: '/fixture/skins/ths', bundleWired: false },
+  'blue-fantasy': { pkg: '@zzyyyds88/dsh-client-ui-skin-blue-fantasy', id: 'ui-skin-blue-fantasy', dir: '/fixture/skins/blue-fantasy', bundleWired: false },
+  xp: { pkg: '@zzyyyds88/dsh-client-ui-skin-xp', id: 'ui-skin-xp', dir: '/fixture/skins/xp', bundleWired: false },
+  'maid-atelier': { pkg: '@zzyyyds88/dsh-client-ui-skin-maid-atelier', id: 'ui-skin-maid-atelier', dir: '/fixture/skins/maid-atelier', bundleWired: false },
+}
+
+/** A fresh, shallow-copied synthetic registry. */
+function fixtureRegistry(): Record<string, SkinSwitchEntry> {
+  return Object.fromEntries(Object.entries(FIXTURE_ENTRIES).map(([name, entry]) => [name, { ...entry }]))
+}
+
 /** A minimal registry for pure-function tests (deterministic, no disk reads). */
 function miniRegistry(exclude = [] as string[]): Record<string, SkinSwitchEntry> {
-  const base = loadRegistry()
+  const base = fixtureRegistry()
   for (const name of exclude) delete base[name]
   return base
 }
@@ -111,19 +127,15 @@ function miniRegistry(exclude = [] as string[]): Record<string, SkinSwitchEntry>
 describe('skin registry derivation (from skin.json wiring)', () => {
   it('loadRegistry() maps every installed skin to its wiring metadata', () => {
     const registry = loadRegistry()
-    expect(registry.qq98).toEqual(expect.objectContaining({
-      pkg: '@zzyyyds88/dsh-client-ui-skin-qq98',
-      id: 'ui-skin-qq98',
+    // 只保留 maid-atelier（Abyssal Maid Atelier），其余皮肤源码已删除。
+    expect(Object.keys(registry).sort()).toEqual(['maid-atelier'])
+    expect(registry['maid-atelier']).toEqual(expect.objectContaining({
+      pkg: '@zzyyyds88/dsh-client-ui-skin-maid-atelier',
+      id: 'ui-skin-maid-atelier',
     }))
-    expect(registry.ths).toEqual(expect.objectContaining({ id: 'ui-skin-ths' }))
-    expect(registry['blue-fantasy']).toEqual(expect.objectContaining({
-      pkg: '@zzyyyds88/dsh-client-ui-skin-blue-fantasy',
-      id: 'ui-skin-blue-fantasy',
-    }))
-    // No skin is bundle-wired in the npm aggregate layout — xp ships like the
-    // others and must carry its own insert row when applied.
-    expect(registry.xp.bundleWired).toBe(false)
-    expect(wiredNames(registry).has('xp')).toBe(false)
+    // maid-atelier 走 npm 聚合布局：不 bundle-wired，应用时需自带 insert 行。
+    expect(registry['maid-atelier'].bundleWired).toBe(false)
+    expect(wiredNames(registry).has('maid-atelier')).toBe(false)
   })
 })
 
@@ -341,7 +353,7 @@ describe('running profile resolution (issue #155: non-default profile)', () => {
 
   it('useSkin and currentSkin target the $DSH_PROFILE profile', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     const fakeDir = join(h, 'code', 'dsh-web-ui', 'packages', 'skins', 'qq98')
     makeSkinPackage(fakeDir, qq98)
@@ -363,7 +375,7 @@ describe('running profile resolution (issue #155: non-default profile)', () => {
 
   it('useSkin and currentSkin infer the running profile from a cwd under profiles/<name>', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     const fakeDir = join(h, 'code', 'dsh-web-ui', 'packages', 'skins', 'qq98')
     makeSkinPackage(fakeDir, qq98)
@@ -467,7 +479,7 @@ describe('useSkin / currentSkin against a throwaway HOME', () => {
 
   it('use <name> writes an insert row and the profile symlink for a non-wired skin', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     // A complete skin package at the fake repo path so the resolvability gate passes.
     const fakeDir = join(h, 'code', 'dsh-web-ui', 'packages', 'skins', 'qq98')
@@ -502,7 +514,7 @@ describe('useSkin / currentSkin against a throwaway HOME', () => {
 
   it('useSkin leaves an already-installed REAL package dir untouched (npm layout, issue #21/#33)', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     // The npm-install layout: the skin package is physically present as a
     // directory under the profile's node_modules — no symlink exists. The
@@ -526,19 +538,19 @@ describe('useSkin / currentSkin against a throwaway HOME', () => {
 
   it('useSkin refuses an unrelated directory at the profile link path', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     // A stray directory that is NOT this skin's package: the old code
     // refused non-symlinks, and the npm-layout relaxation must not silently
     // accept just any directory.
     const target = join(resolvePaths(h).profileModulesDir, qq98.pkg)
     mkdirSync(target, { recursive: true })
-    expect(() => useSkin('qq98', { home: h })).toThrow(/does not look like/)
+    expect(() => useSkin('qq98', { home: h, registry })).toThrow(/does not look like/)
   })
 
   it('honest apply: useSkin rejects a skin dir with no package.json / host entry (issue #42)', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     // Mirror the broken npm aggregate layout that shipped skin dirs with only
     // skin.json + lib/client.js (no package.json, no host entry): ensureSymlink
@@ -562,7 +574,7 @@ describe('useSkin / currentSkin against a throwaway HOME', () => {
 
   it('falls back to a directory junction when symlinkSync fails with EPERM on win32 (issue #24)', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     const fakeDir = join(h, 'code', 'dsh-web-ui', 'packages', 'skins', 'qq98')
     makeSkinPackage(fakeDir, qq98)
@@ -696,7 +708,7 @@ describe('home patch lifecycle vs installed skin bundles (issue #108/#148)', () 
 
   it('useSkin writes no duplicate insert row for an installed per-skin bundle', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     // The npm-installed bundle layout: a REAL package dir under the profile
     // whose own bundle patch already inserts ui-skin-qq98.
@@ -720,7 +732,7 @@ describe('home patch lifecycle vs installed skin bundles (issue #108/#148)', () 
 
   it('useSkin keeps the insert row for the bundled-carrier symlink layout', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     // The aggregate layout: entry.dir is a skin asset inside dsh-skins/skins
     // and the profile target is only a symlink into that carrier.
@@ -780,7 +792,7 @@ describe('legacy row cleanup and duplicate insert self-heal (issue #267)', () =>
 
   it('useSkin drops its own insert row when a same-id insert row already exists elsewhere', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     const fakeDir = join(h, 'code', 'dsh-web-ui', 'packages', 'skins', 'qq98')
     makeSkinPackage(fakeDir, qq98)
@@ -1053,7 +1065,7 @@ describe('self-referential symlink defense (issue #43: ELOOP on second skin swit
 
   it('useSkin refuses to build a self-referential link after a poisoned registry (second switch, no ELOOP)', () => {
     const h = fakeHome()
-    const registry = loadRegistry()
+    const registry = fixtureRegistry()
     const qq98 = registry.qq98
     const realDir = join(h, 'code', 'dsh-web-ui', 'packages', 'skins', 'qq98')
     makeSkinPackage(realDir, qq98)

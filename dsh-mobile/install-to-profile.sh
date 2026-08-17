@@ -35,7 +35,7 @@ if [ "${1:-}" != "--no-restart" ]; then
 fi
 
 # 1) 停止正式实例（按端口 $PORT 精确找 PID，避免误杀 test-env 等其它 dsh web 进程）
-PID="$(ss -tlnp 2>/dev/null | grep -E "(:$PORT |\*:$PORT |\[::\]:$PORT )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+PID="$(ss -tlnp 2>/dev/null | grep -E "(:$PORT |\*:$PORT |\[::\]:$PORT )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
 if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
   echo "  停止 dsh web（PID $PID，端口 $PORT）…"
   kill "$PID" 2>/dev/null || true

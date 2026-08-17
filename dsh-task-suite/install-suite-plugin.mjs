@@ -50,10 +50,11 @@ if (!PROFILE_DIR) {
   process.exit(1)
 }
 
-// ---- 安全断言：目标必须是测试环境 ----
+// ---- 安全断言：目标必须是测试环境（正式安装须显式 --allow-formal，由用户手动） ----
+const allowFormal = args.includes('--allow-formal')
 const TEST_ENV_HINT = /(^|\/)(test-env(-\d+)?)\//.test(resolve(PROFILE_DIR))
-if (!TEST_ENV_HINT) {
-  console.error(`✗ 安全断言失败：--profile-dir 不是测试环境路径（${PROFILE_DIR}）。正式环境由用户手动安装。`)
+if (!TEST_ENV_HINT && !allowFormal) {
+  console.error(`✗ 安全断言失败：--profile-dir 不是测试环境路径（${PROFILE_DIR}）。正式环境须加 --allow-formal（仅用户手动安装）。`)
   process.exit(1)
 }
 
@@ -180,7 +181,12 @@ if (SKIN_ID !== null) {
     writeFileSync(homeBak, homeExisting)
     console.log(`  （已备份 HOME 层 patch → ${homeBak}）`)
   }
-  const stripped = homeExisting.replace(/# --- dsh-skin managed[\s\S]*?# --- end dsh-skin managed ---\n?/, '').trimEnd()
+  // 空模板（[] 或空文件）视为无用户层内容；旧 managed 区段替换为新的。
+  const stripped = homeExisting
+    .replace(/# --- dsh-skin managed[\s\S]*?# --- end dsh-skin managed ---\n?/, '')
+    .trimEnd()
+    .replace(/^\[\]$/, '')
+    .trim()
   writeFileSync(HOME_PATCH_FILE, (stripped === '' ? '' : stripped + '\n\n') + managed)
   console.log(`  ✓ HOME 层 managed 区段：启用 ${SKIN_ID}（${HOME_PATCH_FILE}）`)
 } else {

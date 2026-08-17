@@ -46,7 +46,7 @@ HTTPS_PORT="${DSH_HTTPS_PORT:-$SETTINGS_PORT}"
 echo "反向代理目标：https://${LAN_IP}:${HTTPS_PORT}（dsh 回环 127.0.0.1:3080）"
 
 echo "== [1/5] 停掉当前 dsh web（只停 3080 正式实例，避免误杀 test-env 等其它 dsh web 进程）=="
-FORMAL_PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+FORMAL_PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2 || true)"
 if [ -n "$FORMAL_PID" ]; then
   echo "  停止正式实例（PID $FORMAL_PID，端口 3080）"
   kill "$FORMAL_PID" 2>/dev/null || true

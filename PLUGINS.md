@@ -33,18 +33,18 @@
 | `dsh-client-ui-access-gate` | 前端 | 「设置 → 插件 → 插件配置 → 访问门禁」**卡片**（`settings.plugin.item`，样式同官方网页搜索卡片）：改访问口令 + 配置 HTTPS 反代参数（局域网地址/端口）；由 `dsh-client-ui-web-auth` 改名 + 标签页改卡片 | profile 挂载 |
 | `dsh-mobile-adapt`（`dsh-mobile/`，本地定制） | 前端 | **手机端适配**：窄屏（≤768px）聊天区占满全宽、aionui 右侧面板（文件树/预览）变右侧抽屉（默认收起，浮出按钮打开、收起箭头关闭）、设置面板字段纵向堆叠消除竖排坏字、输入框 16px 防 iOS 聚焦缩放 + 安全区、桌宠缩小/弹层打开时让位；宿主 tapIndex 注入 CSS + client bundle（改完刷新即生效） | profile 挂载（`dsh-mobile/install-to-test-env.sh` / 正式 `install-to-profile.sh`） |
 | `deepseek-pet`（[keleus/deepseek-pet](https://github.com/keleus/deepseek-pet)，MIT，收录） | 前端 | **网页桌宠**：随任务/工具调用/上下文占用/活跃会话自动切换表情（思考/编码/等待批准/多会话忙碌等），支持拖动、缩放、折叠、批准/提问气泡；**增强**：WebAudio 音效（完成琶音/出错安慰/戳音）、edge-tts 离线语音（23 条原创台词）、长按摸头、双击静音、三击诊断、纸屑庆祝、音量持久化 | profile 挂载（`dsh-deepseekpet/install-to-test-env.sh` / 正式 `dsh plugin add`） |
-| `@zzyyyds88/dsh-task-suite-all`（`dsh-task-suite/`，自 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) v0.1.17 抽取） | 前端聚合 | **精选 Web UI 插件集（一个包装齐）**：任务看板（五列 + cron 定时跑 + 真实会话执行）、实时令牌统计（TPS/LLM 耗时/上下文/缓存命中/输入输出 token）、实时吞吐统计（流式估算）、Git 图谱（分支泳道 + 提交历史）、右侧面板（文件树 + 多标签预览 + SCM stage/unstage/discard）、图像理解（describe_image 工具 + 配置卡）、设置中心、皮肤中心 + 11 款皮肤 | 聚合包 cordis.patch.yml 汇总子包行；皮肤互斥走 HOME 层 managed 区段（皮肤中心热切换，无需重启） |
+| `@zzyyyds88/dsh-task-suite-all`（`dsh-task-suite/`，自 [dsh-web-ui](https://github.com/zhu1090093659/dsh-web-ui) v0.1.17 抽取） | 前端聚合 | **精选 Web UI 插件集（一个包装齐）**：任务看板（五列 + cron 定时跑 + 真实会话执行）、实时令牌统计（TPS/LLM 耗时/上下文/缓存命中/输入输出 token）、实时吞吐统计（流式估算）、Git 图谱（分支泳道 + 提交历史）、右侧面板（文件树 + 多标签预览 + SCM stage/unstage/discard）、图像理解（describe_image 工具 + 配置卡）、设置中心、皮肤中心 + maid-atelier 皮肤 | 聚合包 cordis.patch.yml 汇总子包行；皮肤互斥走 HOME 层 managed 区段（皮肤中心热切换，无需重启） |
 | `@zzyyyds88/dsh-client-ui-task-board` | 前端 | **任务看板**：五列（待规划/待办/进行中/已完成/已失败），卡片「执行」交给真实 DSH 会话并回写状态，详情可配 cron 定时跑 | 聚合包子包 |
 | `@zzyyyds88/dsh-live-stats` | 前端 | **实时令牌统计 + 实时吞吐统计**：输入框下方 TPS / LLM 耗时 / 上下文占用 / 缓存命中率 / 输入输出 token；会话状态行流式 token 估算（~ 启发式，provider 用量到达自动换真实值） | 聚合包子包 |
 | `@zzyyyds88/dsh-client-ui-git-graph` | 前端+后端 | **Git 图谱**：分支选择器、提交历史、分支泳道图谱（host 端 git 服务 + 前端渲染） | 聚合包子包 |
 | `@zzyyyds88/dsh-client-ui-aionui-panel` | 前端+后端 | **右侧面板**：文件树（搜索定位）+ 多标签预览（md/html/code/diff/csv/pdf/office/图片）+ SCM 变更（stage/unstage/discard），宽度拖拽 + 折叠持久化 | 聚合包子包 |
 | `@zzyyyds88/dsh-tool-describe-image` | 前端+后端 | **图像理解**：`describe_image` 工具把图片（本地路径 / URL / 附件引用）交给 OpenAI 兼容视觉端点，只有返回文本进会话；输入框图片按钮；「设置 → 插件 → 插件配置 → Image understanding」卡配置端点/模型/密钥/默认指令/**重试次数（maxRetries，默认 2，瞬时失败自动重试）**，即时生效 | 聚合包子包 |
 | `@zzyyyds88/dsh-client-ui-web-ui-settings` | 前端 | **设置中心**：「设置 → 插件 → 插件配置」Web UI 插件组卡片（已剔除社区插件索引卡） | 聚合包子包 |
-| `@zzyyyds88/dsh-client-ui-skin-center` + `@zzyyyds88/dsh-skins` | 前端+后端 | **皮肤中心 + 皮肤全家桶**：列表/试穿/一键应用（host `/api/skin-center/*` 热切换）；11 款皮肤资产内置（含收录的 maid-atelier，CC BY-NC-SA 4.0） | 聚合包子包 |
+| `@zzyyyds88/dsh-client-ui-skin-center` + `@zzyyyds88/dsh-skins` | 前端+后端 | **皮肤中心 + 皮肤聚合**：列表/试穿/一键应用（host `/api/skin-center/*` 热切换）；唯一皮肤资产 maid-atelier（Abyssal Maid Atelier，CC BY-NC-SA 4.0） | 聚合包子包 |
 
-> 皮肤：正式 profile 当前启用 `@linxin666/dsh-client-ui-skin-whale-song`（旧上游装）；
-> `dsh-task-suite/` 的皮肤中心（`@zzyyyds88`）应用后会以 `@zzyyyds88` 重建
-> HOME 层 managed 区段（旧行自动清除，属预期迁移）。
+> 皮肤：只保留 `maid-atelier`（Abyssal Maid Atelier），其余 10 款皮肤源码已删除
+> （2026-08-17）。皮肤中心应用 maid-atelier 后以 `@zzyyyds88` 重建 HOME 层 managed
+> 区段（旧行自动清除，属预期迁移）。
 >
 > `dsh-client-ui-directory-picker-browse` fork 已退役（默认目录改由 host 端
 > `dsh-host-directory-picker-browse` 从设置读取，改设置即时生效、无需重启）。
@@ -115,7 +115,7 @@ dsh plugin add ./<包名>-<版本>.tgz
 | `dsh-host-access-gate` / `dsh-client-ui-access-gate`（访问门禁） | 0.1.0-rc.6 | 源码即产物（依赖 fork 需重建 apiproxy） | ✅ 17 项集成 + 真实实例链路（test-env 3090） | ✅ 已开源（`dsh-AccessGate/install-access-gate-plugin.mjs`） | 升级免疫；apiproxy fork 含 `access-gate` 命名空间暴露 |
 | `dsh-mobile-adapt` | 0.1.0-rc.6 | ✅ `bash build.sh`（src → lib，lib/ 已入库） | ✅ test-env-1（3090）：390×844 Playwright 实测（聊天区 106→326px、抽屉开合闭环、设置面板无竖排）+ 识图模型复核 + `verify.sh --live` 全绿 | ✅ 已开源（`dsh-mobile/install-to-profile.sh`） | 升级免疫（profile 挂载）；宿主 CSS 注入 + client bundle（改完刷新即生效）；注意：不可 classList 操作 frame className（与 React/MutationObserver 死循环） |
 | `deepseek-pet`（收录上游桌宠 + 移植 whale-pet 音效/语音/互动） | 0.1.0-rc.6 | ✅ `node scripts/build.mjs`（lib/ 已入库；语音 `scripts/synth-voice.py`） | ✅ test-env-2（3091）：boot 清单 + client bundle 加载全过（含音效/语音/纸屑/诊断功能） | ✅ 已开源（`install-pet-plugin.mjs` / `dsh plugin add`） | 零改动收录（MIT）+ Web 端增强（WebAudio 音效、edge-tts 原创台词离线语音、长按摸头/双击静音/三击诊断/纸屑庆祝/音量持久化）；上游测试 14 项中 1 项断言 bug 不影响运行；升级免疫 |
-| `dsh-task-suite`（`@zzyyyds88/dsh-task-suite-all` 聚合 + 7 功能包 + skin-center + dsh-skins + 11 皮肤，自 dsh-web-ui v0.1.17 抽取） | 0.1.0-rc.6 | ✅ `pnpm -r build`（22 包） | ✅ test-env（3090）：boot 8 插件 + maid-atelier 皮肤 + 皮肤热切换闭环 + 830+ 断言测试 | ✅ 已开源（源码分发，见 task-suite README） | 升级免疫（profile 插件）；皮肤互斥走 HOME 层 managed 区段；maid-atelier 为 CC BY-NC-SA 4.0 收录 |
+| `dsh-task-suite`（`@zzyyyds88/dsh-task-suite-all` 聚合 + 7 功能包 + skin-center + dsh-skins + maid-atelier 皮肤，自 dsh-web-ui v0.1.17 抽取） | 0.1.0-rc.6 | ✅ `pnpm -r build`（22 包） | ✅ test-env（3090）：boot 8 插件 + maid-atelier 皮肤 + 皮肤热切换闭环 + 830+ 断言测试 | ✅ 已开源（源码分发，见 task-suite README） | 升级免疫（profile 插件）；皮肤互斥走 HOME 层 managed 区段；maid-atelier 为 CC BY-NC-SA 4.0 收录（其余皮肤已删除） |
 | 补丁项目（默认目录 / 重试 / 鉴权安装包补丁） | 0.1.0-rc.6 | — | ✅（副本上全测） | ✅（已实施） | **升级后需重打**（幂等脚本 + `升级后重打补丁指南.md`；默认目录/重试已由 dsh-defaults 插件化替代，脚本保留兜底） |
 
 > 更新日期：2026-08-17 核对（已开源：仓库源码分发，`dsh plugin add` 纯插件 / 安装脚本铺 fork）。DSH 升级后请按 §4 流程重验并更新本表。
