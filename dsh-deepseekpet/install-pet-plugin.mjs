@@ -18,6 +18,7 @@
  *   node install-pet-plugin.mjs --unpatch      # 卸载：还原 patch 文件(.bak)并删除插件目录
  *   node install-pet-plugin.mjs --profile-dir <路径> # 指定 profile 目录（自动推导时可不填）
  *   node install-pet-plugin.mjs --dsh-home <路径>    # 指定 DSH_HOME（默认 ~/.dsh）
+ *   node install-pet-plugin.mjs --dsh-root <路径>    # 指定 dsh 安装根（自动搜索时可不填）
  *   node install-pet-plugin.mjs --allow-formal # 显式允许写入非 test-env* profile（仅用户手动）
  *
  * 退出码：0 = 已是最新/处理完成；2 = 失败（已打印原因）。
@@ -63,7 +64,22 @@ if (!/test-env[\d-]*[\\/]/.test(profileDir.replace(/\\/g, "/")) && !allowFormal)
 }
 
 // ---------- YAML（与 dsh 同 schema） ----------
-const dshRoot = "/usr/lib/node_modules/@deepseek-ai/dsh";
+const CANDIDATE_DSH_ROOTS = [
+  "/usr/lib/node_modules/@deepseek-ai/dsh",
+  "/usr/local/lib/node_modules/@deepseek-ai/dsh",
+];
+const dshRootOpt = optValue("--dsh-root");
+function findDshRoot(explicit) {
+  if (explicit) {
+    if (existsSync(join(explicit, "package.json"))) return explicit;
+    fail(`指定的 --dsh-root 不存在或缺少 package.json: ${explicit}`);
+  }
+  for (const root of CANDIDATE_DSH_ROOTS) {
+    if (existsSync(join(root, "package.json"))) return root;
+  }
+  fail("未找到 dsh 安装根。请用 --dsh-root 指定（含 package.json 的 dsh 安装目录）。");
+}
+const dshRoot = findDshRoot(dshRootOpt);
 const require = createRequire(join(dshRoot, "package.json"));
 const yaml = require("js-yaml");
 const { entryListSchema } = require("@deepseek-ai/cordis-plugin-include");
@@ -87,6 +103,19 @@ if (unpatch) {
     }
   } else {
     console.log(`没有备份 ${backup}，跳过 patch 文件还原。`);
+  }
+  // 标准卸载：dsh plugin remove 同时清理 node_modules 与 profile bundles 条目
+  // （直接 rmSync 会残留 bundles 条目，下次启动解析缺失 bundle 失败）。
+  if (!dryRun) {
+    const profileName = basename(profileDir);
+    const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "deepseek-pet"], {
+      cwd: profileDir,
+      env: { ...process.env, DSH_HOME: dshHome },
+      encoding: "utf8",
+    });
+    if (rm.status !== 0) {
+      console.log("  （dsh plugin remove 未成功，回退为目录删除兜底）");
+    }
   }
   const pluginDest = join(profileDir, "node_modules", "deepseek-pet");
   if (existsSync(pluginDest)) {

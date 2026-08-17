@@ -138,6 +138,17 @@ if (unpatch) {
   } else {
     console.log(`没有备份 ${backup}，跳过 patch 文件还原。`);
   }
+  // 标准卸载：dsh plugin remove 同时清理 node_modules 与 profile bundles 条目
+  // （直接 rmSync 会残留 bundles 条目，下次启动解析缺失 bundle 失败）。
+  const profileName = basename(profileDir);
+  const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "dsh-host-access-gate", "dsh-client-ui-access-gate"], {
+    cwd: profileDir,
+    env: { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    encoding: "utf8",
+  });
+  if (rm.status !== 0) {
+    console.log("  （dsh plugin remove 未成功，回退为目录删除兜底）");
+  }
   for (const pkg of ["dsh-host-access-gate", "dsh-client-ui-access-gate"]) {
     const dest = join(profileDir, "node_modules", pkg);
     if (existsSync(dest)) {
@@ -165,8 +176,8 @@ for (const pkg of FORK_PKGS) {
     continue;
   }
   if (!dryRun) {
-    if (existsSync(dst)) {
-      rmSync(`${dst}.bak`, { recursive: true, force: true });
+    // 仅首次备份：保留最初的官方原包，重复执行不覆盖 .bak（否则会丢失官方基线、无法回退）
+    if (existsSync(dst) && !existsSync(`${dst}.bak`)) {
       cpSync(dst, `${dst}.bak`, { recursive: true });
       console.log(`  备份旧包 → ${dst}.bak`);
     }
@@ -323,7 +334,7 @@ const defaultLanHosts = [...new Set(
   (settingLanHost && hostOk(settingLanHost) ? [settingLanHost] : []).concat(detectLanIps().filter(hostOk))
 )];
 const fallbackIps = defaultLanHosts.map((h) => `'${h}'`).join(", ");
-const connExpr = `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : (() => { try { const m = require('node:fs').readFileSync((process.env.DSH_HOME || '/root/.dsh') + '/settings.yaml', 'utf8').match(/lanHost[\\s]*[:=][\\s]*['"]?([A-Za-z0-9.:\\[\\]-]+)/); return [...new Set([process.env.DSH_WEB_TRUSTED_HOST, m ? m[1] : '', ${fallbackIps}].filter(Boolean))]; } catch (e) { return [...new Set([process.env.DSH_WEB_TRUSTED_HOST, ${fallbackIps}].filter(Boolean))]; } })()`;
+const connExpr = `ctx.webRuntime.trustedHosts.length > 0 ? ctx.webRuntime.trustedHosts : (() => { try { const m = require('node:fs').readFileSync((process.env.DSH_HOME || require('node:os').homedir() + '/.dsh') + '/settings.yaml', 'utf8').match(/lanHost[\\s]*[:=][\\s]*['"]?([A-Za-z0-9.:\\[\\]-]+)/); return [...new Set([process.env.DSH_WEB_TRUSTED_HOST, m ? m[1] : '', ${fallbackIps}].filter(Boolean))]; } catch (e) { return [...new Set([process.env.DSH_WEB_TRUSTED_HOST, ${fallbackIps}].filter(Boolean))]; } })()`;
 if (defaultLanHosts.length === 0) {
   console.warn("  ⚠ 未探测到本机局域网 IP，trustedHosts 依赖设置卡地址或 DSH_WEB_TRUSTED_HOST（否则仅回环可访问）");
 }

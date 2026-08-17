@@ -20,15 +20,15 @@ for pkg in dsh-host-directory-picker-browse dsh-llm dsh-llm-pi-ai dsh-host-apipr
   [ -d "$FORKS_ROOT/$pkg/lib" ] || { echo "✗ $pkg 未构建（先 ./build.sh）"; exit 1; }
 done
 
-echo "== 1. 停止 dsh web =="
-PID="$(pgrep -f 'dsh web' | head -1 || true)"
+echo "== 1. 停止正式 dsh web（只停 3080 正式实例，避免误杀 test-env 等其它 dsh web 进程）=="
+PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 |\[::\]:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
 if [ -n "$PID" ]; then
-  echo "  停止 PID $PID ..."
-  kill "$PID"
+  echo "  停止正式实例（PID $PID，端口 3080）"
+  kill "$PID" 2>/dev/null || true
   for _ in $(seq 1 30); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
   kill -0 "$PID" 2>/dev/null && { echo "✗ dsh web 未能停止，请手动处理"; exit 1; }
 else
-  echo "  （未发现运行中的 dsh web）"
+  echo "  （未发现监听 3080 的进程，可能已停止）"
 fi
 
 echo "== 2. fork 包覆盖（同包名）=="
@@ -58,7 +58,7 @@ else
 fi
 
 echo "== 4. 新插件 + cordis.patch.yml 挂载 =="
-node "$HERE/install-defaults-plugin.mjs" --profile-dir "$TARGET"
+node "$HERE/install-defaults-plugin.mjs" --profile-dir "$TARGET" --allow-formal
 
 echo "== 5. 重启 dsh web =="
 echo "  请手动执行：dsh web（本脚本不代启动）"

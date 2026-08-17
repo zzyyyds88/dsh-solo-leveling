@@ -18,7 +18,7 @@
 #   settings.yaml access-gate.lanHost / httpsPort > 内置默认（192.168.1.100 / 5700）
 set -uo pipefail
 
-PROJECT="<仓库根目录>/dsh-AccessGate"
+PROJECT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 从 $DSH_HOME/settings.yaml 读取 access-gate 命名空间里的反代参数（GUI「访问门禁」卡片保存的）
 read_access_setting() { # <key> <default>
@@ -63,7 +63,7 @@ sleep 1
 
 echo "== [2/5] 写入最终 profile 配置（webserver=127.0.0.1，access-gate mode: on）=="
 cd "$PROJECT"
-node install-access-gate-plugin.mjs --allow-formal
+node install-access-gate-plugin.mjs --allow-formal || { echo "✗ 安装器失败，中止（未写配置、未启动 caddy+dsh）"; exit 1; }
 
 echo "== [3/5] 证书（按地址命名，IP/域名匹配复用/重生成）+ 反代片段 + 启动 caddy =="
 mkdir -p /etc/caddy/certs /etc/caddy/sites.d
@@ -131,12 +131,17 @@ systemctl restart caddy
 echo "  caddy 已启动（${LAN_IP}:${HTTPS_PORT} → 127.0.0.1:3080）"
 
 echo "== [4/5] 启动 dsh web（回环 127.0.0.1:3080 + --trusted-host ${LAN_IP} 无端口）=="
-cd /root/.openclaw/workspace 2>/dev/null || cd /root
+cd "${HOME:-/root}"
 nohup node /usr/bin/dsh web --trusted-host "${LAN_IP}" >/tmp/dsh-web.log 2>&1 &
 for i in $(seq 1 60); do
-  grep -q "dsh web:" /tmp/dsh-web.log 2>/dev/null && break
+  curl -s -o /dev/null --max-time 2 "http://127.0.0.1:3080/" 2>/dev/null && break
   sleep 1
 done
+if ! curl -s -o /dev/null --max-time 2 "http://127.0.0.1:3080/" 2>/dev/null; then
+  echo "✗ 60 秒内 dsh web 未就绪，查看日志：tail -20 /tmp/dsh-web.log"
+  tail -20 /tmp/dsh-web.log
+  exit 1
+fi
 tail -5 /tmp/dsh-web.log
 
 echo "== [5/5] 自检 =="

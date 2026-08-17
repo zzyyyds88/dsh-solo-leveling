@@ -39,7 +39,10 @@ function argValue(name) {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : undefined
 }
 const PROFILE_DIR = argValue('--profile-dir')
-const DSH_HOME = argValue('--dsh-home') ?? PROFILE_DIR
+// DSH_HOME 是环境根（含 settings.yaml 与 HOME 层 cordis.patch.yml）；PROFILE_DIR 是
+// <DSH_HOME>/profiles/web，故默认取 dirname(dirname(PROFILE_DIR))，而非 PROFILE_DIR 自身
+//（否则会把 HOME 层皮肤 managed 区段错写进 profile 的 cordis.patch.yml）。
+const DSH_HOME = argValue('--dsh-home') ?? dirname(dirname(PROFILE_DIR))
 const SKIN_ID = argValue('--skin') === 'null' ? null : (argValue('--skin') ?? 'maid-atelier')
 
 if (!PROFILE_DIR) {
@@ -93,6 +96,10 @@ for (const f of Object.values(nameToTgz)) {
 
 // 安装清单：聚合包 + 全部皮肤包（skin-center 作为 dsh-skins 的 file: 传递依赖，不直接装，
 // 避免其 dsh.bundle.patch 与聚合 patch 的 ui-skin-center 行重复挂载）
+if (!nameToTgz[AGGREGATE_PKG]) {
+  console.error(`✗ 聚合包未打包：${AGGREGATE_PKG}（先 pnpm -r build 再 pack）`)
+  process.exit(1)
+}
 const installTgzs = [nameToTgz[AGGREGATE_PKG]]
 for (const id of skinIds) {
   const n = '@zzyyyds88/' + SKIN_PREFIX + id
@@ -167,6 +174,12 @@ if (SKIN_ID !== null) {
   const managed = renderManagedSection(skinIds, SKIN_ID, skinMeta.package)
   let homeExisting = ''
   if (existsSync(HOME_PATCH_FILE)) homeExisting = readFileSync(HOME_PATCH_FILE, 'utf8')
+  // 备份 HOME 层 patch（首次），写坏可回退
+  const homeBak = HOME_PATCH_FILE + '.bak'
+  if (homeExisting !== '' && !existsSync(homeBak)) {
+    writeFileSync(homeBak, homeExisting)
+    console.log(`  （已备份 HOME 层 patch → ${homeBak}）`)
+  }
   const stripped = homeExisting.replace(/# --- dsh-skin managed[\s\S]*?# --- end dsh-skin managed ---\n?/, '').trimEnd()
   writeFileSync(HOME_PATCH_FILE, (stripped === '' ? '' : stripped + '\n\n') + managed)
   console.log(`  ✓ HOME 层 managed 区段：启用 ${SKIN_ID}（${HOME_PATCH_FILE}）`)

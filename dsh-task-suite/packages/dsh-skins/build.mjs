@@ -68,8 +68,10 @@ function renderCarrierPackageJson(sourcePkg) {
       bundle: { patch: './cordis.patch.yml' },
       client: { inject: [], platform: 'web' },
     },
-    license: 'BSD-3-Clause',
-    files: ['lib', 'skin.json', 'cordis.patch.yml'],
+    // 透传源皮肤的许可（如 maid-atelier 为 CC-BY-NC-SA-4.0），不要硬编码统一许可，
+    // 否则会违反 CC BY-NC-SA 等许可的署名/相同方式共享要求。
+    license: sourcePkg.license ?? 'Apache-2.0',
+    files: ['lib', 'skin.json', 'cordis.patch.yml', 'LICENSE*', 'NOTICE*'],
     repository: { type: 'git', url: 'https://github.com/zhu1090093659/dsh-web-ui.git' },
   }
   return JSON.stringify(pkg, null, 2) + '\n'
@@ -113,6 +115,13 @@ function syncDir(src, dst) {
     fs.copyFileSync(bundle, path.join(target, 'lib', 'client.js'))
     fs.copyFileSync(hostEntry, path.join(target, 'lib', 'index.js'))
     fs.copyFileSync(patch, path.join(target, 'cordis.patch.yml'))
+    // 保留上游许可与署名链（CC BY-NC-SA 等许可要求随资产再分发时保留 LICENSE/NOTICE）
+    for (const legal of ['LICENSE', 'NOTICE']) {
+      const srcLegal = path.join(srcDir, legal)
+      if (fs.statSync(srcLegal, { throwIfNoEntry: false })) {
+        fs.copyFileSync(srcLegal, path.join(target, legal))
+      }
+    }
     fs.writeFileSync(path.join(target, 'package.json'), renderCarrierPackageJson(sourcePkg))
     built.add(dir)
     console.log('bundled skin:', dir)

@@ -16,13 +16,14 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DSH_HOME="${DSH_HOME:-/root/.dsh}"
+DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+export DSH_HOME
 PROFILE="$DSH_HOME/profiles/web"
 DST="$PROFILE/node_modules/dsh-mobile-adapt"
 PORT="${DSH_WEB_PORT:-3080}"
 
 [ -d "$PROJECT_DIR/lib" ] || { echo "✗ 未构建（无 lib/），先 bash build.sh"; exit 1; }
-[ -f "$DST/package.json" ] || { echo "✗ 正式 profile 未找到 dsh-mobile-adapt（$DST）"; exit 1; }
+[ -d "$PROFILE/node_modules" ] || { echo "✗ 正式 profile 未初始化（$PROFILE/node_modules 不存在）"; exit 1; }
 
 if [ "${1:-}" != "--no-restart" ]; then
   echo "即将：停止正式 dsh web（端口 $PORT）→ 替换插件 → 重新启动。"
@@ -33,27 +34,30 @@ if [ "${1:-}" != "--no-restart" ]; then
   esac
 fi
 
-# 1) 停止正式实例（按 PID 精确停止）
-PID_FILE="$(ls "$DSH_HOME"/*.pid 2>/dev/null | head -1 || true)"
-if [ -n "$PID_FILE" ] && [ -f "$PID_FILE" ]; then
-  PID="$(cat "$PID_FILE")"
-  if kill -0 "$PID" 2>/dev/null; then
-    echo "  停止 dsh web（PID $PID）…"
-    kill "$PID"
-    for _ in $(seq 1 20); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
-    kill -0 "$PID" 2>/dev/null && { echo "✗ 停止超时，请手动检查。"; exit 1; }
-  fi
+# 1) 停止正式实例（按端口 $PORT 精确找 PID，避免误杀 test-env 等其它 dsh web 进程）
+PID="$(ss -tlnp 2>/dev/null | grep -E "(:$PORT |\*:$PORT |\[::\]:$PORT )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+  echo "  停止 dsh web（PID $PID，端口 $PORT）…"
+  kill "$PID" 2>/dev/null || true
+  for _ in $(seq 1 20); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
+  kill -0 "$PID" 2>/dev/null && { echo "✗ 停止超时，请手动检查。"; exit 1; }
 else
-  echo "  ⚠ 未找到 PID 文件，跳过停止（若实例在运行请先手动停止）。"
+  echo "  ⚠ 未发现监听 $PORT 的进程（可能已停止）"
 fi
 
-# 2) 标准安装（npm pack → dsh plugin --profile web add；bundles 挂载，包内 cordis.patch.yml
-#    承担挂载清单；不再手工替换目录/写用户层 patch 行——旧版手工写法已废弃）
+# 2) 标准安装（npm pack → dsh plugin --profile web remove+add；bundles 挂载，包内
+#    cordis.patch.yml 承担挂载清单；先备份旧包，remove+add 解决同版本 tgz 重装不刷新问题）
 PACK_DIR="$(mktemp -d)"
 TGZ="$(cd "$PROJECT_DIR" && npm pack --pack-destination "$PACK_DIR" --silent 2>/dev/null | tail -1)"
 if [ -z "$TGZ" ] || [ ! -f "$PACK_DIR/$TGZ" ]; then echo "✗ npm pack 失败"; exit 1; fi
+if [ -d "$DST" ]; then
+  rm -rf "$DST.bak"
+  cp -a "$DST" "$DST.bak"
+  echo "  旧版备份于 $DST.bak"
+fi
+dsh plugin --profile web remove dsh-mobile-adapt >/dev/null 2>&1 || true
 dsh plugin --profile web add "$PACK_DIR/$TGZ"
-echo "  ✓ dsh-mobile-adapt 标准安装完成（bundles 挂载，旧版备份于 $DST.bak 若存在）"
+echo "  ✓ dsh-mobile-adapt 标准安装完成（bundles 挂载）"
 
 # 3) 启动
 if [ "${1:-}" != "--no-restart" ]; then
@@ -70,4 +74,4 @@ if [ "${1:-}" != "--no-restart" ]; then
   echo "✗ 30 秒内未就绪，查看日志：tail -50 $DSH_HOME/dsh-web.log"; exit 1
 fi
 
-echo "✓ 文件已替换（未重启）。请手动重启 dsh web 后刷新浏览器。"
+echo "✓ 插件已安装（未重启）。请手动重启 dsh web 后刷新浏览器。"

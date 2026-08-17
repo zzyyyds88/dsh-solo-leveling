@@ -5,11 +5,11 @@
 # 用法：bash migrate-to-embedded-caddy.sh
 set -uo pipefail
 
-WS="<仓库根目录>"
+WS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT="$WS/dsh-AccessGate"
-DSH_HOME="/root/.dsh"
-LAN_IP="192.168.1.100"
-HTTPS_PORT="5700"
+DSH_HOME="${DSH_HOME:-$HOME/.dsh}"
+LAN_IP="${DSH_LAN_IP:-192.168.1.100}"
+HTTPS_PORT="${DSH_HTTPS_PORT:-5700}"
 LOG="/tmp/migrate-embedded-caddy.log"
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG"; }
@@ -22,7 +22,7 @@ log "  settings.yaml / cordis.patch.yml 已备份（.pre-embedded.bak）"
 
 # ---------- 1) 停正式 dsh（3080，按端口精确找 PID） ----------
 log "== 1/5 停止正式 dsh web（3080）=="
-FORMAL_PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
+FORMAL_PID="$(ss -tlnp 2>/dev/null | grep -E "(:3080 |\*:3080 |\[::\]:3080 )" | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2)"
 if [ -n "$FORMAL_PID" ]; then
   log "  停止正式实例（PID $FORMAL_PID）"
   kill "$FORMAL_PID" 2>/dev/null || true
@@ -45,21 +45,24 @@ node install-access-gate-plugin.mjs --allow-formal 2>&1 | tee -a "$LOG"
 
 # ---------- 3) settings.yaml 写入反代参数（保留口令） ----------
 log "== 3/5 写入反代参数（${LAN_IP}:${HTTPS_PORT}）到 settings.yaml =="
-node -e '
+DSH_HOME="$DSH_HOME" node -e '
 const { createRequire } = require("node:module");
 const req = createRequire("/usr/lib/node_modules/@deepseek-ai/dsh/package.json");
 const yaml = req("js-yaml");
 const fs = require("fs");
-const p = "/root/.dsh/settings.yaml";
+const p = process.env.DSH_HOME + "/settings.yaml";
 const doc = yaml.load(fs.readFileSync(p, "utf8")) ?? {};
 doc["access-gate"] = { ...(doc["access-gate"] ?? {}), lanHost: process.argv[1], httpsPort: Number(process.argv[2]) };
-fs.writeFileSync(p, yaml.dump(doc, { lineWidth: 120 }));
+// 原子写：先写临时文件再 rename，避免中断截断 settings.yaml
+const tmp = p + ".tmp";
+fs.writeFileSync(tmp, yaml.dump(doc, { lineWidth: 120 }));
+fs.renameSync(tmp, p);
 console.log("  access-gate:", JSON.stringify(doc["access-gate"]));
 ' "$LAN_IP" "$HTTPS_PORT" 2>&1 | tee -a "$LOG"
 
 # ---------- 4) 启动正式 dsh（无需 --trusted-host：connection 覆盖已固化 trustedHosts） ----------
 log "== 4/5 启动正式 dsh web（3080）=="
-cd /root 2>/dev/null || cd "$WS"
+cd "${HOME:-/root}" 2>/dev/null || cd "$WS"
 nohup node /usr/bin/dsh web > "$DSH_HOME/dsh-web.log" 2>&1 &
 echo $! > "$DSH_HOME/dsh-web.pid"
 log "  已启动（PID $(cat "$DSH_HOME/dsh-web.pid")，日志 $DSH_HOME/dsh-web.log）"

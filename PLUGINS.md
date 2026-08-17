@@ -5,8 +5,9 @@
 > 内容：**1. 正在使用的插件　2. 公开插件的使用方法　3. 插件的更新情况　
 > 4. 插件维护（DSH 破坏性更新应对）**。
 >
-> **⚠ 插件源码正在整理完善中，暂未上传本仓库**（本地保留，完善后将随仓库发布）。
-> 本文件是插件总览：先公开使用方式、更新情况与维护方案，源码发布后同步补齐。
+> 本文件是插件总览（使用方式 / 更新情况 / 维护方案）。全部插件源码已在本仓库
+> （`dsh-AccessGate/`、`dsh-Moresettings/`、`dsh-deepseekpet/`、`dsh-mobile/`、
+> `dsh-task-suite/`）。
 
 ---
 
@@ -130,7 +131,8 @@ dsh plugin add ./<包名>-<版本>.tgz
 **DSH 升级后的统一流程**：
 
 1. 更新根 README「当前安装版本」；查看上游 [changelog](https://github.com/deepseek-ai/deepseek-harness) 的破坏性变更。
-2. 各补丁项目执行 `升级后重打补丁指南.md`（幂等重打脚本，如 `patch-*.py` / `install-auth-plugin.mjs` / `switch-to-https.sh`）。
+2. 各项目执行各自的 `升级后重打补丁指南.md`；fork 源码因上游 API 变动需改动时
+   `./build.sh` 重新构建（`dsh-AccessGate/`、`dsh-Moresettings/`）。
 3. 重建测试环境基线：`scripts/test-env-init.sh --force`（从新正式 profile 克隆），
    再 `scripts/test-env-install.sh --from-project dsh-AccessGate`（或按需指定
    `dsh-Moresettings` / 显式 fork 路径）重装定制插件。
@@ -142,8 +144,8 @@ dsh plugin add ./<包名>-<版本>.tgz
 | 插件/项目 | 升级后动作 | 回退方法 |
 |---|---|---|
 | fork 插件（profile 覆盖） | 通常免疫；重验即可；上游 API 变动时改 `src/` 重新构建 | 覆盖前自动 `.bak` 备份，拷回即回退 |
-| `dsh-web-auth` / `dsh-host-access-gate` 等 npm 插件 | 随 profile 免疫；误删则重跑 `node dsh-AccessGate/install-access-gate-plugin.mjs --allow-formal`（旧版重跑 `node install-auth-plugin.mjs`） | 同脚本幂等重装 |
-| 安装包补丁（三个旧项目） | 重跑各自幂等补丁脚本 + `switch-to-https.sh` | 补丁旁 `.bak` / unpatch 说明 |
+| `dsh-web-auth` / `dsh-host-access-gate` 等插件 | 随 profile 免疫；误删则重跑 `node dsh-AccessGate/install-access-gate-plugin.mjs --allow-formal` | 同脚本幂等重装 |
+| 安装包补丁（旧项目） | **已退役**：三个补丁项目（默认目录 / 重试 / 鉴权安装包补丁）均已插件化替代，旧脚本已删除 | 按上表各插件回退 |
 | `deepseek-pet`（收录桌宠） | 随 profile 免疫；上游更新时 `git fetch` 合并 + `node scripts/build.mjs` 重建 + test-env 重验 | `dsh plugin --profile web remove deepseek-pet`；测试环境 `node dsh-deepseekpet/install-pet-plugin.mjs --unpatch` |
 | `dsh-task-suite`（精选 Web UI 插件集） | 随 profile 免疫；上游 dsh-web-ui 发新版时对照 README §1 重新抽取相关包源码 + `pnpm -r build` + test-env 重验；DSH 大版本升级按 `dsh-task-suite/升级后重打补丁指南.md` | 测试环境：`scripts/test-env-reset.sh`（patch 有 `.bak`）；正式：删 `node_modules/@zzyyyds88/` 目录 + 还原 `cordis.patch.yml` 与 HOME 层 managed 区段（先备份） |
-| retryPolicy 配置 | 重跑 `patch-retry-policy.py`（apply/幂等/unpatch 全测过） | 脚本 unpatch |
+| retryPolicy 配置 | **已插件化**：默认重试次数改由 `dsh-defaults` 插件设置卡统一管理（对所有供应商生效），无需重打补丁 | 设置卡改回默认值即可 |

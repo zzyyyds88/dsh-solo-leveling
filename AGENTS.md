@@ -41,6 +41,14 @@
    禁止绕过官方机制（如手写脚本直接往 profile node_modules 拷文件）。
    测试环境安装可沿用工作区脚本，但**正式安装必须走官方方式**。
 
+   **唯一显式例外——`@deepseek-ai/*` 同包名覆盖 fork**：这类 fork 保留官方包名
+   （如 `@deepseek-ai/dsh-host-webserver`），依赖 profile `node_modules/@deepseek-ai/`
+   下同名包优先于全局安装实现「升级免疫」覆盖。它们不带 `dsh.bundle`（不是插件），
+   且 `dsh plugin add` 会解析到官方 npm 同名包、装不了本地 fork，故正式安装允许由
+   安装脚本（`install-access-gate-plugin.mjs` / `dsh-Moresettings/install-to-profile.sh`）
+   直接写入 profile `node_modules/@deepseek-ai/<包名>`（覆盖前 `.bak` 备份）。
+   其余一切自研 / 收录插件仍必须走官方 `dsh plugin add`。
+
 ## 测试环境速查（打包测试唯一去处）
 
 ```bash

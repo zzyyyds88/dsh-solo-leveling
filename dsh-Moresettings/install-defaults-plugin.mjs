@@ -87,6 +87,16 @@ const { entryListSchema } = require("@deepseek-ai/cordis-plugin-include");
 console.log(`dsh 安装根：${dshRoot}`);
 console.log(`web profile：${profileDir}`);
 
+// 安全闸：目标 profile 不是 test-env* 时，一律视为正式环境，必须 --allow-formal 才允许写入
+// （与 install-access-gate-plugin.mjs / install-pet-plugin.mjs 对齐，防止参数笔误误伤正式 profile）。
+if (!/test-env[\d-]*[\\/]/.test(profileDir.replace(/\\/g, "/")) && !args.includes("--allow-formal")) {
+  fail(
+    `目标 profile 不是测试环境（${profileDir}），已拒绝写入。\n` +
+    "如确认要对正式 profile 安装（请先在 SSH 终端停止 dsh web），加 --allow-formal 参数。"
+  );
+}
+
+const patchFile = join(profileDir, "cordis.patch.yml");
 const hostPluginDest = join(profileDir, "node_modules", "dsh-defaults");
 const clientPluginDest = join(profileDir, "node_modules", "dsh-client-ui-defaults");
 
@@ -96,6 +106,17 @@ if (unpatch) {
     console.log(`已还原 ${patchFile} ← ${patchFile}.bak`);
   } else {
     console.log(`没有备份 ${patchFile}.bak，跳过 patch 文件还原。`);
+  }
+  // 标准卸载：dsh plugin remove 同时清理 node_modules 与 profile bundles 条目
+  // （直接 rmSync 会残留 bundles 条目，下次启动解析缺失 bundle 失败）。
+  const profileName = basename(profileDir);
+  const rm = spawnSync("dsh", ["plugin", "--profile", profileName, "remove", "dsh-defaults", "dsh-client-ui-defaults"], {
+    cwd: profileDir,
+    env: { ...process.env, DSH_HOME: process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    encoding: "utf8",
+  });
+  if (rm.status !== 0) {
+    console.log("  （dsh plugin remove 未成功，回退为目录删除兜底）");
   }
   for (const dest of [hostPluginDest, clientPluginDest]) {
     if (existsSync(dest)) {
@@ -139,7 +160,7 @@ if (stdInstalled) {
   const profileName = basename(profileDir);
   const add = spawnSync("dsh", ["plugin", "--profile", profileName, "add", ...tgzs], {
     cwd: profileDir,
-    env: { ...process.env, DSH_HOME: dshHomeOpt ?? process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
+    env: { ...process.env, DSH_HOME: process.env.DSH_HOME ?? join(os.homedir(), ".dsh") },
     encoding: "utf8",
   });
   if (add.status !== 0) fail(`dsh plugin add 失败（exit ${add.status}）：${add.stderr ?? add.stdout}`);
@@ -148,7 +169,6 @@ if (stdInstalled) {
 
 // 2) 收敛用户层 patch：移除 dsh-defaults / ui-dsh-defaults 残留行
 //    （标准插件包安装下挂载由 bundle 层 dsh.bundle.patch 承担；残留行会 duplicate 崩溃）
-const patchFile = join(profileDir, "cordis.patch.yml");
 if (!existsSync(patchFile)) fail(`找不到 profile patch 文件：${patchFile}`);
 if (!dryRun && !existsSync(patchFile + ".bak")) {
   cpSync(patchFile, patchFile + ".bak");
