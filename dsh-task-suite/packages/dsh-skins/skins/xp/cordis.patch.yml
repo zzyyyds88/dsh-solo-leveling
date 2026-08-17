@@ -1,7 +1,7 @@
 # xp skin bundle patch: inserts its dshClient row into the web plugin roster.
-# The bundle is the official dsh plugin shape — install it with
-# `dsh plugin --profile <name> add <path-or-git-url>`; mutual exclusion between
-# skins is managed by scripts/dsh-skin (home-layer disabled rows).
+# This row is aggregated into the dsh-task-suite-all patch (the skin package
+# itself has no dsh.bundle, so `dsh plugin add` alone won't apply it).
+# Mutual exclusion between skins is managed by the home-layer managed section.
 - insert:
     - id: ui-skin-xp
       name: '@zzyyyds88/dsh-client-ui-skin-xp'

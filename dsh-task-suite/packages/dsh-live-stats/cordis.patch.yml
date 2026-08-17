@@ -1,5 +1,5 @@
 # dsh-live-stats bundle patch: inserts its plugin row into the web profile
-# roster. The bundle is the official dsh plugin shape — install it with
+# roster. This package has no dsh.bundle (row aggregated into dsh-task-suite-all) —do NOT install standalone via
 # `dsh plugin --profile <name> add <path-or-git-url>`.
 #
 # The single row mounts BOTH halves: the host side (token estimation +
