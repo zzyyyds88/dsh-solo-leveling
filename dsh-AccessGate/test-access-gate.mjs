@@ -118,7 +118,7 @@ console.log("== 场景 A：普通鉴权（显式口令）==");
       body: "password=wrong-password",
     });
     const setCookie = res.headers.get("set-cookie") ?? "";
-    check("A 错误口令 → 302 回登录页且不种 Cookie", res.status === 302 && (res.headers.get("location") ?? "").includes("error=wrong") && !setCookie.includes("dsh_session="), `status=${res.status}`);
+    check("A 错误口令 → 302 回登录页且不种 Cookie", res.status === 302 && (res.headers.get("location") ?? "").includes("error=wrong") && !setCookie.includes("dsh_session_0="), `status=${res.status}`);
   }
   {
     const res = await fetch(`${base}/login`, {
@@ -128,8 +128,8 @@ console.log("== 场景 A：普通鉴权（显式口令）==");
       body: `password=${encodeURIComponent(TEST_PASSWORD)}`,
     });
     const setCookie = res.headers.get("set-cookie") ?? "";
-    cookie = (setCookie.match(/dsh_session=[^;]+/) ?? [""])[0];
-    check("A 正确口令 → 302 到 / 且种 Cookie", res.status === 302 && res.headers.get("location") === "/" && cookie.startsWith("dsh_session="), `status=${res.status}`);
+    cookie = (setCookie.match(/dsh_session_0=[^;]+/) ?? [""])[0];
+    check("A 正确口令 → 302 到 / 且种 Cookie", res.status === 302 && res.headers.get("location") === "/" && cookie.startsWith("dsh_session_0="), `status=${res.status}`);
   }
   {
     const res = await fetch(`${base}/`, { redirect: "manual", headers: { cookie } });
@@ -230,10 +230,10 @@ console.log("\n== 场景 B：首次设置（无任何口令）==");
         body: "password=first-setup-pass",
       });
       const setCookie = res.headers.get("set-cookie") ?? "";
-      const cookie = (setCookie.match(/dsh_session=[^;]+/) ?? [""])[0];
+      const cookie = (setCookie.match(/dsh_session_0=[^;]+/) ?? [""])[0];
       const res2 = await fetch(`${base}/`, { redirect: "manual", headers: { cookie } });
       const body = await res2.text();
-      check("B 用新口令登录成功并访问 SPA", res.status === 302 && cookie.startsWith("dsh_session=") && res2.status === 200 && body.includes("SPA2"), `login=${res.status} home=${res2.status}`);
+      check("B 用新口令登录成功并访问 SPA", res.status === 302 && cookie.startsWith("dsh_session_0=") && res2.status === 200 && body.includes("SPA2"), `login=${res.status} home=${res2.status}`);
     }
   } finally {
     rmSync(tmpHome, { recursive: true, force: true });

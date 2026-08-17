@@ -34,8 +34,9 @@
 *     dsh-client-connection 的受保护方法围栏在「已登录」时放行 settings.*
 *     （LAN 用户登录后可以在设置面板里改口令）。
 *
-* 会话 Cookie：dsh_session = v1.<expiresMs>.<nonce>.<hmac>，HMAC-SHA256
-* 签名（密钥由口令派生），HttpOnly + SameSite=Strict，默认 7 天有效。
+* 会话 Cookie：dsh_session_<port> = v1.<expiresMs>.<nonce>.<hmac>，HMAC-SHA256
+* 签名（密钥由口令派生），HttpOnly + SameSite=Strict，默认 7 天有效；cookie 名按
+* 监听端口派生（dsh_session_3080 / dsh_session_3090 …），同 host 多实例互不覆盖。
 * 登录接口带简单限速（按来源 IP）。
 * @module dsh-host-access-gate
 */
@@ -55,8 +56,14 @@ const inject = ["webServer"];
 
 /** The webserver schema's all-interfaces bind literal. */
 const ALL_INTERFACES_HOST = "0.0.0.0";
-/** Session cookie name. */
+/** Session cookie base name. */
 const COOKIE_NAME = "dsh_session";
+/** Full cookie name for an instance, derived from the listening port so that
+ *  multiple dsh instances on the same host (different ports) don't collide —
+ *  browsers scope cookies by host, not by port. */
+function cookieNameFor(port) {
+	return `${COOKIE_NAME}_${port}`;
+}
 /** Signed token prefix (bump on format change). */
 const TOKEN_PREFIX = "v1.";
 /** Login/logout/setup route paths. */
@@ -125,19 +132,19 @@ function verifyToken(token, key) {
 	return timingSafeEqual(Buffer.from(sig, "utf8"), Buffer.from(expected, "utf8"));
 }
 /** Whether a cookie header value carries a valid session token. */
-function sessionFromCookie(cookieHeader, key) {
+function sessionFromCookie(cookieHeader, key, cookieName) {
 	if (typeof cookieHeader !== "string" || cookieHeader.length === 0) return false;
 	for (const part of cookieHeader.split(";")) {
 		const eq = part.indexOf("=");
 		if (eq < 0) continue;
-		if (part.slice(0, eq).trim() !== COOKIE_NAME) continue;
+		if (part.slice(0, eq).trim() !== cookieName) continue;
 		if (verifyToken(part.slice(eq + 1).trim(), key)) return true;
 	}
 	return false;
 }
 /** node:http request → valid session? */
-function sessionFromRequest(req, key) {
-	return sessionFromCookie(typeof req?.headers?.cookie === "string" ? req.headers.cookie : "", key);
+function sessionFromRequest(req, key, cookieName) {
+	return sessionFromCookie(typeof req?.headers?.cookie === "string" ? req.headers.cookie : "", key, cookieName);
 }
 //#endregion
 //#region lib/types/util.js
@@ -385,7 +392,7 @@ function makeLoginHandler(state, ttl, limiter) {
 			return;
 		}
 		if (req.method === "GET" || req.method === "HEAD") {
-			if (sessionFromRequest(req, key)) {
+			if (sessionFromRequest(req, key, state.cookieName)) {
 				res.writeHead(302, { location: "/" });
 				res.end();
 				return;
@@ -439,14 +446,14 @@ function makeLoginHandler(state, ttl, limiter) {
 		const token = signToken(key, Date.now() + ttl * 1000);
 		res.writeHead(302, {
 			location: next,
-			"set-cookie": `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${String(ttl)}`,
+			"set-cookie": `${state.cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${String(ttl)}`,
 			"cache-control": "no-store"
 		});
 		res.end();
 	};
 }
 /** /logout route: POST clears the session cookie. */
-async function handleLogout(req, res) {
+async function handleLogout(req, res, cookieName) {
 	if (req.method !== "POST") {
 		res.writeHead(405);
 		res.end();
@@ -459,7 +466,7 @@ async function handleLogout(req, res) {
 	}
 	res.writeHead(302, {
 		location: LOGIN_PATH,
-		"set-cookie": `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
+		"set-cookie": `${cookieName}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
 		"cache-control": "no-store"
 	});
 	res.end();
@@ -566,7 +573,7 @@ function makeCheckPortHandler(state) {
 			res.end(JSON.stringify(body));
 		};
 		if (req.method !== "POST") return send(405, { ok: false, error: { code: "method", message: "POST only" } });
-		if (state.password === void 0 || state.key === void 0 || !sessionFromRequest(req, state.key)) {
+		if (state.password === void 0 || state.key === void 0 || !sessionFromRequest(req, state.key, state.cookieName)) {
 			return send(401, { ok: false, error: { code: "unauthorized", message: "login required" } });
 		}
 		let port;
@@ -593,7 +600,7 @@ function makeRestartHandler(state) {
 			res.end();
 			return;
 		}
-		if (state.password === void 0 || state.key === void 0 || !sessionFromRequest(req, state.key)) {
+		if (state.password === void 0 || state.key === void 0 || !sessionFromRequest(req, state.key, state.cookieName)) {
 			res.writeHead(401, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
 			res.end(JSON.stringify({ ok: false, error: { code: "unauthorized", message: "login required" } }));
 			return;
@@ -778,13 +785,19 @@ function apply(ctx, config) {
 
 	const ttl = config.sessionTtlSeconds;
 	const limiter = createRateLimiter(config.lockoutMaxAttempts, config.lockoutWindowMs);
+	// 会话 cookie 名按监听端口派生：同 host 多实例（正式 3080 / 测试 3090）的 cookie
+	// 不会互相覆盖（浏览器 cookie 按 host 隔离、不按端口隔离，故必须用端口区分名字）。
+	// 用 config.port（真实部署恒为 3080/3090 非零；测试用 0 → cookie 名 dsh_session_0）。
+	const port = ctx.webServer.config?.port ?? ctx.webServer.port ?? 3080;
+	const cookieName = cookieNameFor(port);
 	/** Mutable auth state read by the gate/routes at request time. */
 	const state = {
 		password: fallbackPassword,
 		key: fallbackPassword === void 0 ? void 0 : deriveKey(fallbackPassword),
 		settings: void 0,
 		readSettings: void 0,
-		announcedSetup: false
+		announcedSetup: false,
+		cookieName
 	};
 
 	// settings 命名空间：GUI 设置面板（access-gate 卡片）与 /setup 页写口令的落点。
@@ -836,7 +849,7 @@ function apply(ctx, config) {
 	ctx.provide(WEB_AUTH_SERVICE, {
 		isAuthenticated: (request) => {
 			const cookie = typeof request?.headers?.get === "function" ? request.headers.get("cookie") ?? "" : "";
-			return state.key !== void 0 && sessionFromCookie(cookie, state.key);
+			return state.key !== void 0 && sessionFromCookie(cookie, state.key, state.cookieName);
 		}
 	});
 
@@ -855,7 +868,7 @@ function apply(ctx, config) {
 			if (pathname === "/api" || pathname.startsWith("/api/")) return unauthorized(res);
 			return redirectTo(res, SETUP_PATH);
 		}
-		if (sessionFromRequest(req, state.key)) return true;
+		if (sessionFromRequest(req, state.key, state.cookieName)) return true;
 		if (res === null) return false;
 		if (pathname === "/api" || pathname.startsWith("/api/")) return unauthorized(res);
 		const target = sanitizeNext(pathname);
@@ -878,7 +891,7 @@ function apply(ctx, config) {
 	ctx.effect(() => ctx.webServer.register({
 		kind: "exact",
 		path: LOGOUT_PATH,
-		handler: handleLogout
+		handler: (req, res) => handleLogout(req, res, state.cookieName)
 	}), "access-gate: /logout route");
 	ctx.effect(() => ctx.webServer.register({
 		kind: "exact",

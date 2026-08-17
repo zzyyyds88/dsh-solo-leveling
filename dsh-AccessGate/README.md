@@ -50,7 +50,7 @@
 | 前端插件包 | `dsh-client-ui-web-auth` | **`dsh-client-ui-access-gate`** |
 | cordis 插件 id | `web-auth` / `ui-web-auth` | **`access-gate`** / **`ui-access-gate`** |
 | settings 命名空间 | `web-auth` | **`access-gate`** |
-| 会话 Cookie | `dsh_session` | `dsh_session`（不变） |
+| 会话 Cookie | `dsh_session` | `dsh_session_<port>`（按监听端口派生，同 host 多实例隔离） |
 | webAuth 服务名 | `webAuth` | `webAuth`（不变，connection fork 契约） |
 | 环境变量 | `DSH_WEB_PASSWORD` | `DSH_ACCESS_GATE_PASSWORD`（旧名兼容兜底） |
 
@@ -64,7 +64,7 @@
 | 登录 | `/login` 输入访问口令（`mode: on` 强制）；登录页为**蓝色液态玻璃**设计（背景图 + 流动光斑 + 毛玻璃卡片） |
 | 首次启动 | 未设置任何口令时所有页面跳 `/setup`，由用户**自行设置**访问口令（不生成、不打印） |
 | 修改口令 | GUI「设置 → 插件 → 插件配置 → 访问门禁」卡片（口令可留空不修改；保存后旧会话立即失效） |
-| 会话 | Cookie `dsh_session`（HMAC-SHA256、HttpOnly、SameSite=Strict、默认 7 天） |
+| 会话 | Cookie `dsh_session_<port>`（按监听端口派生；HMAC-SHA256、HttpOnly、SameSite=Strict、默认 7 天） |
 | 未登录行为 | 页面/静态资源 → 302 /login；`/api/*` → 401 JSON；WebSocket 升级 → 403 |
 | 远程设置卡片（HTTPS/LAN 页面） | 官方 `dsh-client-ui-settings` 仅回环可用（非回环走 memory 模式，绑定设置命名空间的卡片全部隐藏）；本项目 fork 放行：**登录后远程可读写全部设置卡片（含访问门禁卡）**，匿名远程仍被门闸 401 拦截（服务端强制） |
 | 口令来源（优先级） | config.password > settings 命名空间 `access-gate.password` > `DSH_ACCESS_GATE_PASSWORD`（兼容 `DSH_WEB_PASSWORD`）> passwordFile |
