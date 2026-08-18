@@ -10,20 +10,65 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { createSnapshotStore, type SettingsScope, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
+import { type SettingsScope, type SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { DefaultsCard } from './card.tsx'
+import { CardForm, numberField, textField, type CardActions, type CardShell, type FieldState } from './settings-form.ts'
+
+/** Simplified Chinese dictionary (the key-set source of truth). */
+const zh = {
+  'settings.title': '默认值',
+  'settings.description': '配置目录选择器的默认工作目录与模型失败后的默认重试次数（对所有供应商生效）。保存后立即生效，无需重启。',
+  'settings.dirLabel': '默认工作目录',
+  'settings.dirPlaceholder': '例如 /home/user/Projects（留空 = 打开主目录）',
+  'settings.dirHint': '「添加工作区 → 选择工作目录」时，选择器默认打开此目录。留空则使用官方行为（打开服务主目录）。',
+  'settings.retryLabel': '默认重试次数',
+  'settings.retryHint': '未单独声明重试策略的供应商（包括内置 DeepSeek 供应商），模型失败后的重试次数。0 = 不重试。',
+  'settings.overridden': '已覆盖',
+  'settings.reset': '恢复默认',
+  'settings.notExposed': '当前 DSH 版本未向设置页暴露本插件的配置命名空间，表单不可用。可编辑 ~/.dsh/settings.yaml 直接配置。',
+  'settings.readOnly': '当前部署的设置只读。',
+  'settings.expand': '展开设置',
+  'settings.collapse': '收起设置',
+  'settings.save': '保存',
+  'settings.saving': '保存中…',
+  'settings.discard': '放弃',
+  'settings.unsaved': '未保存',
+  'settings.saveFailed': '部署未接受这些值，已保留供你修改。',
+  'settings.invalidNumber': '请输入数字，留空则使用默认值。',
+} satisfies Record<string, string>
+
+/** The defaults key union. */
+type DefaultsKey = keyof typeof zh
+
+/** English dictionary, checked complete against the zh key set. */
+const en: Record<DefaultsKey, string> = {
+  'settings.title': 'Defaults',
+  'settings.description': "Configure the directory picker's default working directory and the default retry count (applies to every provider). Saving takes effect immediately — no restart needed.",
+  'settings.dirLabel': 'Default working directory',
+  'settings.dirPlaceholder': 'e.g. /home/user/Projects (empty = home directory)',
+  'settings.dirHint': 'The directory picker opens at this path when adding a workspace. Leave empty for the official behavior (the host home directory).',
+  'settings.retryLabel': 'Default retry count',
+  'settings.retryHint': 'Retries after a failed model call for providers without their own retry policy, including the built-in DeepSeek provider. 0 = no retry.',
+  'settings.overridden': 'Overridden',
+  'settings.reset': 'Reset to default',
+  'settings.notExposed': "This DSH version does not expose this plugin's settings namespace to the configuration page, so the form is unavailable. Edit ~/.dsh/settings.yaml directly.",
+  'settings.readOnly': 'This deployment stores settings read-only.',
+  'settings.expand': 'Show settings',
+  'settings.collapse': 'Hide settings',
+  'settings.save': 'Save',
+  'settings.saving': 'Saving…',
+  'settings.discard': 'Discard',
+  'settings.unsaved': 'Unsaved',
+  'settings.saveFailed': 'The deployment did not accept these values; they were left for you to correct.',
+  'settings.invalidNumber': 'Enter a number, or leave blank to use the default.',
+}
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
-    'dsh-client-ui-defaults':
-      | 'title' | 'description'
-      | 'dirLabel' | 'dirPlaceholder' | 'dirHint'
-      | 'retryLabel' | 'retryHint'
-      | 'saveLabel' | 'discard' | 'unsaved' | 'readOnly'
-      | 'saved' | 'retryInvalid' | 'saveFailed'
+    'dsh-client-ui-defaults': DefaultsKey
   }
 }
 
@@ -36,24 +81,18 @@ interface DefaultsSettings {
   defaultRetryCount?: number
 }
 
-/** What the card renders, projected from the bound scope. */
-export interface DefaultsCardState {
-  /** Whether the namespace resolved and the card should render. */
-  available: boolean
-  /** Whether the Host accepts writes; false disables the controls. */
-  writable: boolean
-  defaultWorkingDirectory: string
-  defaultRetryCount: number
+/** What the card renders, projected from the staged form. */
+export interface DefaultsCardState extends CardShell {
+  defaultWorkingDirectory: FieldState
+  defaultRetryCount: FieldState
 }
 
 /** The registration-side face the card's slot entry injects. */
-export interface DefaultsCardFace {
+export interface DefaultsCardFace extends CardActions {
   hooks: {
     /** Card snapshot bound by the renderer as `useDefaultsCard`. */
     defaultsCard: SnapshotStore<DefaultsCardState>
   }
-  /** Write both fields; resolves true only when the store confirms them. */
-  save: (fields: { defaultWorkingDirectory: string; defaultRetryCount: number }) => Promise<boolean>
 }
 
 /** Props the renderer binds for the defaults card. */
@@ -62,95 +101,34 @@ export type DefaultsCardProps =
   & PropsLocale<typeof NS>
   & InjectFace<DefaultsCardFace>
 
-/** Bridges the `dsh-defaults` scope onto the card's snapshot store. */
+/** Bridges the `dsh-defaults` scope onto the card's staged form. */
 export class DefaultsCardController {
+  private readonly form: CardForm<DefaultsSettings>
   private readonly store: SnapshotStore<DefaultsCardState>
-  private readonly unsub: () => void
 
   /**
    * @param scope - the bound settings scope for the `dsh-defaults` namespace.
    */
-  constructor(private readonly scope: SettingsScope<DefaultsSettings>) {
-    this.store = createSnapshotStore<DefaultsCardState>(this.projection())
-    this.unsub = scope.subscribe(() => { this.store.set(this.projection()) })
+  constructor(scope: SettingsScope<DefaultsSettings>) {
+    this.form = new CardForm(scope, [
+      textField('defaultWorkingDirectory'),
+      numberField('defaultRetryCount', { integer: true, min: 0 }),
+    ])
+    this.store = this.form.bind(() => this.projection())
   }
 
   private projection(): DefaultsCardState {
-    const snapshot = this.scope.getSnapshot()
     return {
-      available: snapshot.status === 'ready',
-      writable: snapshot.writable,
-      defaultWorkingDirectory: snapshot.status === 'ready'
-        ? (snapshot.value?.defaultWorkingDirectory ?? '')
-        : '',
-      defaultRetryCount: snapshot.status === 'ready'
-        ? (snapshot.value?.defaultRetryCount ?? 10)
-        : 10,
+      ...this.form.shell(),
+      defaultWorkingDirectory: this.form.field('defaultWorkingDirectory'),
+      defaultRetryCount: this.form.field('defaultRetryCount'),
     }
-  }
-
-  /** Write both fields; resolves true only when the store confirms the values landed. */
-  async save(fields: { defaultWorkingDirectory: string; defaultRetryCount: number }): Promise<boolean> {
-    try {
-      await this.scope.set('defaultWorkingDirectory', fields.defaultWorkingDirectory)
-      await this.scope.set('defaultRetryCount', fields.defaultRetryCount)
-    } catch {
-      return false
-    }
-    const snapshot = this.scope.getSnapshot()
-    const value = snapshot.value
-    return snapshot.status === 'ready'
-      && value !== undefined
-      && value.defaultWorkingDirectory === fields.defaultWorkingDirectory
-      && value.defaultRetryCount === fields.defaultRetryCount
   }
 
   /** Build the face the card's slot registration injects. */
   inject(): DefaultsCardFace {
-    return {
-      hooks: { defaultsCard: this.store },
-      save: fields => this.save(fields),
-    }
+    return { hooks: { defaultsCard: this.store }, ...this.form.actions() }
   }
-
-  /** Detach the scope subscription. */
-  dispose(): void {
-    this.unsub()
-  }
-}
-
-const zh = {
-  title: '默认值',
-  description: '配置目录选择器的默认工作目录与模型失败后的默认重试次数（对所有供应商生效）。保存后立即生效，无需重启。',
-  dirLabel: '默认工作目录',
-  dirPlaceholder: '例如 /home/user/Projects（留空 = 打开主目录）',
-  dirHint: '「添加工作区 → 选择工作目录」时，选择器默认打开此目录。留空则使用官方行为（打开服务主目录）。',
-  retryLabel: '默认重试次数',
-  retryHint: '未单独声明重试策略的供应商（包括内置 DeepSeek 供应商），模型失败后的重试次数。0 = 不重试。',
-  saveLabel: '保存',
-  discard: '放弃',
-  unsaved: '未保存',
-  readOnly: '当前设置不可写。',
-  saved: '已保存：目录选择器与重试默认值已更新。',
-  retryInvalid: '重试次数必须是大于等于 0 的整数。',
-  saveFailed: '保存失败：可能已被其它修改覆盖或权限不足，请重试。',
-}
-
-const en = {
-  title: 'Defaults',
-  description: "Configure the directory picker's default working directory and the default retry count (applies to every provider). Saving takes effect immediately — no restart needed.",
-  dirLabel: 'Default working directory',
-  dirPlaceholder: 'e.g. /home/user/Projects (empty = home directory)',
-  dirHint: 'The directory picker opens at this path when adding a workspace. Leave empty for the official behavior (the host home directory).',
-  retryLabel: 'Default retry count',
-  retryHint: 'Retries after a failed model call for providers without their own retry policy, including the built-in DeepSeek provider. 0 = no retry.',
-  saveLabel: 'Save',
-  discard: 'Discard',
-  unsaved: 'Unsaved',
-  readOnly: 'Settings are not writable.',
-  saved: 'Saved: the directory picker and retry defaults are updated.',
-  retryInvalid: 'The retry count must be a non-negative integer.',
-  saveFailed: 'Save failed: possibly overwritten concurrently or not permitted. Retry.',
 }
 
 /**
@@ -163,7 +141,6 @@ export function apply(ctx: Context): void {
   const scope = ctx.settingsScope.bind<DefaultsSettings>({ namespace: 'dsh-defaults' })
   const controller = new DefaultsCardController(scope)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-defaults: card dictionaries')
-  ctx.effect(() => () => { controller.dispose() }, 'ui-defaults: card scope')
   ctx.slots.inject('settings.plugin.item', function* () {
     yield ctx.slots.register({
       name: 'settings.plugin.item',
