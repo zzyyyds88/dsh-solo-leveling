@@ -125,3 +125,6 @@ scripts/check-fork-versions.sh                  # 检查 @deepseek-ai/* 同包�
 - 构建入口：`pnpm install && pnpm run build`；验证走 `test-envs/`；正式安装由用户在
   SSH 终端执行（会停/起正式 dsh web）。
 - 皮肤中心只保留 **maid-atelier（Abyssal Maid Atelier）**，其余皮肤源码已删除。
+- **完成定义（验收/打包/发布）**：迁移完成后由我测（`test-envs/`）→ 打包成 npm 包
+  （同官方 `npx @deepseek-ai/dsh web` 用法，见 `apps/cli` 的 `bin.dsh`）→ 用户自测 →
+  **用户测试通过后才 push GitHub**（通过前禁止 push）。
