@@ -37,10 +37,24 @@ describe('SettingsDocumentStore', () => {
     const controller = new SettingsDocumentStore({ settings: { describe, openDocument } } as never)
     await controller.load()
     expect(controller.store.getSnapshot()).toEqual({
-      status: 'ready', opening: false, error: null,
+      status: 'ready', opening: false, error: null, documentPath: null,
     })
     await controller.open()
     expect(openDocument).toHaveBeenCalledWith({})
+  })
+
+  it('surfaces the document path when the host has no native opener', async () => {
+    const describe = vi.fn(() => Promise.resolve(response(true)))
+    const openDocument = vi.fn(() => Promise.resolve({
+      rpcId: 'settings-open-path' as never,
+      result: { ok: true, value: { opened: false, path: '/tmp/settings.yaml' } },
+    }))
+    const controller = new SettingsDocumentStore({ settings: { describe, openDocument } } as never)
+    await controller.load()
+    await controller.open()
+    expect(controller.store.getSnapshot()).toMatchObject({
+      status: 'ready', opening: false, error: null, documentPath: '/tmp/settings.yaml',
+    })
   })
 
   it('marks absent or failed metadata unavailable without opening anything', async () => {

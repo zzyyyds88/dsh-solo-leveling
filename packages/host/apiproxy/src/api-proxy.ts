@@ -1889,6 +1889,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return defaults.openPath !== undefined || canOpenNativePath()
   }
 
+  /** Whether this deployment can hand a text document to a native editor. */
+  function canOpenTextFile(): boolean {
+    if (defaults.canOpenPath !== undefined) return defaults.canOpenPath()
+    // An injected text-editor opener is by definition usable; otherwise ask the platform.
+    return defaults.openTextFile !== undefined || canOpenNativePath()
+  }
+
   /** Missing-service report shared by the credentials domain. */
   function credentialsAbsent(): RpcError {
     return { code: 'internal', message: 'credentials service is absent: this deployment does not mount a credential provider (e.g. @deepseek-ai/dsh-credentials-local) in its composition', details: {} }
@@ -3248,7 +3255,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
-        if (!canOpenPaths()) return ok(request, { opened: false as const, path })
+        if (!canOpenTextFile()) return ok(request, { opened: false as const, path })
         return openTextFile(request, path, signal)
       },
       update: request => settingsWrite(request, request.payload.ns, 'update', request.payload.patch, request.payload.expectedRevision),
