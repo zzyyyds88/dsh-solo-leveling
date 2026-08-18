@@ -39,21 +39,18 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 
-# ===== 大宝贝定制版：工作区/运维专属忽略 =====
-# 测试环境运行态（可随时重建；仅保留说明文件）
-test-envs/*
-!test-envs/README.md
-!test-envs/test-env-1/
-test-envs/test-env-1/USAGE.md
-test-envs/test-env-1/settings.yaml
-test-envs/test-env-1/cordis.*
-test-envs/test-env-1/profiles/
-test-envs/test-env-1/sessions/
-test-envs/test-env-1/storages/
-test-envs/test-env-1/dsh-web.*
-test-envs/test-env-1/pet.json
-test-envs/test-env-1/caddy/
-test-envs/test-env-1/.agent-presets/
+# ===== 大宝贝定制版：构建/打包产物忽略（可再生，不提交）=====
+# tsc/typert 编译时会把 .js/.d.ts/.map 输出泄漏进 src（与 .ts 同目录）；
+# 正式产物在 lib/。忽略这些再生输出，手写环境声明（css-modules/token-meter）例外保留。
+packages/*/*/src/**/*.js
+packages/*/*/src/**/*.js.map
+packages/*/*/src/**/*.d.ts
+packages/*/*/src/**/*.d.ts.map
+!packages/*/*/src/**/css-modules.d.ts
+!packages/*/*/src/**/token-meter.d.ts
+
+# 打包 tarball 目录（scripts/package-npm.sh 产出，可再生）
+dist/
 
 # 旧插件工作区备份 / 本地工具配置（运维产物）
 backups/
