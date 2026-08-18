@@ -6,6 +6,7 @@ import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { AlertName } from './sound.ts'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import type { GoalPhase, GoalProjection } from '@deepseek-ai/dsh-goal/client'
 import { REACTIONS, REACTION_FRAMES } from './assets.generated.js'
 import { clampPetScale, latestOutput, presentationForState, rotatingActivityLabel } from './pet-presentation.ts'
 import {
@@ -197,6 +198,15 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     pressureFace?.getSnapshot() as { projectedTokens?: number; contextWindow?: number } | undefined
   ) ?? EMPTY_PRESSURE, [pressureFace])
   const pressure = useSyncExternalStore(subscribePressure, getPressure, getPressure)
+  // The session's current goal (the `goal` session projection): non-null while
+  // a goal drives this session, with `goal.goal.phase` naming its lifecycle.
+  const goalFace = useMemo(() => session?.projections?.faceOf?.('goal'), [session])
+  const subscribeGoal = useCallback((listener: () => void) => goalFace?.subscribe(listener) ?? (() => {}), [goalFace])
+  const getGoal = useCallback(() => (goalFace?.getSnapshot() as GoalProjection | null | undefined) ?? null, [goalFace])
+  const goalProjection = useSyncExternalStore(subscribeGoal, getGoal, getGoal)
+  // A goal is "in flight" while it exists and has not reached its terminal phase.
+  // Its sub-task running→idle edges must not read as the whole task finishing.
+  const goalActive = goalProjection !== null && goalProjection.goal.phase !== 'complete'
   const petEnabled = useSyncExternalStore(subscribeAppSettings, isPetEnabled, isPetEnabled)
   const ledgerEnabled = useSyncExternalStore(subscribeLedgerSettings, isLedgerEnabled, isLedgerEnabled)
   // 订阅修订号：费率/预算变化（即使 enabled 不变）也触发重渲染，账房数字即时刷新
@@ -264,6 +274,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const celebrateTimer = useRef<number | undefined>(undefined)
   const lastCelebrateAtRef = useRef(0)
   const wasPartialRef = useRef(false)
+  const goalPhaseRef = useRef<GoalPhase | undefined>(goalProjection?.goal.phase)
 
   useEffect(() => {
     let transitionTimer: ReturnType<typeof setTimeout> | undefined
@@ -277,7 +288,9 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
       if (immediate.kind !== 'idle') commit(immediate)
       else {
         commit(completionState() as unknown as DerivedVisual)
-        if (petEnabled) fireCompletionCelebration()
+        // A goal-driven session's running→idle is one sub-task of the goal, not
+        // the whole task; the goal's own phase→complete edge celebrates instead.
+        if (petEnabled && !goalActive) fireCompletionCelebration()
         completionTimer = window.setTimeout(() =>{  commit(immediate) }, 8000)
       }
     } else transitionTimer = window.setTimeout(() =>{  commit(immediate) }, immediate.kind === 'error' ? 100 : 720)
@@ -575,10 +588,21 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     updateCompletionDiag(`partial文本:${hasStreamContent ? '有' : '无'} → ${wasStreamContent ? '有' : '无'} | running:${snapshot.running ? '是' : '否'} | 状态:${effectiveVisual.kind}`)
     if (!wasStreamContent || hasStreamContent) return
     if (snapshot.running) return // agent 任务路径已处理
+    if (goalActive) return // goal 子任务的流式输出结束，等 goal 完成再庆祝
     const kind = effectiveVisual.kind
     if (kind === 'error' || kind === 'tool-error') return // 出错走安慰
     fireCompletionCelebration()
   }, [snapshot.partial, snapshot.running, effectiveVisual.kind, fireCompletionCelebration, updateCompletionDiag, petEnabled])
+
+  // goal 整体完成检测：goal 驱动会话里，唯一真正的「任务完成」信号是 goal.phase
+  // 从非 complete → complete 的转换（子任务的 running→idle 已由上面两处跳过）。
+  useEffect(() => {
+    if (!petEnabled) return
+    const phase = goalProjection?.goal.phase
+    const prev = goalPhaseRef.current
+    goalPhaseRef.current = phase
+    if (prev !== 'complete' && phase === 'complete') fireCompletionCelebration()
+  }, [goalProjection?.goal.phase, petEnabled, fireCompletionCelebration])
 
   /** 出错安慰音（工具失败 / 任务报错）+ 语音。 */
   const comfortError = useCallback(() => {
