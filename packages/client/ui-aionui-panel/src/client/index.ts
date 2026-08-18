@@ -38,8 +38,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Required services: sessions for the project root, locale for the copy, settingsScope for the master switch. */
-export const inject = ['sessions', 'locale', 'settingsScope']
+/** Required services: sessions (project root), locale (copy), settingsScope (master switch), slots (settings card). */
+export const inject = ['sessions', 'locale', 'settingsScope', 'slots']
 
 /** Apply the browser half. */
 export function apply(ctx: ClientContext): void {
