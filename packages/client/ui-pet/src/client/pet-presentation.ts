@@ -8,25 +8,25 @@ export type PetVisualKind =
 /** What the state machine hands the presentation layer. */
 export interface PetVisual {
   kind: PetVisualKind
-  reaction?: string
+  reaction?: string | undefined
   detail?: unknown
 }
 
 /** Ambient signals the presentation layer reads to pick a sprite. */
 export interface PetSignals {
-  waitingMs?: number
-  hasImage?: boolean
-  userCorrection?: boolean
-  visualMs?: number
-  busySessions?: number
-  contextRatio?: number
-  idleMs?: number
-  questionCount?: number
-  thinkingMs?: number
+  waitingMs?: number | undefined
+  hasImage?: boolean | undefined
+  userCorrection?: boolean | undefined
+  visualMs?: number | undefined
+  busySessions?: number | undefined
+  contextRatio?: number | undefined
+  idleMs?: number | undefined
+  questionCount?: number | undefined
+  thinkingMs?: number | undefined
 }
 
 /** Select one complete emoji sprite. Motion is applied to the whole sprite in CSS. */
-export function presentationForState(visual: PetVisual, phase = 0, signals: PetSignals = {}): { expression: string, reaction: string } {
+export function presentationForState(visual: PetVisual, phase = 0, signals: PetSignals = {}): { expression: string; reaction: string } {
   if (visual.kind === 'whip') return result(visual.reaction ?? 'idle')
   if (visual.kind === 'waiting') return waitingReaction(phase, signals.waitingMs ?? 0)
   if (signals.hasImage || visual.kind === 'vision') return result('blindfold')
@@ -53,27 +53,24 @@ export function presentationForState(visual: PetVisual, phase = 0, signals: PetS
     return result(elapsed < 2500 ? 'desk-done' : elapsed < 5200 ? 'cheerful' : 'proud')
   }
   if (visual.kind === 'error') return result(['apologetic', 'crying', 'desk-facepalm'][phase % 3] ?? 'idle')
-  if (visual.kind === 'working') return result(reactionForTool(visual.detail))
+  if (visual.kind === 'working') return result(reactionForTool(String(visual.detail)))
   if (visual.kind === 'listening') return result('skeptical')
   if (visual.kind === 'speaking') return result(['desk-coding', 'thinking', 'skeptical'][phase % 3] ?? 'idle')
   if (visual.kind === 'confused') return result('desk-confused')
-  if (visual.kind === 'idle') {
-    if ((signals.idleMs ?? 0) >= 2 * 60_000) return result(['relaxed', 'skeptical', 'thinking'][phase % 3] ?? 'idle')
-    // 待机变体轮换：idle 占多数（加权），偶尔活泼一下——待机大多数时候应是 idle
-    return result(['idle', 'idle', 'idle', 'cheerful', 'idle', 'relaxed', 'proud'][phase % 3] ?? 'idle')
-  }
-  return result('idle')
+  if ((signals.idleMs ?? 0) >= 2 * 60_000) return result(['relaxed', 'skeptical', 'thinking'][phase % 3] ?? 'idle')
+  // 待机变体轮换：idle 占多数（加权），偶尔活泼一下——待机大多数时候应是 idle
+  return result(['idle', 'idle', 'idle', 'cheerful', 'idle', 'relaxed', 'proud'][phase % 7] ?? 'idle')
 }
 
-function waitingReaction(phase: number, waitingMs: number): { expression: string, reaction: string } {
+function waitingReaction(phase: number, waitingMs: number): { expression: string; reaction: string } {
   if (waitingMs >= 4 * 60_000) return result('sleepy')
   if (waitingMs >= 2 * 60_000) return result('angry')
   if (waitingMs >= 45_000) return result('skeptical')
   return result(['relaxed', 'skeptical', 'thinking'][phase % 3] ?? 'idle')
 }
 
-function reactionForTool(detail: unknown): string {
-  const tool = String(detail ?? '').toLowerCase()
+function reactionForTool(detail: string): string {
+  const tool = detail.toLowerCase()
   if (tool.includes('subagent') || tool.includes('spawn_agent') || tool.includes('create_thread')) return 'desk-coding'
   if (tool.includes('web') || tool.includes('search') || tool.includes('browser')) return 'skeptical'
   if (tool === 'read' || tool.includes('fetch')) return 'thinking'
@@ -84,12 +81,12 @@ function reactionForTool(detail: unknown): string {
   return 'desk-coding'
 }
 
-function result(reaction: string): { expression: string, reaction: string } {
+function result(reaction: string): { expression: string; reaction: string } {
   return { expression: reaction, reaction }
 }
 
-export function latestOutput(text: unknown, limit = 180): string {
-  const normalized = String(text ?? '').replace(/\s+/gu, ' ').trim()
+export function latestOutput(text: string, limit = 180): string {
+  const normalized = text.replace(/\s+/gu, ' ').trim()
   if (normalized.length <= limit) return normalized
   const tail = normalized.slice(-limit)
   const boundary = tail.search(/[。！？.!?；;]\s*/u)

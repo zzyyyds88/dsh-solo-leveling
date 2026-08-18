@@ -81,6 +81,7 @@
     { "path": "./packages/client/ui-mobile-adapt" },
     { "path": "./packages/client/ui-defaults" },
     { "path": "./packages/client/ui-access-gate" },
+    { "path": "./packages/client/ui-pet" },
     { "path": "./packages/client/ui-model-selection" },
     { "path": "./packages/client/ui-agent-preset" },
     { "path": "./packages/client/ui-permission-presets" },

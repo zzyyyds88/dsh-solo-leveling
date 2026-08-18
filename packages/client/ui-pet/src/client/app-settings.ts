@@ -10,10 +10,10 @@ const APP_KEY = 'deepseek-pet:app'
 
 function loadApp(): { enabled: boolean } {
   try {
-    const raw = window.localStorage?.getItem(APP_KEY)
+    const raw = window.localStorage.getItem(APP_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed === 'object') return { enabled: parsed.enabled !== false }
+      const parsed = JSON.parse(raw) as { enabled?: boolean }
+      return { enabled: parsed.enabled !== false }
     }
   } catch {}
   return { enabled: true }
@@ -24,7 +24,7 @@ const app = loadApp()
 
 function persist(): void {
   try {
-    window.localStorage?.setItem(APP_KEY, JSON.stringify(app))
+    window.localStorage.setItem(APP_KEY, JSON.stringify(app))
     window.dispatchEvent(new Event('deepseek-pet:app-changed'))
   } catch {}
 }
@@ -36,7 +36,7 @@ export function isPetEnabled(): boolean {
 
 /** 设置桌宠开关，返回新状态。 */
 export function setPetEnabled(enabled: boolean): boolean {
-  app.enabled = enabled === true
+  app.enabled =  enabled
   persist()
   return app.enabled
 }
@@ -48,7 +48,7 @@ export function appSettingsSnapshot(): { enabled: boolean } {
 
 /** 设置卡片批量保存：一次写入多个字段，返回新快照。 */
 export function applyAppSettings(patch: { enabled?: boolean }): { enabled: boolean } {
-  if (patch && typeof patch === 'object' && typeof patch.enabled === 'boolean') {
+  if (typeof patch.enabled === 'boolean') {
     app.enabled = patch.enabled
     persist()
   }

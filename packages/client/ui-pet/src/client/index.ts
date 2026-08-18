@@ -12,7 +12,7 @@ export const inject = ['slots', 'sessions']
 export function apply(ctx: Context): void {
   ctx.effect(installStyles, 'ui-live2d: styles')
   const resolveSession = (sessionId: SessionId) => ctx.sessions.binding(sessionId)?.session
-  const openSession = (sessionId: SessionId) => ctx.sessions.open(sessionId)
+  const openSession = (sessionId: SessionId) =>{  ctx.sessions.open(sessionId) }
 
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
@@ -20,7 +20,7 @@ export function apply(ctx: Context): void {
     order: 90,
     label: 'DeepSeek Pet 插件',
     inject: () => ({ resolveSession, openSession }),
-  }, DeepSeekPet))
+  }, DeepSeekPet as never))
 
   // 设置 → 插件 → 插件配置 →「DeepSeek 桌宠」+「账房面板」两张一级卡片（开发规范 §2.5）
   registerSettingsCards(ctx)

@@ -1,14 +1,16 @@
 /** One conversation node as read by the pet (loose: the snapshot is a projection). */
 export interface PetNode {
-  kind?: string
-  text?: string
-  type?: string
+  kind?: string | undefined
+  text?: string | undefined
+  type?: string | undefined
   content?: unknown
-  isError?: boolean
+  isError?: boolean | undefined
   call?: { name?: string }
   error?: { name?: string }
-  name?: string
+  name?: string | undefined
   outcome?: { kind?: string }
+  seq?: number | undefined
+  time?: number | undefined
 }
 
 /** The conversation snapshot the pet reads (loose projection of the session view). */
@@ -94,15 +96,15 @@ export function stateFromSnapshot(snapshot: PetSnapshot | null | undefined): Pet
 
   const calls = Array.isArray(snapshot.runningCalls) ? snapshot.runningCalls : []
   if (calls.length > 0) {
-    const name = String(calls.at(-1)?.name ?? '')
+    const name = calls.at(-1)?.name ?? ''
     return state('working', (TOOL_LABELS as Record<string, string>)[name] ?? `正在使用 ${friendlyToolName(name)}`, name || 'tool')
   }
 
   const blocks = Array.isArray(snapshot.partial?.blocks) ? snapshot.partial.blocks : []
-  if (blocks.some(block => block?.kind === 'text' && block.text)) {
+  if (blocks.some(block => block.kind === 'text' && block.text)) {
     return state('speaking', '正在组织回答', '答案正在生成…')
   }
-  if (blocks.some(block => block?.kind === 'reasoning' && block.text)) {
+  if (blocks.some(block => block.kind === 'reasoning' && block.text)) {
     return state('thinking', '正在深入思考', '推理进行中…')
   }
   if (snapshot.running) return state('thinking', '正在分析任务', 'DeepSeek 工作中')
@@ -115,7 +117,7 @@ export function stateFromSnapshot(snapshot: PetSnapshot | null | undefined): Pet
 /** Latest human input contains an image attachment. */
 export function hasRecentImage(snapshot: PetSnapshot | null | undefined): boolean {
   const queued = Array.isArray(snapshot?.queue) ? snapshot.queue : []
-  if (queued.some(item => contentHasImage(item?.content))) return true
+  if (queued.some(item => contentHasImage(item.content))) return true
   const nodes = Array.isArray(snapshot?.nodes) ? snapshot.nodes : []
   for (let index = nodes.length - 1; index >= 0; index -= 1) {
     const node = nodes[index]
@@ -129,7 +131,9 @@ export function hasRecentImage(snapshot: PetSnapshot | null | undefined): boolea
 export function hasRecentCorrection(snapshot: PetSnapshot | null | undefined): boolean {
   const text = latestHumanText(snapshot)
   if (!text) return false
-  return /(?:你|这个|刚才|结果|回答|代码).{0,12}(?:做错|写错|弄错|搞错|错了|不对|有问题)|(?:做错了|又错了|不是这样|重新做|重来)|\b(?:you(?:'re| are)? wrong|wrong answer|incorrect|not right|redo it)\b/iu.test(text)
+  const cnRe = /(?:你|这个|刚才|结果|回答|代码).{0,12}(?:做错|写错|弄错|搞错|错了|不对|有问题)|(?:做错了|又错了|不是这样|重新做|重来)/iu
+  const enRe = /\b(?:you(?:'re| are)? wrong|wrong answer|incorrect|not right|redo it)\b/iu
+  return cnRe.test(text) || enRe.test(text)
 }
 
 /** Number of question/uncertainty cues in the current reasoning stream. */
@@ -142,15 +146,16 @@ export function reasoningQuestionCount(snapshot: PetSnapshot | null | undefined)
 }
 
 /** Current stream copy for the companion's scrolling transcript. */
-export function streamFromSnapshot(snapshot: PetSnapshot | null | undefined): { reasoning: string, reply: string } {
+export function streamFromSnapshot(snapshot: PetSnapshot | null | undefined): { reasoning: string; reply: string } {
   const blocks = Array.isArray(snapshot?.partial?.blocks) ? snapshot.partial.blocks : []
-  const reasoning = blocks.filter(block => block?.kind === 'reasoning').map(block => block.text).join('\n').trim()
-  const reply = blocks.filter(block => block?.kind === 'text').map(block => block.text).join('\n').trim()
+  const reasoning = blocks.filter(block => block.kind === 'reasoning').map(block => block.text ?? '').join('\n').trim()
+  const reply = blocks.filter(block => block.kind === 'text').map(block => block.text ?? '').join('\n').trim()
   return { reasoning, reply }
 }
 
 function contentHasImage(content: unknown): boolean {
-  return Array.isArray(content) && content.some(block => block?.type === 'image' || block?.kind === 'image')
+  if (!Array.isArray(content)) return false
+  return (content as PetNode[]).some(block => block.type === 'image' || block.kind === 'image')
 }
 
 function latestHumanText(snapshot: PetSnapshot | null | undefined): string {
@@ -163,7 +168,7 @@ function latestHumanText(snapshot: PetSnapshot | null | undefined): string {
     if (node?.kind === 'assistant') return ''
     if (node?.kind === 'user' || node?.kind === 'steering') {
       return Array.isArray(node.content)
-        ? node.content.filter(block => block?.type === 'text').map(block => block.text).join('\n')
+        ? (node.content as PetNode[]).filter(block => block.type === 'text').map(block => block.text ?? '').join('\n')
         : ''
     }
   }

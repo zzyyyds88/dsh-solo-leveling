@@ -24,6 +24,9 @@
       "path": "../ui-layout"
     },
     {
+      "path": "../ui-settings-plugins"
+    },
+    {
       "path": "../../settings/settings"
     },
     {

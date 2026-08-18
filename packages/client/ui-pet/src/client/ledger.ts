@@ -66,21 +66,19 @@ function clampNonNegative(value: unknown, fallback: number): number {
 
 function loadLedger(): LedgerSettings {
   try {
-    const raw = window.localStorage?.getItem(LEDGER_KEY)
+    const raw = window.localStorage.getItem(LEDGER_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw) as { enabled?: unknown, budget?: unknown, rates?: Partial<LedgerRates> }
-      if (parsed && typeof parsed === 'object') {
-        const rates = {
-          miss: clampNonNegative(parsed.rates?.miss, DEFAULT_LEDGER.rates.miss),
-          hit: clampNonNegative(parsed.rates?.hit, DEFAULT_LEDGER.rates.hit),
-          write: clampNonNegative(parsed.rates?.write, DEFAULT_LEDGER.rates.write),
-          output: clampNonNegative(parsed.rates?.output, DEFAULT_LEDGER.rates.output),
-        }
-        return {
-          enabled: parsed.enabled !== false,
-          budget: clampNonNegative(parsed.budget, DEFAULT_LEDGER.budget),
-          rates,
-        }
+      const parsed = JSON.parse(raw) as { enabled?: unknown; budget?: unknown; rates?: Partial<LedgerRates> }
+      const rates = {
+        miss: clampNonNegative(parsed.rates?.miss, DEFAULT_LEDGER.rates.miss),
+        hit: clampNonNegative(parsed.rates?.hit, DEFAULT_LEDGER.rates.hit),
+        write: clampNonNegative(parsed.rates?.write, DEFAULT_LEDGER.rates.write),
+        output: clampNonNegative(parsed.rates?.output, DEFAULT_LEDGER.rates.output),
+      }
+      return {
+        enabled: parsed.enabled !== false,
+        budget: clampNonNegative(parsed.budget, DEFAULT_LEDGER.budget),
+        rates,
       }
     }
   } catch {}
@@ -95,7 +93,7 @@ let ledgerRevision = 0
 
 function persist(): void {
   try {
-    window.localStorage?.setItem(LEDGER_KEY, JSON.stringify(ledger))
+    window.localStorage.setItem(LEDGER_KEY, JSON.stringify(ledger))
     ledgerRevision += 1
     window.dispatchEvent(new Event('deepseek-pet:ledger-changed'))
   } catch {}
@@ -132,19 +130,17 @@ export function ledgerSettingsSnapshot(): LedgerSettings {
 
 /** 设置卡片批量保存：一次写入多个字段（enabled/budget/rates），返回新快照。 */
 export function applyLedgerSettings(patch: Partial<LedgerSettings>): LedgerSettings {
-  if (patch && typeof patch === 'object') {
-    if (typeof patch.enabled === 'boolean') ledger.enabled = patch.enabled
-    if (typeof patch.budget === 'number' && Number.isFinite(patch.budget) && patch.budget >= 0) ledger.budget = patch.budget
-    if (patch.rates && typeof patch.rates === 'object') {
-      ledger.rates = {
-        miss: clampNonNegative(patch.rates.miss, ledger.rates.miss),
-        hit: clampNonNegative(patch.rates.hit, ledger.rates.hit),
-        write: clampNonNegative(patch.rates.write, ledger.rates.write),
-        output: clampNonNegative(patch.rates.output, ledger.rates.output),
-      }
+  if (typeof patch.enabled === 'boolean') ledger.enabled = patch.enabled
+  if (typeof patch.budget === 'number' && Number.isFinite(patch.budget) && patch.budget >= 0) ledger.budget = patch.budget
+  if (patch.rates && typeof patch.rates === 'object') {
+    ledger.rates = {
+      miss: clampNonNegative(patch.rates.miss, ledger.rates.miss),
+      hit: clampNonNegative(patch.rates.hit, ledger.rates.hit),
+      write: clampNonNegative(patch.rates.write, ledger.rates.write),
+      output: clampNonNegative(patch.rates.output, ledger.rates.output),
     }
-    persist()
   }
+  persist()
   return ledgerSettingsSnapshot()
 }
 
@@ -161,13 +157,13 @@ export function subscribeLedgerSettings(listener: () => void): () => void {
 /* ---------------- 用量聚合（来自轨迹会话视图） ---------------- */
 
 /** 从 session snapshot 读会话累计用量。无数据返回 null。 */
-export function usageFromSnapshot(snapshot: { views?: Map<string, { requests?: Array<{ usage?: RawUsage }> }> }): TokenUsage | null {
-  const requests = snapshot?.views?.get?.('trajectory')?.requests
+export function usageFromSnapshot(snapshot: unknown): TokenUsage | null {
+  const requests = (snapshot as { views?: Map<string, { requests?: Array<{ usage?: RawUsage }> }> }).views?.get('trajectory')?.requests
   if (!Array.isArray(requests) || requests.length === 0) return null
   const acc = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }
   let found = false
   for (const request of requests) {
-    const usage = request?.usage
+    const usage = request.usage
     if (!usage || typeof usage !== 'object') continue
     const { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, reasoningTokens } = usage
     if (typeof inputTokens === 'number' && Number.isFinite(inputTokens)) { acc.input += inputTokens; found = true }

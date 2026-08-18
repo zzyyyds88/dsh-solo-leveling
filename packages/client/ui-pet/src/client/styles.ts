@@ -70,5 +70,5 @@ export function installStyles() {
   style.dataset.plugin = 'deepseek-pet'
   style.textContent = STYLES
   document.head.append(style)
-  return () => style.remove()
+  return () =>{  style.remove() }
 }

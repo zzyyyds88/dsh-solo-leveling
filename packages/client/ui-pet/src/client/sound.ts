@@ -48,10 +48,10 @@ const ALERT_TOGGLES = Object.freeze({
 /** 音量配置（总音量 + 分动作 + 提醒开关），localStorage 持久化。 */
 function loadSettings(): SoundSettings {
   try {
-    const raw = window.localStorage?.getItem(VOLUME_KEY)
+    const raw = window.localStorage.getItem(VOLUME_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<SoundSettings> & { alerts?: Partial<Record<AlertName, boolean>> }
-      if (parsed && typeof parsed === 'object') return {
+      return {
         muted: parsed.muted === true,
         total: clampVolume(parsed.total),
         voice: clampVolume(parsed.voice),
@@ -73,19 +73,19 @@ const settings = loadSettings()
 
 function persist(): void {
   try {
-    window.localStorage?.setItem(VOLUME_KEY, JSON.stringify(settings))
+    window.localStorage.setItem(VOLUME_KEY, JSON.stringify(settings))
     window.dispatchEvent(new Event('deepseek-pet:sound-changed'))
   } catch {}
 }
 
 /** 某类提醒音效是否开启（celebrate/error/prompt/poke/headpat）。 */
 export function alertEnabled(name: AlertName): boolean {
-  return settings.alerts?.[name] !== false
+  return settings.alerts[name]
 }
 
 /** 设置某类提醒音效开关。 */
 export function setAlertEnabled(name: AlertName, enabled: boolean): void {
-  settings.alerts = { ...settings.alerts, [name]: enabled === true }
+  settings.alerts = { ...settings.alerts, [name]:  enabled }
   persist()
 }
 
@@ -107,7 +107,7 @@ export function toggleMuted(): boolean {
 
 /** 读取分动作音量（voice/sfx/celebrate）。 */
 export function actionVolume(action: ActionVolume): number {
-  return clampVolume(settings[action] ?? settings.sfx)
+  return clampVolume(settings[action])
 }
 
 /** 设置分动作音量（0~1）。 */
@@ -139,17 +139,15 @@ export function soundSettingsSnapshot(): SoundSettings {
 
 /** 设置卡片批量保存：一次写入多个字段（total/alerts/muted 等），返回新快照。 */
 export function applySoundSettings(patch: Partial<SoundSettings>): SoundSettings {
-  if (patch && typeof patch === 'object') {
-    if (Number.isFinite(patch.total)) settings.total = clampVolume(patch.total)
-    if (Number.isFinite(patch.voice)) settings.voice = clampVolume(patch.voice)
-    if (Number.isFinite(patch.sfx)) settings.sfx = clampVolume(patch.sfx)
-    if (Number.isFinite(patch.celebrate)) settings.celebrate = clampVolume(patch.celebrate)
-    if (typeof patch.muted === 'boolean') settings.muted = patch.muted
-    if (patch.alerts && typeof patch.alerts === 'object') {
-      settings.alerts = { ...settings.alerts, ...patch.alerts }
-    }
-    persist()
+  if (Number.isFinite(patch.total)) settings.total = clampVolume(patch.total)
+  if (Number.isFinite(patch.voice)) settings.voice = clampVolume(patch.voice)
+  if (Number.isFinite(patch.sfx)) settings.sfx = clampVolume(patch.sfx)
+  if (Number.isFinite(patch.celebrate)) settings.celebrate = clampVolume(patch.celebrate)
+  if (typeof patch.muted === 'boolean') settings.muted = patch.muted
+  if (patch.alerts && typeof patch.alerts === 'object') {
+    settings.alerts = { ...settings.alerts, ...patch.alerts }
   }
+  persist()
   return soundSettingsSnapshot()
 }
 
@@ -164,7 +162,9 @@ export function audioError(): string | null {
 /** 创建（不 resume）AudioContext。若已存在则原样返回。 */
 function createAudioContext(): AudioContext | null {
   if (audioCtx) return audioCtx
-  try { audioCtx = new (window.AudioContext || (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext)() } catch (error) {
+  try {
+    audioCtx = new window.AudioContext()
+  } catch (error) {
     lastAudioError = `create: ${error instanceof Error ? error.message : String(error)}`
   }
   return audioCtx
@@ -173,7 +173,7 @@ function createAudioContext(): AudioContext | null {
 function ensureAudio(): AudioContext | null {
   createAudioContext()
   if (audioCtx && audioCtx.state === 'suspended') {
-    try { audioCtx.resume() } catch (error) {
+    try { void audioCtx.resume() } catch (error) {
       lastAudioError = `resume: ${error instanceof Error ? error.message : String(error)}`
     }
   }
@@ -324,7 +324,7 @@ export function hasVoice(): boolean {
  */
 export async function speakVoice(key: string): Promise<boolean> {
   if (settings.muted) return false
-  const entry = (VOICES as Record<string, { text: string, b64: string }>)[key]
+  const entry = (VOICES as Record<string, { text: string; b64: string }>)[key]
   if (!entry?.b64) return false
   const ctx = ensureAudio()
   if (!ctx) return false

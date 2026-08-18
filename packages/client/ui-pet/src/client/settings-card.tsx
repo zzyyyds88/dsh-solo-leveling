@@ -70,13 +70,13 @@ function installCardCss() {
   tag.dataset.pluginCss = tagId
   tag.textContent = CARD_CSS
   document.head.append(tag)
-  return () => tag.remove()
+  return () =>{  tag.remove() }
 }
 
 /** 开启/关闭下拉框（用户要求「下拉窗形式」，不用可选框）。 */
-function PetSelect({ value, onChange, label }: { value: string, onChange: (value: string) => void, label: string }) {
+function PetSelect({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
   return (
-    <select className="dshp-select" value={value} onChange={event => onChange(event.target.value)} aria-label={label}>
+    <select className="dshp-select" value={value} onChange={(event) =>{  onChange(event.target.value) }} aria-label={label}>
       <option value="on">开启</option>
       <option value="off">关闭</option>
     </select>
@@ -87,7 +87,7 @@ function PetSelect({ value, onChange, label }: { value: string, onChange: (value
  * 官方 ValueField 版式：head 行（label + badges）→ 控件独占一行 → hint。
  * 与官方 BashCard/WebSearchCard 字段形态一致（fields.module.css）。
  */
-function PetField({ label, hint, control, badge }: { label: string, hint?: string, control?: ReactNode, badge?: string }) {
+function PetField({ label, hint, control, badge }: { label: string; hint?: string; control?: ReactNode; badge?: string }) {
   return (
     <div className="dshp-field">
       <div className="dshp-head">
@@ -115,7 +115,7 @@ function CardShell({ cardId, name, description, open, setOpen, dirty, message, s
 }) {
   return (
     <li className={`dshp-card${open ? ' dshp-cardOpen' : ''}`} data-plugin-card={cardId}>
-      <button type="button" className="dshp-head" onClick={() => setOpen(current => !current)}
+      <button type="button" className="dshp-head" onClick={() =>{  setOpen(current => !current) }}
         aria-expanded={open} aria-label={`${open ? '收起' : '展开'}: ${name}`}>
         <span className="dshp-headText">
           <span className="dshp-name">{name}</span>
@@ -168,7 +168,7 @@ export function DeepSeekPetSettingsCard() {
     applyAppSettings({ enabled: draft.enabled })
     setStored(appSettingsSnapshot())
     setMessage('已保存')
-    window.setTimeout(() => setMessage(''), 1600)
+    window.setTimeout(() =>{  setMessage('') }, 1600)
   }, [draft])
 
   const discard = useCallback(() => {
@@ -180,7 +180,7 @@ export function DeepSeekPetSettingsCard() {
     <CardShell cardId={CARD_ID} name="DeepSeek 桌宠" description="桌宠显示开关"
       open={open} setOpen={setOpen} dirty={dirty} message={message} save={save} discard={discard}>
       <PetField label="桌宠开关" hint="关闭后桌宠不再显示，也不再发声"
-        control={<PetSelect value={draft.enabled ? 'on' : 'off'} onChange={value => setDraft({ enabled: value === 'on' })} label="桌宠开关" />} />
+        control={<PetSelect value={draft.enabled ? 'on' : 'off'} onChange={(value) =>{  setDraft({ enabled: value === 'on' }) }} label="桌宠开关" />} />
     </CardShell>
   )
 }
@@ -223,7 +223,7 @@ export function LedgerSettingsCard() {
     applyLedgerSettings(ledgerStoredOf(draft))
     setStored(ledgerSettingsSnapshot())
     setMessage('已保存')
-    window.setTimeout(() => setMessage(''), 1600)
+    window.setTimeout(() =>{  setMessage('') }, 1600)
   }, [draft])
 
   const discard = useCallback(() => {
@@ -232,7 +232,7 @@ export function LedgerSettingsCard() {
   }, [])
 
   const budgetText = draft.budgetText
-  const rateTextOf = (key: string): string => draft.rateText?.[key] ?? '0'
+  const rateTextOf = (key: string): string => draft.rateText[key] ?? '0'
 
   return (
     <CardShell cardId={LEDGER_CARD_ID} name="账房面板" description="吉祥物旁实时显示 token 用量 / 缓存命中率 / 预估价格 / 预算"
@@ -241,37 +241,39 @@ export function LedgerSettingsCard() {
         control={<PetSelect value={draft.enabled ? 'on' : 'off'} onChange={setEnabled} label="账房面板开关" />} />
       <PetField label="预算封顶（元）" hint="本会话预估花费达到该值后提醒"
         control={<input className="dshp-number" type="number" min="0" step="1" value={budgetText}
-          onChange={event => setBudget(event.target.value)} aria-label="预算封顶" />} />
+          onChange={(event) =>{  setBudget(event.target.value) }} aria-label="预算封顶" />} />
       <PetField label="费率（¥ / 百万 token）" badge="deepseek-chat" hint="按 deepseek-chat 官方价估算，可自行覆盖" />
       {([['miss', '输入未命中'], ['hit', '缓存命中'], ['write', '缓存写入'], ['output', '输出']] as const).map(([key, label]) => (
         <PetField key={key} label={label}
           control={<input className="dshp-number" type="number" min="0" step="0.1" value={rateTextOf(key)}
-            onChange={event => setRate(key, event.target.value)} aria-label={label} />} />
+            onChange={(event) =>{  setRate(key, event.target.value) }} aria-label={label} />} />
       ))}
     </CardShell>
   )
 }
 
 /** 账房草稿视图：数字字段以字符串暂存（允许 "0." 等中间态输入）。 */
-function ledgerDraftFromSnapshot(snapshot: LedgerSettings): { enabled: boolean, budgetText: string, rateText: Record<string, string> } {
-  const rates = snapshot.rates ?? {}
+function ledgerDraftFromSnapshot(snapshot: LedgerSettings): { enabled: boolean; budgetText: string; rateText: Record<string, string> } {
+  const rates = snapshot.rates
   return {
-    enabled: snapshot.enabled !== false,
-    budgetText: String(snapshot.budget ?? 30),
+    enabled:  snapshot.enabled,
+    budgetText: String(snapshot.budget),
     rateText: Object.fromEntries(Object.entries(rates).map(([key, value]) => [key, String(value)])),
   }
 }
 
 /** 账房草稿归一化：字符串暂存解析回数值，供 dirty 比较与保存。非法输入回退原值。 */
-function ledgerStoredOf(draft: { enabled: boolean, budgetText: string, rateText: Record<string, string> }): { enabled: boolean, budget: number, rates: LedgerRates } {
+function ledgerStoredOf(
+  draft: { enabled: boolean; budgetText: string; rateText: Record<string, string> },
+): { enabled: boolean; budget: number; rates: LedgerRates } {
   const parsedBudget = Number(draft.budgetText)
   const rates: Partial<LedgerRates> = {}
-  for (const [key, text] of Object.entries(draft.rateText ?? {})) {
+  for (const [key, text] of Object.entries(draft.rateText)) {
     const parsed = Number(text)
     if (Number.isFinite(parsed) && parsed >= 0) (rates as Record<string, number>)[key] = parsed
   }
   return {
-    enabled: draft.enabled !== false,
+    enabled:  draft.enabled,
     budget: Number.isFinite(parsedBudget) && parsedBudget >= 0 ? parsedBudget : 30,
     rates: rates as LedgerRates,
   }
