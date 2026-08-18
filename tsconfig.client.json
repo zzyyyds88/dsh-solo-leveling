@@ -88,6 +88,7 @@
     { "path": "./packages/client/ui-git-graph" },
     { "path": "./packages/client/ui-skin-maid-atelier" },
     { "path": "./packages/client/ui-skin-center" },
+    { "path": "./packages/client/ui-aionui-panel" },
     { "path": "./packages/client/ui-model-selection" },
     { "path": "./packages/client/ui-agent-preset" },
     { "path": "./packages/client/ui-permission-presets" },

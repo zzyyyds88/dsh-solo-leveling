@@ -131,6 +131,10 @@
     - id: git-graph
       name: '@deepseek-ai/dsh-host-git-graph'
 
+    # Right-panel host half: workspace-gated fs + git services and /aionui-panel routes.
+    - id: aionui-panel
+      name: '@deepseek-ai/dsh-host-aionui-panel'
+
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
@@ -316,6 +320,10 @@
     # In-GUI skin center: /api/skin-center routes (host) + Skins plugin card (client).
     - id: ui-skin-center
       name: '@deepseek-ai/dsh-client-ui-skin-center'
+
+    # Right-panel browser half: explorer file tree, multi-tab preview, git SCM panel.
+    - id: ui-aionui-panel
+      name: '@deepseek-ai/dsh-client-ui-aionui-panel'
 
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
