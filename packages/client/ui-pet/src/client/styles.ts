@@ -43,6 +43,8 @@ export const STYLES = `
 .dsh-live2d-diag-alerts p{grid-column:1/-1;margin:0 0 2px;font-size:10px;color:var(--dsw-alias-text-tertiary,#8194b6)}
 .dsh-live2d-diag-alerts label{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--dsw-alias-text-secondary,#b8c7df);cursor:pointer;white-space:nowrap}
 .dsh-live2d-diag-alerts input{accent-color:var(--pet-cyan);cursor:pointer}
+.dsh-live2d-diag-alert-group{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:6px}
+.dsh-live2d-diag-alert-group-title{grid-column:1/-1;margin:0 0 2px;font-size:9px;font-weight:600;color:var(--dsw-alias-text-primary,#eff7ff)}
 .dsh-live2d-ledger{position:relative;z-index:14;width:250px;margin-bottom:7px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--pet-cyan) 42%,var(--pet-line));border-radius:13px;background:var(--pet-panel);box-shadow:0 12px 32px rgba(3,15,40,.22);backdrop-filter:blur(18px);pointer-events:auto}
 .dsh-live2d-ledger header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--dsw-alias-text-primary,#eff7ff)}
 .dsh-live2d-ledger header button{border:0;background:none;color:var(--dsw-alias-text-tertiary,#8194b6);cursor:pointer;font-size:11px;padding:2px}

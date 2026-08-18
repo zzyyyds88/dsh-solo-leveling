@@ -3,7 +3,6 @@ import type { PetNode, PetSnapshot } from './pet-state.ts'
 import type { PetVisual, PetSignals } from './pet-presentation.ts'
 import type { CostSample } from './ledger.ts'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { AlertName } from './sound.ts'
 import type {} from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type { GoalPhase, GoalProjection } from '@deepseek-ai/dsh-goal/client'
@@ -14,8 +13,8 @@ import {
   stateFromSnapshot, streamFromSnapshot,
 } from './pet-state.ts'
 import {
-  ALERT_LABELS, alertEnabled, alertToggles, armAutoplayUnlock, audioError, audioState, beep, getVolume,
-  isMuted, playCelebrate, playPoke, playPrompt, playSad, setAlertEnabled,
+  ALERT_GROUPS, ALERT_LABELS, alertEnabled, alertToggles, armAutoplayUnlock, audioError, audioState, beep, getVolume,
+  isMuted, playCelebrate, playPoke, playPrompt, playSad, playTool, setAlertEnabled,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.ts'
 import { isPetEnabled, subscribeAppSettings } from './app-settings.ts'
@@ -275,6 +274,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const lastCelebrateAtRef = useRef(0)
   const wasPartialRef = useRef(false)
   const goalPhaseRef = useRef<GoalPhase | undefined>(goalProjection?.goal.phase)
+  const prevWorkingRef = useRef(false)
 
   useEffect(() => {
     let transitionTimer: ReturnType<typeof setTimeout> | undefined
@@ -645,6 +645,18 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     void speakVoice(pickVoiceKey(keys))
   }, [effectiveVisual.kind, (effectiveVisual as DerivedVisual).promptKind, petEnabled])
 
+  // 调用工具时播工具调用语音（进入 working 状态时，短促咔哒音提示「正在调用工具」）。
+  useEffect(() => {
+    if (!petEnabled) return
+    const working = immediate.kind === 'working'
+    const prev = prevWorkingRef.current
+    prevWorkingRef.current = working
+    if (working && !prev && alertEnabled('tool')) {
+      unlockAudio()
+      playTool()
+    }
+  }, [immediate.kind, petEnabled])
+
   /* ---------- 账房：token 用量 / 缓存命中率 / 预估价格 / 预算封顶 ---------- */
   const usage = useMemo(() => (petEnabled && ledgerEnabled ? usageFromSnapshot(snapshot) : null), [snapshot, petEnabled, ledgerEnabled])
   // 费率/预算每次渲染直读（修订号订阅保证费率变化后重渲染，这里拿到新值）
@@ -866,10 +878,15 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
         <dl>{diagLines.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
         <div className="dsh-live2d-diag-alerts" role="group" aria-label="音效提醒设置">
           <p>音效提醒</p>
-          {Object.entries(ALERT_LABELS).map(([key, label]) => {
-            const alertName = key as AlertName
-            return <label key={key}><input type="checkbox" checked={alertToggles()[alertName]} onChange={(event) => { setAlertEnabled(alertName, event.target.checked); setAlertVer(version => version + 1) }} />{label}</label>
-          })}
+          {ALERT_GROUPS.map(group => (
+            <div key={group.title} className="dsh-live2d-diag-alert-group">
+              <p className="dsh-live2d-diag-alert-group-title">{group.title}</p>
+              {group.keys.map((key) => {
+                const label = ALERT_LABELS[key]
+                return <label key={key}><input type="checkbox" checked={alertToggles()[key]} onChange={(event) => { setAlertEnabled(key, event.target.checked); setAlertVer(version => version + 1) }} />{label}</label>
+              })}
+            </div>
+          ))}
         </div>
         <footer>
           <label>音量 <input type="range" min="0" max="100" value={Math.round(getVolume() * 100)} onChange={(event) =>{  setVolume(Number(event.target.value) / 100) }} aria-label="桌宠音量" /></label>

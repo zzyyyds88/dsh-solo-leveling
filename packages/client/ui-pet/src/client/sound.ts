@@ -10,7 +10,7 @@
 const VOLUME_KEY = 'deepseek-pet:sound'
 
 /** Alert sound keys. */
-export type AlertName = 'celebrate' | 'error' | 'prompt' | 'state' | 'poke' | 'headpat'
+export type AlertName = 'celebrate' | 'error' | 'prompt' | 'state' | 'tool' | 'poke' | 'headpat'
 
 /** Per-action volume group. */
 export type ActionVolume = 'voice' | 'sfx' | 'celebrate'
@@ -31,9 +31,16 @@ export const ALERT_LABELS = Object.freeze({
   error: '出错安慰',
   prompt: '提问/审批提示',
   state: '状态语音（思考/忙碌）',
+  tool: '工具调用语音',
   poke: '戳一戳音效',
   headpat: '摸头音效',
 })
+
+/** 诊断面板的音效开关分组：基础音效在前，附加音效在后。 */
+export const ALERT_GROUPS = Object.freeze([
+  { title: '基础音效', keys: ['celebrate', 'error', 'prompt', 'poke', 'headpat'] as readonly AlertName[] },
+  { title: '附加音效', keys: ['state', 'tool'] as readonly AlertName[] },
+])
 
 /** 各类提醒音效的开关（true = 开启）。用户可在诊断面板/设置卡片配置。 */
 const ALERT_TOGGLES = Object.freeze({
@@ -41,6 +48,7 @@ const ALERT_TOGGLES = Object.freeze({
   error: true,     // 出错安慰（低音+语音）
   prompt: true,    // 提问/审批提示（等待批准/回答时，提示音+语音）
   state: true,     // 状态语音：进入思考/忙碌时播「让我想一想」「这个问题有点意思」等
+  tool: true,      // 工具调用语音：进入 working（调用工具）时播短促音效
   poke: true,      // 戳一戳音效
   headpat: true,   // 摸头庆祝
 })
@@ -275,6 +283,12 @@ export function beep() {
 export function playPrompt() {
   bell(660, 0.18, 0.12, 0, 740, 'sfx')
   bell(880, 0.22, 0.12, 0.16, 990, 'sfx')
+}
+
+/** 工具调用音效：短促咔哒双音（提示「正在调用工具」）。 */
+export function playTool() {
+  bell(392, 0.07, 0.07, 0, null, 'sfx')
+  bell(494, 0.07, 0.07, 0.08, null, 'sfx')
 }
 
 /** 需要用户手势解锁 AudioContext（浏览器自动播放策略）。 */
