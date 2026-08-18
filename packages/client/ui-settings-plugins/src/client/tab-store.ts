@@ -108,8 +108,13 @@ export class ConfigurablePluginsTabController {
 
   private publish(): void {
     const served = new Set(this.served)
+    // Local fork: sort by namespace so the card list is deterministic across
+    // boots. The ledger order follows async plugin activation, which the
+    // fork's extra plugins can reorder between runs; an alphabetical key order
+    // keeps every visit stable.
     const namespaces = this.entries().flatMap(entry =>
       entry.options.key !== undefined && served.has(entry.options.key) ? [entry.options.key] : [])
+      .sort()
     const previous = this.store.getSnapshot()
     // Every settings-document commit re-reads, and most of them change nothing
     // this section shows. An observable source must keep its snapshot
