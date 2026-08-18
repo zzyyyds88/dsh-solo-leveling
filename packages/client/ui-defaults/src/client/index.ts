@@ -157,6 +157,8 @@ const en = {
  * Mount the card into the Plugins settings section's 插件配置 area.
  * @param ctx - the browser plugin context.
  */
+export const inject = ['slots', 'locale', 'settingsScope']
+
 export function apply(ctx: Context): void {
   const scope = ctx.settingsScope.bind<DefaultsSettings>({ namespace: 'dsh-defaults' })
   const controller = new DefaultsCardController(scope)
