@@ -68,7 +68,7 @@ export function AccessGateCard(props: AccessGateCardProps) {
       '- 服务名：dsh-web',
       `- 启动命令：${cmd}`,
       '- 要求：进程退出（包括被 kill）后自动重启（Restart=always）、开机自启',
-      '- DSH_HOME：/root/.dsh',
+      '- DSH_HOME：$HOME/.dsh',
       '请生成 /etc/systemd/system/dsh-web.service 单元文件，并给出 systemctl enable --now 命令。',
     ].join('\n')
   }
