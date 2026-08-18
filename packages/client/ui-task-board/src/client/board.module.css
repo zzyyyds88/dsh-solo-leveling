@@ -162,6 +162,10 @@ html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [class*='centerCol'] 
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   overflow: hidden;
+  /* The card list scrolls on this elevated surface: rebind the thumb to the
+     elevated (l2) palette so the dark-theme thumb stays distinct from l1. */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .columnHeader {

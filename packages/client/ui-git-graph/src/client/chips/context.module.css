@@ -628,7 +628,7 @@
   text-overflow: ellipsis;
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-2);
+  background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-secondary);
   font-size: 10px;
 }

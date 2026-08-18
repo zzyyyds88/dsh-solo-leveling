@@ -7,10 +7,15 @@ import { SlotRegistry } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { TestRemote, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { SettingsScopeBinder } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+// Import the source entry directly: the package export (`dsh-client-ui-settings-plugins/client`)
+// resolves to the built browser bundle (lib/client.js), whose top line is a
+// `window.__ModuleLoader__.load` handoff with no named exports, so importing it
+// in a test yields an undefined `apply`. The sibling specs hit the same path via
+// the tsconfig glob, so pin this one to source to keep the suite runnable.
+import { apply, inject } from '../src/client/index.ts'
 import type {
   ConfigurablePluginsTabFace, PluginsSettingsSectionInjected,
-} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
+} from '../src/client/index.ts'
 
 // The service reads its initial locale from the browser; these specs assert
 // the shipped Chinese copy, so they state the browser they assume.
