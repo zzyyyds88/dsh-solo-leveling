@@ -7,6 +7,7 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type {
   GenerateOptions,
   LlmConfigurableProvider,
@@ -384,8 +385,16 @@ export class LlmRuntime extends Service {
         throw new LlmError(`adapter metadata for provider "${provider}" must preserve its id and have a non-empty name`, 'INVALID_ADAPTER')
       }
       unique.add(provider)
+      // Local fork: a provider that names no retryPolicy falls back to the
+      // dsh-defaults settings namespace's defaultRetryCount (runtime global
+      // default for every adapter family), keeping the official no-retry
+      // behavior when unset.
+      const defaultsRetry = (this.ctx.get('settings')?.get(settingsNamespace('dsh-defaults')) as { defaultRetryCount?: number } | undefined)?.defaultRetryCount
+      const fallbackRetry = typeof defaultsRetry === 'number' && Number.isSafeInteger(defaultsRetry) && defaultsRetry >= 0
+        ? { mode: 'normal' as const, maxRetries: defaultsRetry }
+        : undefined
       const retryPolicy = adapter.providerRetryPolicy(provider)
-        ?? resolveRetryPolicy(undefined, `llm: provider "${provider}" retryPolicy`)
+        ?? resolveRetryPolicy(fallbackRetry, `llm: provider "${provider}" retryPolicy`)
       registrations.push({
         adapter,
         provider: { id: info.id, name: info.name },
