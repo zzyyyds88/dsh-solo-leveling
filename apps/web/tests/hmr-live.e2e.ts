@@ -97,6 +97,9 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       {
         DEEPSEEK_API_KEY: 'keyless-hmr-no-call',
         DSH_HOME: join(world, '.dsh'),
+        // Fork divergence: the shipped access gate boots to a first-run password
+        // setup on an empty DSH_HOME; this scenario exercises HMR, not the gate.
+        DSH_ACCESS_GATE_MODE: 'off',
       },
     ))
     const baseUrl = await waitForOutput(host, /dsh web: (http:\/\/[^\s]+)/, 'built dsh web')
