@@ -1,6 +1,0 @@
-# dsh-mobile-adapt 挂载清单（标准插件包：dsh.bundle.patch 声明本文件）
-- insert:
-    - id: mobile-adapt
-      name: dsh-mobile-adapt
-      inject:
-        - webServer

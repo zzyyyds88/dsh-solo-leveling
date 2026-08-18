@@ -1,5 +1,0 @@
-# dsh-client-ui-access-gate 挂载清单（标准插件包：dsh.bundle.patch 声明本文件）
-# 前端卡片：「设置 → 插件 → 插件配置 → 访问门禁」卡
-- insert:
-    - id: ui-access-gate
-      name: dsh-client-ui-access-gate

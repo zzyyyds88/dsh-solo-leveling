@@ -1,8 +1,0 @@
-# maid-atelier skin bundle patch: inserts its public dsh.client entry into the web plugin roster.
-# This package has no dsh.bundle (row aggregated into dsh-task-suite-all) —do NOT install standalone via
-# `dsh plugin --profile <name> add <path-or-git-url>`; mutual exclusion between
-# skins is managed by the skin-center host (skin-switch.ts, an ESM port of the
-# upstream scripts/dsh-skin) and the home-layer disabled rows.
-- insert:
-    - id: ui-skin-maid-atelier
-      name: '@zzyyyds88/dsh-client-ui-skin-maid-atelier'
