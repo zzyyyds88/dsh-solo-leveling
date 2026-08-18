@@ -28,9 +28,9 @@
   - img
   - img
   - text: Think No dynamic Plugins are present, so I will define the requested Host and Client Package.
-- button "Register Cordis Plugin snapshot noop does nothing, for the snapshot Ready" [expanded]:
+- button "Register Cordis Plugin snapshot noop does nothing, for the snapshot Client ready to activate" [expanded]:
   - img
-  - text: Register Cordis Plugin snapshot noop does nothing, for the snapshot Ready
+  - text: Register Cordis Plugin snapshot noop does nothing, for the snapshot Client ready to activate
 - tablist "Plugin source":
   - tab "Client"
   - tab "Host" [selected]
@@ -45,7 +45,7 @@
   - img
   - text: Think The Host returned snap-1/pkg-1, so I will request its first activation.
 - img
-- text: Run Cordis Plugin snap-1 · pkg-1 Ready
+- text: Run Cordis Plugin snap-1 · pkg-1 Client ready to activate
 - button "Inspect"
 - text: snap-1/pkg-1 is awaiting user approval (run-1).
 - button "Think The activation request has been submitted, so I will return the requested readiness marker.":
@@ -90,7 +90,7 @@
 - textbox "Message the agent"
 - button "Commands":
   - img
-- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Access mode, current: Workspace Write"'
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img

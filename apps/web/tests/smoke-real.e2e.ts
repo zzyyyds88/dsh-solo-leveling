@@ -166,6 +166,7 @@ describe('dsh web keyless CLI smoke', () => {
         env: {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-no-call',
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(sessionsDir, '.dsh'),
           DSH_AGENTS_HOME: join(sessionsDir, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -233,6 +234,7 @@ describe('dsh web keyless CLI smoke', () => {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-workspace',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -346,6 +348,7 @@ describe('dsh web keyless CLI smoke', () => {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-retry',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
         },
@@ -372,7 +375,9 @@ describe('dsh web keyless CLI smoke', () => {
         turn: 1,
         step: 1,
         retry: 1,
-        maxRetries: 2,
+        // Local fork: dsh-defaults.defaultRetryCount defaults to 10 and is the
+        // fallback for providers without their own retry policy (DeepSeek here).
+        maxRetries: 10,
         failure: { code: 'TRANSPORT' },
       })
       expect(JSON.stringify(page.events)).toContain('WEB_RETRY_DISCARDED')
@@ -429,6 +434,7 @@ describe('dsh web keyless CLI smoke', () => {
           DEEPSEEK_API_KEY: 'keyless-web-code-mode',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
           DSH_TOOLS_MODE: 'code',
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -497,6 +503,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
         cwd: sessionsDir,
         env: {
           ...process.env,
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(sessionsDir, '.dsh'),
           DSH_AGENTS_HOME: join(sessionsDir, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),

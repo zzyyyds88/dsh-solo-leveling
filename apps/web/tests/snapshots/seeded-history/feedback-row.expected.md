@@ -39,10 +39,12 @@
   - img
 - text: 7/25 {{clock}} Ran for {{duration}} TTFT {{duration}} {{throughput}} tok/s
 - button "compact Compacted 5 history items (~{{tokens}} tokens)"
-- button "Context injection AGENTS.md":
-  - img
+- button "Context injection AGENTS.md" [expanded]:
   - img
   - text: Context injection AGENTS.md
+- list:
+  - listitem "context-injection-browser-snapshot": AGENTS.md loaded
+- text: "<system-reminder> The following workspace instructions may be relevant to your work. Use them as guidance when applicable. Instruction 1: preserve the logged context contract. Instruction 2: preserve the logged context contract. Instruction 3: preserve the logged context contract. Instruction 4: preserve the logged context contract. Instruction 5: preserve the logged context contract. Instruction 6: preserve the logged context contract. Instruction 7: preserve the logged context contract. Instruction 8: preserve the logged context contract. Instruction 9: preserve the logged context contract. Instruction 10: preserve the logged context contract. Instruction 11: preserve the logged context contract. Instruction 12: preserve the logged context contract. Instruction 13: preserve the logged context contract. Instruction 14: preserve the logged context contract. Instruction 15: preserve the logged context contract. Instruction 16: preserve the logged context contract. Instruction 17: preserve the logged context contract. Instruction 18: preserve the logged context contract. Instruction 19: preserve the logged context contract. Instruction 20: preserve the logged context contract. Instruction 21: preserve the logged context contract. Instruction 22: preserve the logged context contract. Instruction 23: preserve the logged context contract. Instruction 24: preserve the logged context contract. </system-reminder>"
 - img
 - text: permission preset read-only
 - 'button "feedback Feedback recorded for session {{seededId}} Anonymous user: {{uuid}}. Session sharing is not configured." [expanded]':
@@ -52,9 +54,9 @@
 - textbox "Message the agent"
 - button "Commands":
   - img
-- 'button "Access mode, current: Read Only"': Read Only
+- 'button "Access mode, current: Read Only"'
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 98% Input 15.8K tok · Output 135 tok
+- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 98% Input 15.8K tok · Output 135 tok ·TPS {{throughput}} tok/s

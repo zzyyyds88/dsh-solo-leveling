@@ -80,8 +80,10 @@ it('assembles the shipped Web catalog, file-reference guidance, and confined acc
   // now lives in a preset mounted under one session's scope, so the global
   // layer holds nothing and a caller must name the agent to see anything. This
   // composes from the deployment default — what a session that names no preset
-  // gets — which is the shape this test has always been about.
-  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([])
+  // gets — which is the shape this test has always been about. The fork's
+  // describe-image tool is the one process-global model-facing tool; every
+  // other tool lives in a preset under an agent's scope.
+  expect(ctx.tools.schemas().map(schema => schema.name)).toEqual(['describe_image'])
   const handle = await ctx.agents.create({
     sessionId: SessionId('shipped-composition'),
     setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),

@@ -4,6 +4,7 @@
 - button "New session":
   - img
   - text: New Session
+- button "任务看板"
 - text: Workspaces
 - button "Search sessions":
   - img
@@ -13,14 +14,12 @@
 - button "Add workspace":
   - img
 - tree "Sessions":
-  - treeitem "workspace" [expanded]:
-    - img
-    - text: workspace
+  - treeitem "workspace" [expanded]
   - treeitem "New Session" [selected]
 - button "Settings":
   - img
   - text: Settings
-- text: Into the Unknown Preview
+- text: Into the Unknown Dabao Custom Edition
 - button "Choose workspace":
   - img
   - text: workspace
@@ -33,7 +32,7 @@
 - button "Commands":
   - img
 - tooltip "Commands"
-- 'button "Access mode, current: Workspace Write"': Workspace Write
+- 'button "Access mode, current: Workspace Write"'
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
@@ -41,3 +40,21 @@
 - text: Details
 - button "Close details"
 - text: Click a tool row in the message flow to view its details
+- complementary "DeepSeek 任务状态助手":
+  - status: 晚上好 今天也辛苦啦
+  - button "拖动/单击/长按/三击 DeepSeek 状态助手"
+  - region "账房面板":
+    - text: 💰 账房 · 实时
+    - button "收起账房面板": ✕
+    - paragraph: ⏳ 暂无用量：完成一次请求后自动统计（费率按 deepseek-chat 估算，设置可调）
+  - navigation "Pet 快捷操作":
+    - button "静音": 🔊 有声
+    - button "最小化 Pet": − 最小化
+    - button "账房面板": 💰 账房中
+  - region "活跃会话":
+    - button "workspace 聚焦"
+- button "文件"
+- button "变更"
+- button "收起面板"
+- textbox "按文件名搜索"
+- text: 项目为空

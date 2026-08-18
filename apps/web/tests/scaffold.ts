@@ -442,6 +442,10 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       id: 'webserver',
       config: { host: '127.0.0.1', port: 0 },
     },
+    // The access gate is a product feature for real deployments; the hermetic
+    // e2e lane boots keyless on 127.0.0.1 and never authenticates, so force the
+    // gate off here (the shipped bundle defaults it on).
+    { id: 'access-gate', config: { mode: 'off' } },
     // The bundle's web-runtime row resolves the same built dist under test
     // (apps/web IS @deepseek-ai/dsh-web-frontend); only the URL line is silenced.
     // Preserve the composed surface-context choice because a patch replaces

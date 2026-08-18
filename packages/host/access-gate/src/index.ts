@@ -813,9 +813,17 @@ interface AccessGateSettings {
   httpsPort?: string | number | null
 }
 
+/** Resolve the effective gate mode: an explicit env override wins over the composed config. */
+function resolveGateMode(configured: AccessGateConfig['mode']): AccessGateConfig['mode'] {
+  const fromEnv = process.env.DSH_ACCESS_GATE_MODE
+  if (fromEnv === 'auto' || fromEnv === 'on' || fromEnv === 'off') return fromEnv
+  return configured
+}
+
 export function apply(ctx: Context, config: AccessGateConfig): void {
   const fallbackPassword = resolveFallbackPassword(config)
-  const enabled = config.mode === 'on' ? true : config.mode === 'off' ? false : ctx.webServer.host === ALL_INTERFACES_HOST
+  const mode = resolveGateMode(config.mode)
+  const enabled = mode === 'on' ? true : mode === 'off' ? false : ctx.webServer.host === ALL_INTERFACES_HOST
   if (!enabled) return
 
   const ttl = config.sessionTtlSeconds

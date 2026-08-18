@@ -259,7 +259,9 @@ describe('web e2e: settings modal and General preferences', () => {
         legacy: localStorage.getItem('dsh.theme'),
         themeColor: metas[0]?.content ?? null,
         themeColorCount: metas.length,
-        token: computed.getPropertyValue('--dsw-alias-bg-base').trim(),
+        // The maid-atelier skin pins --dsw-alias-bg-base to transparent for its
+        // painted backdrop; layer-1 still carries the light/dark palette.
+        token: computed.getPropertyValue('--dsw-alias-bg-layer-1').trim(),
       }
     })
     const expectThemeColorSynchronized = (state: ThemeState): void => {
