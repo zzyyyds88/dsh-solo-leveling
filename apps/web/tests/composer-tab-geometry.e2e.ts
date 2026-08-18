@@ -355,56 +355,53 @@ describe('web e2e: input card position across view tabs', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('holds the input card in place when the tab changes', async () => {
+  it('hides the composer in the inspect view while keeping it visible in Chat', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-wide'))
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
     const comparison = await compareTabs(page)
-    // The reported symptom as a number. At this viewport the card sits at its
-    // width cap, so the uncompensated cascade's shift shows up as a centring
-    // difference — half the band on each edge — rather than as a width change.
-    expect(comparison.leftShift).toBe(0)
-    expect(comparison.rightShift).toBe(0)
-    expect(comparison.widthShift).toBe(0)
+    // Fork divergence: the maid-atelier skin gives inspect-only views (Trajectory,
+    // Timeline) the full canvas. The resident composer seat stays mounted — so the
+    // draft state survives the tab switch — but is `display: none` in the
+    // Trajectory tab, so the card collapses to a zero box instead of holding its
+    // position. The upstream "card does not move" invariant therefore reads as
+    // "card present in Chat, absent in the inspect view".
+    expect(comparison.chat.cardWidth).toBeGreaterThan(0)
+    expect(comparison.trajectory.cardWidth).toBe(0)
+    expect(comparison.trajectory.cardLeft).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('holds the input card in place at a viewport where it shrinks with the column', async () => {
+  it('keeps Chat\'s composer shrinking and the inspect composer hidden at a narrow viewport', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-narrow'))
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
     const capped = await measureTab(page)
     await setMeasuredViewport(page, NARROW_VIEWPORT, true)
     const comparison = await compareTabs(page)
-    // The other geometry, and a different failure: below the cap the card takes
-    // the column's width, so an unreserved gutter changes its WIDTH by the whole
-    // band instead of shifting it by half. Asserted against the capped
-    // measurement rather than against the cap's pixel value, which belongs to
-    // the stylesheet.
+    // Same fork divergence as above, measured below the card's width cap: the Chat
+    // card shrinks with the column while the inspect view's card stays collapsed.
     expect(comparison.chat.cardWidth).toBeLessThan(capped.cardWidth)
-    expect(comparison.leftShift).toBe(0)
-    expect(comparison.rightShift).toBe(0)
-    expect(comparison.widthShift).toBe(0)
+    expect(comparison.chat.cardWidth).toBeGreaterThan(0)
+    expect(comparison.trajectory.cardWidth).toBe(0)
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('moves the card again once the seat compensation is removed in the page', async () => {
+  it('keeps the inspect composer hidden once the seat compensation is removed', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-composer-tab-geometry-control'))
     await setMeasuredViewport(page, WIDE_VIEWPORT, false)
-    // The control: without it, equal rectangles could also mean the tab switch
-    // never reached the layout. Under the uncompensated cascade the overlay seat
-    // loses its `right` compensation and measures the full padding box, so the
-    // card moves by half the band on each edge. Chat's own reservation is
-    // untouched — that is the side that must not change.
+    // The control cascade drops the overlay seat's `right` compensation. Under the
+    // upstream overlay the card then drifts by half the band; with the skin's
+    // inspect-view hide the compensation is moot — the card is `display: none`
+    // either way, so dropping it must not resurrect the composer in Trajectory.
     const comparison = await compareTabsWithoutCompensation(page)
     expect(comparison.chat.gutter).toBe('stable')
     expect(comparison.chat.band).toBeGreaterThan(0)
     expect(comparison.trajectory.band).toBe(0)
-    expect(comparison.leftShift).toBe(comparison.chat.band / 2)
-    expect(comparison.rightShift).toBe(comparison.chat.band / 2)
+    expect(comparison.trajectory.cardWidth).toBe(0)
     // Restoring the sheet restores the compensation, so the control cannot leak
     // into the remaining measurements.
     const restored = await compareTabs(page)
-    expect(restored.leftShift).toBe(0)
+    expect(restored.trajectory.cardWidth).toBe(0)
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 

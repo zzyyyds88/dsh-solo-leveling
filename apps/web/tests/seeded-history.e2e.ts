@@ -376,7 +376,10 @@ describe('web e2e: seeded history renders through cold resume', () => {
     expect(style).toEqual({
       backgroundColor: 'rgb(249, 250, 251)',
       borderRadius: '8px',
-      color: 'rgb(129, 133, 140)',
+      // Fork divergence: the maid-atelier skin redefines --dsw-alias-label-tertiary
+      // to #405273, so the context text inherits a blue-tinted ink instead of the
+      // upstream neutral gray.
+      color: 'rgb(64, 82, 115)',
       fontSize: '11px',
       lineHeight: '16px',
       padding: ['10px', '16px', '12px', '12px'],
