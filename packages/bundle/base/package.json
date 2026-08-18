@@ -54,6 +54,7 @@
     "@deepseek-ai/dsh-compaction-basic": "workspace:^",
     "@deepseek-ai/dsh-compaction-tool-result-pruner": "workspace:^",
     "@deepseek-ai/dsh-credentials-local": "workspace:^",
+    "@deepseek-ai/dsh-defaults": "workspace:^",
     "@deepseek-ai/dsh-fs-local": "workspace:^",
     "@deepseek-ai/dsh-fs-observation-policy": "workspace:^",
     "@deepseek-ai/dsh-fs-sandbox": "workspace:^",

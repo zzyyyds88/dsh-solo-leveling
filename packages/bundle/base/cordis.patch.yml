@@ -78,6 +78,10 @@
     - id: settings
       name: '@deepseek-ai/dsh-settings-file'
 
+    # GUI-configured defaults namespace (default working directory + retry count).
+    - id: defaults
+      name: '@deepseek-ai/dsh-defaults'
+
     # Credential sources: inherited environment over the managed
     # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
     # Adapters resolve references per request; the Models page writes only the
