@@ -248,6 +248,13 @@ export function TaskDetail({ controller, task }: { controller: BoardController; 
     <div className={css.modalBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) controller.closeTask() }}>
       <div className={css.detail} role="dialog" aria-label={t('detail.title')}>
         <header className={css.detailHeader}>
+          <button
+            type="button"
+            className={css.ghostButton}
+            onClick={() => { controller.closeTask() }}
+          >
+            ← {t('detail.back')}
+          </button>
           <h2 className={css.detailTitle}>{current.title}</h2>
           <span className={css.statusBadge} data-status={current.status}>{t(STATUS_KEY[current.status])}</span>
           <button

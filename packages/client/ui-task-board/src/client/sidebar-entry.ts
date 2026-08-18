@@ -51,6 +51,9 @@ function createEntry(controller: BoardController): HTMLButtonElement {
   entry.dataset.dshTaskboardEntry = ''
   entry.className = css.entry ?? ''
   entry.setAttribute('aria-label', t('entry.label'))
+  // Native tooltip: when the sidebar is collapsed the label is hidden, so a
+  // hover on the icon-only row still names the entry.
+  entry.title = t('entry.label')
   entry.innerHTML = `<span class="${css.entryIcon}">${ICON}</span><span class="${css.entryLabel}">${t('entry.label')}</span>`
   entry.addEventListener('click', () => { controller.toggleBoard() })
   return entry
