@@ -17,7 +17,7 @@ import { assertUsableApiKey, LlmError, resolveRetryPolicy, RetryPolicySchema } f
 import type { RetryPolicyConfig } from '@deepseek-ai/dsh-llm'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { launchEnvironmentOf, type LaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
-import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { deepEqualJson, installSettingsSection, settingsNamespace, type SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { getOrCreateAnonymousUserId, type AnonymousUserId } from '@deepseek-ai/dsh-anonymous-user-id'
 import {
@@ -147,6 +147,16 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
 }
 
 /**
+ * The `dsh-defaults` settings namespace section this adapter consumes: the
+ * retry-count default for a profile that names no `retryPolicy`. Absent
+ * fields keep the official behavior. (Local fork.)
+ */
+export interface DeepSeekDefaults {
+  /** Default `maxRetries` for a profile that names no `retryPolicy`. */
+  defaultRetryCount?: number
+}
+
+/**
  * The one explicit resolve step from raw config to validated connection
  * facts. Programmatic construction may bypass Schemastery normalization, so
  * every default and bound is re-judged here — for the composition entry at
@@ -156,9 +166,16 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
  * the product CLI. Every layer may supply an endpoint: the product trusts the
  * project it is launched in, so a checkout can point its own agent at the
  * gateway that checkout is meant to use.
+ * @param defaults - the `dsh-defaults` namespace section, when registered
+ * (Local fork: a profile that names no `retryPolicy` falls back to its
+ * `defaultRetryCount` instead of the `dsh-llm` constant).
  * @returns validated connection facts plus the credential reference.
  */
-export function resolveAdapterOptions(config: Config, environment?: LaunchEnvironmentSnapshot): ResolvedDeepSeekOptions {
+export function resolveAdapterOptions(
+  config: Config,
+  environment?: LaunchEnvironmentSnapshot,
+  defaults?: DeepSeekDefaults,
+): ResolvedDeepSeekOptions {
   if (config.thinking === 'disabled'
     && config.reasoningEffort !== undefined
     && config.reasoningEffort !== 'off') {
@@ -180,6 +197,12 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
       `llm-deepseek: streamIdleTimeoutMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`,
     )
   }
+  // Local fork: a profile naming no retryPolicy falls back to the dsh-defaults
+  // namespace's defaultRetryCount; an absent count keeps the official constant.
+  const defaultsRetry = defaults?.defaultRetryCount
+  const fallbackRetry = typeof defaultsRetry === 'number' && Number.isSafeInteger(defaultsRetry) && defaultsRetry >= 0
+    ? { mode: 'normal' as const, maxRetries: defaultsRetry }
+    : undefined
   return {
     apiKeyEnv: credentialRef(config.apiKeyEnv ?? DEFAULT_API_KEY_ENV),
     baseURL: config.baseURL
@@ -193,20 +216,31 @@ export function resolveAdapterOptions(config: Config, environment?: LaunchEnviro
     defaultContextWindow: config.defaultContextWindow ?? DEFAULT_CONTEXT_WINDOW,
     models: resolveModels(config.models),
     streamIdleTimeoutMs,
-    retryPolicy: resolveRetryPolicy(config.retryPolicy, 'llm-deepseek: retryPolicy'),
+    retryPolicy: resolveRetryPolicy(config.retryPolicy ?? fallbackRetry, 'llm-deepseek: retryPolicy'),
   }
 }
 
 export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
   let lastRaw: Config | undefined
+  let lastDefaults: unknown
   let lastGood: ResolvedDeepSeekOptions | undefined
+  /** The settings service once mounted; absent keeps the official defaults. */
+  let settings: SettingsProvider | undefined
+  ctx.inject(['settings'], (sctx) => {
+    settings = sctx.settings
+    sctx.effect(() => () => {
+      settings = undefined
+    })
+  })
   const options = (): ResolvedDeepSeekOptions => {
     const raw = current()
-    if (raw === lastRaw && lastGood !== undefined) return lastGood
+    const defaults = settings?.get(settingsNamespace('dsh-defaults'))
+    if (raw === lastRaw && defaults === lastDefaults && lastGood !== undefined) return lastGood
     try {
-      const next = resolveAdapterOptions(raw, launchEnvironmentOf(ctx))
+      const next = resolveAdapterOptions(raw, launchEnvironmentOf(ctx), defaults === undefined ? undefined : defaults as DeepSeekDefaults)
       lastRaw = raw
+      lastDefaults = defaults
       lastGood = next
       return next
     } catch (error) {
@@ -215,6 +249,7 @@ export function apply(ctx: Context, config: Config): void {
       // keep serving the last good facts and say so once per bad snapshot.
       if (lastGood === undefined) throw error
       lastRaw = raw
+      lastDefaults = defaults
       ctx.logger.error('llm-deepseek: keeping the last good configuration after an invalid settings section')
       ctx.logger.error(error)
       return lastGood
@@ -273,4 +308,21 @@ export function apply(ctx: Context, config: Config): void {
     },
     onChange: ensureRegistrationFacts,
   })
+
+  // Local fork: a change to the `dsh-defaults` namespace (the retry-count
+  // default) must re-resolve the options and re-register — the registry
+  // captures the retry policy at registration. Listens to `settings/updated`
+  // (the commit event, fired after the resolved value is swapped).
+  ctx.effect(() => {
+    const onDefaultsUpdated = (ns: unknown): void => {
+      if (ns !== 'dsh-defaults') return
+      try {
+        ensureRegistrationFacts()
+      } catch (error) {
+        ctx.logger.error('llm-deepseek: keeping the previously registered routes after a dsh-defaults update')
+        ctx.logger.error(error)
+      }
+    }
+    return ctx.on('settings/updated', onDefaultsUpdated)
+  }, 'llm-deepseek: dsh-defaults change re-registration')
 }
