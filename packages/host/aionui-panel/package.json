@@ -35,6 +35,10 @@
     "lib/types/**/*.d.ts"
   ],
   "license": "Apache-2.0",
+  "dependencies": {
+    "@deepseek-ai/dsh-settings": "workspace:^",
+    "@deepseek-ai/schemastery": "workspace:^"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",

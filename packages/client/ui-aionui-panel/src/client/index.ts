@@ -18,6 +18,10 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls the ui-conversation SlotMap merge (the input dock entry).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// Type-only: pulls the settings-surface SlotMap merge + ctx.settingsScope merge.
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+// Type-only: declares the keyed `settings.plugin.item` slot (plugin-config section).
+import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { PanelApi, subscribePanelEvents } from './api.ts'
 import { PanelLayoutController } from './layout.ts'
 import { createPanelStores, layoutSetRoot } from './store.ts'
@@ -25,6 +29,7 @@ import { mountPanels } from './mount.tsx'
 import { NS, dictionaries, setLanguage, type AionUiPanelKey } from './locales.ts'
 import { DragFileInlay, type DragFileInjected } from './drag/DragFileInlay.tsx'
 import { insertPathIntoDraft } from './drag/file-drag.ts'
+import { AionUiPanelSettingsCard, AionUiPanelSettingsCardController, type AionUiPanelSettings } from './PanelSettingsCard.tsx'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -33,12 +38,24 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-/** Required services: sessions for the project root, locale for the copy. */
-export const inject = ['sessions', 'locale']
+/** Required services: sessions for the project root, locale for the copy, settingsScope for the master switch. */
+export const inject = ['sessions', 'locale', 'settingsScope']
 
 /** Apply the browser half. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, dictionaries), 'dsh-aionui-panel: dictionaries')
+
+  // Master-switch settings card: one staged form over the `aionui-panel`
+  // namespace (the host half registers it), contributed to the plugin-config
+  // section. The same scope gates the panel mount below.
+  const panelSettingsScope = ctx.settingsScope.bind<AionUiPanelSettings>({ namespace: 'aionui-panel' })
+  const panelSettings = new AionUiPanelSettingsCardController(panelSettingsScope)
+  ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
+    name: 'settings.plugin.item',
+    key: 'aionui-panel',
+    locale: NS,
+    inject: () => panelSettings.inject(),
+  }, AionUiPanelSettingsCard))
 
   // The composer drop target for explorer file drags: mounted in the
   // official `conversation.input.dock` band (declared by the shipped
@@ -144,13 +161,33 @@ export function apply(ctx: ClientContext): void {
     langObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['lang'] })
     syncLanguage()
 
-    // Mount everything. DOM failures degrade the panels, never the GUI.
-    try {
-      layout.mount()
-      mountPanels(stores, () =>{  layout.toggleExplorer() })
-    } catch (error) {
-      console.error('[dsh-aionui-panel] mount failed:', error)
+    // Master-switch gating: mount the panels only while the `aionui-panel`
+    // namespace's `enabled` flag is true. Toggling off unmounts; toggling back
+    // on re-mounts (the layout controller is not designed for repeated cycles,
+    // but a page reload re-establishes a clean lifecycle).
+    let disposeMount: (() => void) | undefined
+    const syncEnabled = (): void => {
+      const snapshot = panelSettingsScope.getSnapshot()
+      const enabled = snapshot.status !== 'ready' || (snapshot.value?.enabled ?? true)
+      if (!enabled) {
+        if (disposeMount !== undefined) {
+          disposeMount()
+          disposeMount = undefined
+          layout.dispose()
+        }
+        return
+      }
+      if (disposeMount !== undefined) return
+      // Mount everything. DOM failures degrade the panels, never the GUI.
+      try {
+        layout.mount()
+        disposeMount = mountPanels(stores, () =>{  layout.toggleExplorer() })
+      } catch (error) {
+        console.error('[dsh-aionui-panel] mount failed:', error)
+      }
     }
+    disposers.push(panelSettingsScope.subscribe(syncEnabled))
+    syncEnabled()
 
     // Debounced persists (explorer/scm/preview) may be pending when the page
     // hides; flush them so a close/background never drops the last 150ms.
@@ -162,6 +199,7 @@ export function apply(ctx: ClientContext): void {
     document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
+      disposeMount?.()
       flushOnHide()
       window.removeEventListener('pagehide', flushOnHide)
       document.removeEventListener('visibilitychange', onVisibilityChange)

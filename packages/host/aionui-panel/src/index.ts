@@ -19,6 +19,8 @@ import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-workspace'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import z from '@deepseek-ai/schemastery'
+import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { FsService } from './host/fs-service.ts'
 import { GitService, subprocessRunner } from './host/git-service.ts'
 import { createWorkspaceGate } from './host/gate.ts'
@@ -47,4 +49,12 @@ export function apply(ctx: Context): void {
     order: SECTION_ORDER,
     text: AIONUI_PANEL_GUIDANCE,
   }), 'dsh-aionui-panel: prompt section')
+  // 总开关：设置 → 插件 → 插件配置 里关掉整个右侧面板。宿主半不消费该值，
+  // 仅注册命名空间供浏览器半绑定并据此决定是否挂载面板（数据路由始终就绪）。
+  installSettingsSection(ctx, settingsNamespace('aionui-panel'), z.object({
+    enabled: z.boolean().default(true),
+  }), { enabled: true }, {
+    setSource: () => {},
+    onChange: () => {},
+  })
 }

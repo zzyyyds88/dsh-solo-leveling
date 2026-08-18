@@ -24,6 +24,12 @@
       "path": "../../core/system-prompt"
     },
     {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]
