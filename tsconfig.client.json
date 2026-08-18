@@ -83,6 +83,7 @@
     { "path": "./packages/client/ui-access-gate" },
     { "path": "./packages/client/ui-pet" },
     { "path": "./packages/client/ui-live-stats" },
+    { "path": "./packages/client/ui-task-board" },
     { "path": "./packages/client/ui-model-selection" },
     { "path": "./packages/client/ui-agent-preset" },
     { "path": "./packages/client/ui-permission-presets" },
