@@ -309,6 +309,10 @@
     - id: ui-git-graph
       name: '@deepseek-ai/dsh-client-ui-git-graph'
 
+    # Abyssal Maid Atelier skin: two-character backdrop + chrome overlay.
+    - id: ui-skin-maid-atelier
+      name: '@deepseek-ai/dsh-client-ui-skin-maid-atelier'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'
