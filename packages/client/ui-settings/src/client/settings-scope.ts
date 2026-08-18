@@ -248,7 +248,11 @@ export class SettingsScopeBinder extends Service {
     const controller = new SettingsScopeController<T>(
       connection.api,
       spec,
-      connection.isLoopback ? 'host' : 'memory',
+      // Local fork: the settings scope always uses host persistence. Behind the
+      // access gate an authenticated remote caller may read/write settings
+      // (connection's webAuthAuthed admits it); anonymous callers are refused by
+      // the 403 gate, which reads as "unavailable" — equivalent to memory mode.
+      'host',
     )
     ctx.effect(() => {
       const refresh = (namespace?: string): void => {
