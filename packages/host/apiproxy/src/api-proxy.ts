@@ -3506,7 +3506,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             queue.push(frame({ type: 'host/session-status', sessionId: agent.id, running: status === 'running' }))
           }),
           ctx.on('agent/error', ({ agent, error }: { agent: Agent; error: unknown }) => {
-            queue.push(frame({ type: 'host/agent-error', sessionId: agent.id, message: errorChain(error) }))
+            // Redact AUTH before it leaves the host: provider messages may echo
+            // the credential, and this relay is the pet/live surface's source.
+            const message = (error as { code?: unknown } | null)?.code === 'AUTH'
+              ? 'API key is invalid'
+              : errorChain(error)
+            queue.push(frame({ type: 'host/agent-error', sessionId: agent.id, message }))
           }),
           ctx.on('domain/changed', (change) => {
             if (change.domain !== 'workspace') return

@@ -1,3 +1,5 @@
+import { displayFailureMessage } from '@deepseek-ai/dsh-client-runtime/client'
+
 /** One conversation node as read by the pet (loose: the snapshot is a projection). */
 export interface PetNode {
   kind?: string | undefined
@@ -17,7 +19,7 @@ export interface PetNode {
 export interface PetSnapshot {
   openState?: string
   openError?: { message?: string }
-  promptError?: { error?: { message?: string } }
+  promptError?: { error?: { message?: string; code?: string } }
   lastAgentError?: unknown
   pending?: PetNode[]
   runningCalls?: Array<{ name?: string }>
@@ -202,7 +204,9 @@ function friendlyToolName(name: string): string {
 function errorMessage(snapshot: PetSnapshot): string {
   if (typeof snapshot.lastAgentError === 'string' && snapshot.lastAgentError) return snapshot.lastAgentError
   const prompt = snapshot.promptError?.error
-  if (typeof prompt?.message === 'string' && prompt.message) return prompt.message
-  if (typeof snapshot.openError?.message === 'string' && snapshot.openError.message) return snapshot.openError.message
+  // Redact AUTH failures: provider messages may echo the credential. The raw
+  // diagnostic stays in the session log; the pet's bubble never projects it.
+  if (prompt !== undefined) return displayFailureMessage(prompt)
+  if (snapshot.openError !== undefined) return displayFailureMessage(snapshot.openError)
   return '运行没有顺利完成'
 }
