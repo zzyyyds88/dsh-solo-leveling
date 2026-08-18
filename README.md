@@ -30,9 +30,9 @@
 | 阶段 | 状态 |
 |---|---|
 | 拉取官方基线（rc.7 平铺到仓库根） | ✅ 完成 |
-| 8 个 `@deepseek-ai/*` 同名 fork 重 base 进对应 `packages/*/*` | 🚧 进行中 |
-| 纯插件（门闸 / 默认值 / 桌宠 / 手机端 / 任务套件）迁入 `packages/*/*` | 🚧 进行中 |
-| 同步更新工作区文档（AGENTS / CONTRIBUTING / PLUGINS） | ⏳ 待办 |
+| 8 个 `@deepseek-ai/*` 同名 fork 重 base 进对应 `packages/*/*` | ✅ 完成 |
+| 纯插件（门闸 / 默认值 / 桌宠 / 手机端 / 任务套件）迁入 `packages/*/*` | ✅ 完成 |
+| 同步更新工作区文档（AGENTS / PLUGINS / 路线图 / 组 README） | ✅ 完成 |
 
 逐项映射与迁移方案见 [docs/整合迁移路线图.md](docs/整合迁移路线图.md)。
 
