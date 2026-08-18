@@ -127,6 +127,10 @@
     - id: access-gate
       name: '@deepseek-ai/dsh-host-access-gate'
 
+    # Git graph host service: workspace-gated git operations + /git/* routes.
+    - id: git-graph
+      name: '@deepseek-ai/dsh-host-git-graph'
+
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
@@ -300,6 +304,10 @@
     # Image understanding for text-only models: describe_image tool (host) + settings card/preview (client).
     - id: ui-describe-image
       name: '@deepseek-ai/dsh-client-ui-describe-image'
+
+    # Git graph browser half: branch selector chip + graph dialog.
+    - id: ui-git-graph
+      name: '@deepseek-ai/dsh-client-ui-git-graph'
 
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan

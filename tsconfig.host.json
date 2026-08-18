@@ -290,6 +290,7 @@
     { "path": "./packages/host/plugin-inventory" },
     { "path": "./packages/host/webserver" },
     { "path": "./packages/host/access-gate" },
+    { "path": "./packages/host/git-graph" },
     { "path": "./packages/sdk/client" },
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/lsp/lsp" },

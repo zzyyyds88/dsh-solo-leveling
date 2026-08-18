@@ -85,6 +85,7 @@
     { "path": "./packages/client/ui-live-stats" },
     { "path": "./packages/client/ui-task-board" },
     { "path": "./packages/client/ui-describe-image" },
+    { "path": "./packages/client/ui-git-graph" },
     { "path": "./packages/client/ui-model-selection" },
     { "path": "./packages/client/ui-agent-preset" },
     { "path": "./packages/client/ui-permission-presets" },
