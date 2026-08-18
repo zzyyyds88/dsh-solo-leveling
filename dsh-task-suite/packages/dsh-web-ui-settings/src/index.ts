@@ -13,11 +13,19 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import type {} from '@deepseek-ai/dsh-settings'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import { makeBridgeRoutes } from './bridge.ts'
 
 /** Required services before the bridge routes can mount. */
 export const inject = ['webServer'] as const
+
+/**
+ * Settings namespace for the group card. The family plugins (task-board,
+ * live-stats, etc.) register into the group card's child slot, not directly
+ * into `settings.plugin.item`. The namespace is a display-enabler so the
+ * rc.7 keyed slot shows the group card.
+ */
+const WEB_UI_PLUGINS_NS = settingsNamespace('web-ui-plugins')
 
 /**
  * Mount the settings bridge when a settings seam exists (the seam is what the
@@ -27,6 +35,7 @@ export const inject = ['webServer'] as const
 export function apply(ctx: Context): void {
   ctx.inject(['settings'], (sctx) => {
     const settingsYamlPath = sctx.settings.documentPath ?? join(homedir(), '.dsh', 'settings.yaml')
+    sctx.effect(() => sctx.settings.register(WEB_UI_PLUGINS_NS, {}), 'web-ui-settings: group card namespace')
     sctx.effect(() => {
       const disposers = makeBridgeRoutes({
         settings: sctx.settings,

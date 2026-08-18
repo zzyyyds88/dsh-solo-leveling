@@ -179,9 +179,9 @@ if (unpatch) {
 }
 
 // 1a) 安装门闸基础 fork（profile 同名覆盖，升级免疫；源码在本项目 packages/）
-//     正式 profile 若无 fork，Loader 会回退全局安装——全局 apiproxy 只暴露旧
-//     web-auth 命名空间，缺 access-gate，设置卡片将不可读写，故必须装 fork。
-const FORK_PKGS = ["dsh-host-webserver", "dsh-host-apiproxy", "dsh-client-connection", "dsh-client-ui-settings"];
+//     dsh-host-apiproxy 已弃用（rc.7 移除白名单，所有命名空间自动可见），
+//     使用官方 rc.7 包即可暴露 access-gate / web-auth / dsh-defaults 等命名空间。
+const FORK_PKGS = ["dsh-host-webserver", "dsh-client-connection", "dsh-client-ui-settings"];
 const FORKS_ROOT = join(HERE, "packages");
 let forkInstalled = 0;
 for (const pkg of FORK_PKGS) {
@@ -218,13 +218,12 @@ if (!gateHit) {
     "（或对全局安装跑旧的 patch-webserver-gate.py）。缺少 registerGate 时启用鉴权会直接报错。"
   );
 }
-const apiproxyHit = findMarked(APIPROXY_MARKERS, scoped("dsh-host-apiproxy"), globalScoped("dsh-host-apiproxy"));
 const connectionHit = findMarked(CONNECTION_MARKERS, scoped("dsh-client-connection"), globalScoped("dsh-client-connection"));
-if (!apiproxyHit || !connectionHit) {
+if (!connectionHit) {
   fail(
-    "设置面板集成基础未完全就位（需要 apiproxy 暴露 access-gate/web-auth 命名空间 + connection 登录后放行 settings.*）。\n" +
-    "请先构建并安装 fork（dsh-AccessGate/build.sh + scripts/test-env-install.sh --from-project dsh-AccessGate），\n" +
-    "或对全局安装跑旧的 patch-settings-integration.py。否则 GUI 里的「访问口令」卡片在 LAN 上无法读写。"
+    "设置面板集成基础未完全就位（需要 connection 登录后放行 settings.*）。\n" +
+    "请先构建并安装 fork（dsh-AccessGate/build.sh + scripts/test-env-install.sh --from-project dsh-AccessGate）。\n" +
+    "否则 GUI 里的「访问口令」卡片在 LAN 上无法读写。"
   );
 }
 console.log(`[1b/5] 门闸基础校验就位（webserver: ${gateHit}）`);

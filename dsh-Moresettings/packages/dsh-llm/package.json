@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-llm",
-  "version": "0.1.0-rc.6-local.1",
+  "version": "0.1.0-rc.7-local.1",
   "private": true,
   "description": "Local fork of the official LLM service: a provider that names no retryPolicy falls back to the dsh-defaults namespace's defaultRetryCount (runtime global default for every adapter, not only pi-ai). Same package name so the profile node_modules copy overrides the global install.",
   "type": "module",

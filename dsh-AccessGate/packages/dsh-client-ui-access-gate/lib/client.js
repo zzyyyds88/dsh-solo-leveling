@@ -514,7 +514,7 @@ window.__ModuleLoader__.load({
 			ctx.slots.inject("settings.plugin.item", function* () {
 				yield ctx.slots.register({
 					name: "settings.plugin.item",
-					id: "access-gate",
+					key: "access-gate",
 					order: 30,
 					locale: NS,
 					inject: () => controller.inject()

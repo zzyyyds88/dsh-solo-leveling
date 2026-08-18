@@ -1,7 +1,8 @@
 # dsh-client-ui-settings（本地 fork）
 
 `@deepseek-ai/dsh-client-ui-settings` 的本地副本，与官方包同名，装进 profile 后覆盖全局安装
-（机制同 `dsh-client-connection` / `dsh-host-apiproxy` / `dsh-host-webserver` 三个 fork）。
+（机制同 `dsh-client-connection` / `dsh-host-webserver` 两个 fork；`dsh-host-apiproxy` 已弃用，
+rc.7 移除白名单，所有命名空间自动可见）。
 
 ## 为什么需要 fork
 
@@ -43,4 +44,5 @@
 - 升级 DSH 后若 `dsh-client-ui-settings` 官方包结构变化，用
   `install-to-test-env.sh`（重跑 fork 安装）即可覆盖；若官方 `bind` 逻辑重构，需重新比对
   `lib/client.js` 中该处代码再套用同一行改动。
+- 已 rebase 到 rc.7（2026-08-18）：从 rc.7 官方包 `lib/client.js` 重新打补丁。
 - 正式安装同样走 `install-access-gate-plugin.mjs`（FORK_PKGS 含本包）。

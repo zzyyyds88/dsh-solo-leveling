@@ -249,7 +249,7 @@ window.__ModuleLoader__.load({
 			ctx.slots.inject("settings.plugin.item", function* () {
 				yield ctx.slots.register({
 					name: "settings.plugin.item",
-					id: "dsh-defaults",
+					key: "dsh-defaults",
 					order: 30,
 					locale: NS,
 					inject: () => controller.inject()

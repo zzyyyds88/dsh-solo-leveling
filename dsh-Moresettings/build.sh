@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # 构建 dsh-defaults 统一插件依赖的全部 fork 包（源码全部在本项目 packages/ 内，
-# 含 dsh-host-apiproxy 的本地副本——与 dsh-AccessGate/ 各自维护一份同源码 fork，
-# 互不交叉引用；两份均含 access-gate + dsh-defaults 两个命名空间暴露，正式 profile
-# 同包名覆盖时无论哪份生效两项目卡片都可用）。
+# 注：dsh-host-apiproxy 已弃用（rc.7 移除白名单，所有命名空间自动可见），
+#     dsh-AccessGate/ 与 dsh-Moresettings/ 各自维护的 apiproxy 副本均不再需要。
 # 新插件本体（dsh-defaults / dsh-client-ui-defaults）为手写 ESM，源码即产物，无需构建。
 # 用法：./build.sh
 set -euo pipefail
@@ -10,7 +9,7 @@ cd "$(dirname "$0")"
 
 # 自举构建依赖：全新 clone 无 node_modules，先在各 fork 包内 pnpm install 恢复
 # 构建依赖（tsdown / lightningcss / typescript，锁文件已入库），再 pnpm build。
-FORKS="dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-ai dsh-host-apiproxy"
+FORKS="dsh-host-directory-picker-browse dsh-llm dsh-llm-deepseek dsh-llm-pi-ai"
 
 for pkg in $FORKS; do
   echo "== 构建 $pkg =="

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-host-apiproxy",
-  "version": "0.1.0-rc.6-local.1",
+  "version": "0.1.0-rc.7-local.1",
   "private": true,
   "description": "Local fork of the official API gateway: exposes the web-auth settings namespace (used by the dsh-web-auth login gate settings tab). Same package name so the profile node_modules copy overrides the global install.",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-llm-pi-ai",
-  "version": "0.1.0-rc.6-local.1",
+  "version": "0.1.0-rc.7-local.1",
   "private": true,
   "description": "Local fork of the official pi-ai provider: hand-declared models on OpenAI-style protocols default to off/low/medium/high reasoning levels (composer selector control) and to supportsReasoningEffort, so third-party providers match catalog providers. Same package name so the profile node_modules copy overrides the global install.",
   "type": "module",

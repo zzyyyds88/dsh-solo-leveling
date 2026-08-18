@@ -326,6 +326,13 @@ function makeBridgeRoutes(deps) {
 /** Required services before the bridge routes can mount. */
 const inject = ["webServer"];
 /**
+* Settings namespace for the group card. The family plugins (task-board,
+* live-stats, etc.) register into the group card's child slot, not directly
+* into `settings.plugin.item`. The namespace is a display-enabler so the
+* rc.7 keyed slot shows the group card.
+*/
+const WEB_UI_PLUGINS_NS = settingsNamespace("web-ui-plugins");
+/**
 * Mount the settings bridge when a settings seam exists (the seam is what the
 * bridge serves, so without one there is nothing to expose).
 * @param ctx - host plugin context.
@@ -333,6 +340,7 @@ const inject = ["webServer"];
 function apply(ctx) {
 	ctx.inject(["settings"], (sctx) => {
 		const settingsYamlPath = sctx.settings.documentPath ?? join(homedir(), ".dsh", "settings.yaml");
+		sctx.effect(() => sctx.settings.register(WEB_UI_PLUGINS_NS, {}), "web-ui-settings: group card namespace");
 		sctx.effect(() => {
 			const disposers = makeBridgeRoutes({
 				settings: sctx.settings,

@@ -528,7 +528,7 @@ window.__ModuleLoader__.load({
 			new WebUiSettingsBinder(ctx);
 			ctx.slots.inject("settings.plugin.item", () => ctx.slots.register({
 				name: "settings.plugin.item",
-				id: "web-ui-plugins",
+				key: "web-ui-plugins",
 				order: 90,
 				locale: "web-ui-plugins",
 				children: { "web-ui.plugin.item": {

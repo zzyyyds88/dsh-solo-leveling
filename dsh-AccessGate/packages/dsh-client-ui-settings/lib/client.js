@@ -207,11 +207,11 @@ window.__ModuleLoader__.load({
 			bind(spec) {
 				const ctx = this.ctx;
 				const connection = ctx.get("connection");
-				// 本地 fork：dsh-client-connection fork 已在服务端放行带有效访问门禁会话的
-				// 非回环 settings.* 请求（webAuthAuthed）。客户端 scope 因此一律走 host 模式——
-				// 回环与已认证远程（HTTPS/LAN）都可读写；匿名远程仍被门闸 401 / 信任栅栏
-				// 403 拦下（scope 读失败 → unavailable → 卡片隐藏），等价于官方 memory 模式。
-				const controller = new SettingsScopeController(connection.api, spec, "host");
+				// Local fork: dsh-client-connection fork 已在服务端放行带有效访问门禁会话的
+			// 非回环 settings.* 请求（webAuthAuthed）。客户端 scope 因此一律走 host 模式——
+			// 回环与已认证远程（HTTPS/LAN）都可读写；匿名远程仍被门闸 401 / 信任栅栏
+			// 403 拦下（scope 读失败 → unavailable → 卡片隐藏），等价于官方 memory 模式。
+			const controller = new SettingsScopeController(connection.api, spec, "host");
 				ctx.effect(() => {
 					const refresh = (namespace) => {
 						if (namespace !== void 0 && namespace !== spec.namespace) return;

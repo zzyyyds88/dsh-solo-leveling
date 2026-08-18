@@ -267,14 +267,14 @@ export function registerSettingsCards(ctx) {
   ctx.effect(installCardCss, 'deepseek-pet: settings card styles')
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
-    id: CARD_ID,
+    key: CARD_ID,
     order: 40,
     label: 'DeepSeek 桌宠',
     inject: () => ({ hooks: {} }),
   }, DeepSeekPetSettingsCard))
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
-    id: LEDGER_CARD_ID,
+    key: LEDGER_CARD_ID,
     order: 41,
     label: '账房面板',
     inject: () => ({ hooks: {} }),
