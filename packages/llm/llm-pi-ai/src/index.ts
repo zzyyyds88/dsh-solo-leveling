@@ -59,11 +59,11 @@ import type { Context } from '@deepseek-ai/cordis'
 import { launchEnvironmentOf } from '@deepseek-ai/dsh-launch-environment'
 import { assertUsableApiKey, LlmError } from '@deepseek-ai/dsh-llm'
 import type { AdapterRegistrationHandle, DirectoryRegistrationHandle, LlmConfigurableProvider } from '@deepseek-ai/dsh-llm'
-import { deepEqualJson, installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import { deepEqualJson, installSettingsSection, settingsNamespace, type SettingsProvider } from '@deepseek-ai/dsh-settings'
 import { PiAiAdapter } from './adapter.ts'
 import { catalogProviderIds, catalogProviderTakesApiKey } from './catalog.ts'
 import { assertServiceable, Config, resolveProfiles } from './config.ts'
-import type { ResolvedPiAiProviderProfile } from './config.ts'
+import type { PiAiDefaults, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
 
 export { PiAiAdapter } from './adapter.ts'
@@ -150,11 +150,22 @@ function directoryEntries(
 export function apply(ctx: Context, config: Config): void {
   let current: () => Config = () => config
   let lastRaw: Config | undefined
+  let lastDefaults: unknown
   let memoized: ReadonlyMap<string, ResolvedPiAiProviderProfile> | undefined
+  /** The settings service once mounted; absent keeps the official defaults. */
+  let settings: SettingsProvider | undefined
+  ctx.inject(['settings'], (sctx) => {
+    settings = sctx.settings
+    sctx.effect(() => () => {
+      settings = undefined
+    })
+  })
   /**
    * The resolved profiles for the current configuration, memoized by the raw
    * snapshot's identity — which is also what makes the adapter's own snapshot
-   * stable across operations that observe no change.
+   * stable across operations that observe no change. The dsh-defaults
+   * snapshot rides the memo key (Local fork), so a defaults change re-resolves
+   * the profiles on the next read.
    *
    * No fallback for an unserviceable snapshot lives here: the section schema
    * resolves the whole profile set, so a write that could not be served is
@@ -164,8 +175,11 @@ export function apply(ctx: Context, config: Config): void {
    */
   const profiles = (): ReadonlyMap<string, ResolvedPiAiProviderProfile> => {
     const raw = current()
-    if (raw === lastRaw && memoized !== undefined) return memoized
-    const next = resolveProfiles(raw.providers)
+    const defaults = settings?.get(settingsNamespace('dsh-defaults'))
+    if (raw === lastRaw && defaults === lastDefaults && memoized !== undefined) return memoized
+    lastRaw = raw
+    lastDefaults = defaults
+    const next = resolveProfiles(raw.providers, defaults === undefined ? undefined : defaults as PiAiDefaults)
     lastRaw = raw
     memoized = next
     return next
@@ -315,4 +329,22 @@ export function apply(ctx: Context, config: Config): void {
       }
     },
   })
+
+  // Local fork: a change to the `dsh-defaults` namespace (the retry-count
+  // default) must re-resolve the profiles and re-register the routes — the
+  // registry captures each route's retry policy at registration time. Listens
+  // to `settings/updated` (the commit event, fired after the resolved value is
+  // swapped).
+  ctx.effect(() => {
+    const onDefaultsUpdated = (ns: unknown): void => {
+      if (ns !== 'dsh-defaults') return
+      try {
+        ensureRegistrationFacts()
+      } catch (error) {
+        ctx.logger.error('llm-pi-ai: keeping the previously registered routes after a dsh-defaults update')
+        ctx.logger.error(error)
+      }
+    }
+    return ctx.on('settings/updated', onDefaultsUpdated)
+  }, 'llm-pi-ai: dsh-defaults change re-registration')
 }

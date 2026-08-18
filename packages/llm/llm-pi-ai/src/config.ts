@@ -291,15 +291,29 @@ function rejectRemovedFields(provider: string, source: PiAiProviderProfile): voi
 }
 
 /**
+ * The `dsh-defaults` settings namespace section this adapter consumes: the
+ * retry-count default for provider routes that name no `retryPolicy`. Absent
+ * fields keep the official behavior. (Local fork.)
+ */
+export interface PiAiDefaults {
+  /** Default `maxRetries` for a route that names no `retryPolicy`. */
+  defaultRetryCount?: number
+}
+
+/**
  * Validate profiles and return a detached route-keyed map suitable for
  * per-request reads. This is the one explicit resolve step, so an omitted dict
  * resolves to the empty (dormant) route set here rather than through a hidden
  * fallback, and each route's models and pi-ai provider are materialized once.
  * @param providers - configured provider profiles keyed by route.
+ * @param defaults - the `dsh-defaults` namespace section, when registered
+ *   (Local fork: a route that names no `retryPolicy` falls back to its
+ *   `defaultRetryCount` instead of the `dsh-llm` constant).
  * @returns validated profiles in configuration order.
  */
 export function resolveProfiles(
   providers: Readonly<Record<string, PiAiProviderProfile>> | undefined,
+  defaults?: PiAiDefaults,
 ): Map<string, ResolvedPiAiProviderProfile> {
   if (Array.isArray(providers)) {
     throw new Error('llm-pi-ai: providers is now a dict keyed by provider route, not an array of profiles')
@@ -348,13 +362,20 @@ export function resolveProfiles(
       defaultMaxTokens: source.defaultMaxTokens ?? DEFAULT_MAX_TOKENS,
     })
     const { apiKeyEnv, retryPolicy, models: _models, displayName: _displayName, ...rest } = source
+    // Local fork: a route naming no retryPolicy falls back to the dsh-defaults
+    // namespace's defaultRetryCount when one is configured; an absent count
+    // keeps the official `dsh-llm` DEFAULT_MAX_RETRIES.
+    const defaultsRetry = defaults?.defaultRetryCount
+    const fallbackRetry = typeof defaultsRetry === 'number' && Number.isSafeInteger(defaultsRetry) && defaultsRetry >= 0
+      ? { mode: 'normal' as const, maxRetries: defaultsRetry }
+      : undefined
     resolved.set(provider, {
       ...rest,
       provider,
       displayName,
       ...apiKeyEnv === undefined ? {} : { apiKeyEnv: credentialRef(apiKeyEnv) },
       streamIdleTimeoutMs,
-      retryPolicy: resolveRetryPolicy(retryPolicy, `llm-pi-ai: provider "${provider}" retryPolicy`),
+      retryPolicy: resolveRetryPolicy(retryPolicy ?? fallbackRetry, `llm-pi-ai: provider "${provider}" retryPolicy`),
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog.configuredMaxTokens,
