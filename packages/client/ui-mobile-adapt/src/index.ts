@@ -79,6 +79,11 @@ const MOBILE_CSS = `
   [data-composer-seat] {
     padding-bottom: max(env(safe-area-inset-bottom), 10px);
   }
+  /* hero 空会话态：桌面端输入框居中，手机上沉到底部（margin-top:auto 把
+     flex 列里的输入座推到底，覆盖 scrollBody 的 justify-content:center） */
+  [data-phase='hero'] [data-composer-seat] {
+    margin-top: auto;
+  }
   [data-composer-seat] [data-composer-card] textarea,
   [data-composer-seat] textarea {
     font-size: 16px !important; /* 防止 iOS 聚焦时自动放大页面 */
