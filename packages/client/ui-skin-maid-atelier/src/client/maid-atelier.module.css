@@ -2131,14 +2131,13 @@ body[data-dsh-maid-atelier][data-ds-dark-theme]
   color: rgba(174, 189, 222, 0.5);
 }
 
-/* ChatView exposes data-chat-flow in every loading and content state. Give
-   Trajectory, Timeline, and other inspect-only views the full canvas while
-   leaving the resident composer DOM and its draft state mounted. */
-body[data-dsh-maid-atelier] [data-phase='active']
-  [data-conversation-scroll]:not(:has([data-chat-flow]))
-  > [data-composer-seat] {
-  display: none;
-}
+/* ChatView exposes data-chat-flow in every loading and content state. Inspect-only
+   views (Trajectory, Timeline) keep the resident composer as the harness's own
+   overlay seat — `data-conversation-composer-overlay` absolutely positions the
+   seat against the padding box (ConversationRoot.module.css), so the view gets the
+   full canvas while the composer stays reachable and its draft state survives the
+   tab switch. Do not `display:none` the seat here: that would drop the input box
+   from every inspect view and defeat the overlay compensation upstream relies on. */
 
 body[data-dsh-maid-atelier] [data-composer-card] button {
   transition: transform 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
