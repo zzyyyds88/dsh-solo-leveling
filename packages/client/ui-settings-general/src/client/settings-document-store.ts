@@ -11,6 +11,8 @@ export interface SettingsDocumentState {
   opening: boolean
   /** Last metadata/native-open diagnostic; UI exposes only localized copy. */
   error: string | null
+  /** Absolute document path shown when the Host has no native opener (headless). */
+  documentPath: string | null
 }
 
 function messageOf(error: unknown): string {
@@ -21,7 +23,7 @@ function messageOf(error: unknown): string {
 export class SettingsDocumentStore {
   /** uSES-safe state source shared by the registered header action. */
   readonly store: SnapshotStore<SettingsDocumentState> = createSnapshotStore({
-    status: 'idle', opening: false, error: null,
+    status: 'idle', opening: false, error: null, documentPath: null,
   })
 
   private generation = 0
@@ -78,6 +80,11 @@ export class SettingsDocumentStore {
     try {
       const response = await this.api.settings.openDocument({})
       if (!response.result.ok) throw new Error(response.result.error.message)
+      // Headless deployments have no native opener: surface the path instead.
+      const { opened, path } = response.result.value
+      if (!opened) {
+        this.store.update((state) => { state.documentPath = path ?? null })
+      }
     } catch (error) {
       this.store.update((state) => { state.error = messageOf(error) })
     } finally {

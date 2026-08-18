@@ -3248,6 +3248,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: {},
           })
         }
+        if (!canOpenPaths()) return ok(request, { opened: false as const, path })
         return openTextFile(request, path, signal)
       },
       update: request => settingsWrite(request, request.payload.ns, 'update', request.payload.patch, request.payload.expectedRevision),

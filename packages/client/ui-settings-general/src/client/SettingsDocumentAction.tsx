@@ -36,6 +36,9 @@ export function SettingsDocumentAction({ controller, useSnapshot, t }: SettingsD
 
   return (
     <div className={css.action}>
+      {state.documentPath === null
+        ? null
+        : <span className={css.path} role="status">{t('openDocument.path', { path: state.documentPath })}</span>}
       {state.error === null ? null : <span className={css.error} role="alert">{t('openDocument.error')}</span>}
       <Button
         variant="outline"

@@ -72,7 +72,7 @@ export interface SettingsApi {
    */
   openDocument(
     request: RpcRequest<{}>, signal: AbortSignal,
-  ): Promise<RpcResponse<{ opened: true }>>
+  ): Promise<RpcResponse<{ opened: boolean; path?: string }>>
 
   /**
    * Merge a patch into one namespace's user layer (validate → persist →
