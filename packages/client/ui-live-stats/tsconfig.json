@@ -1,0 +1,54 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../../vendor/schemastery"
+    },
+    {
+      "path": "../runtime"
+    },
+    {
+      "path": "../ui-slots"
+    },
+    {
+      "path": "../locale"
+    },
+    {
+      "path": "../ui-conversation"
+    },
+    {
+      "path": "../ui-settings"
+    },
+    {
+      "path": "../ui-settings-plugins"
+    },
+    {
+      "path": "../../settings/settings"
+    },
+    {
+      "path": "../../session/session-projection"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../llm/llm"
+    },
+    {
+      "path": "../../llm/token-meter"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    }
+  ]
+}

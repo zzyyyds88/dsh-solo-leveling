@@ -289,6 +289,10 @@
     - id: ui-pet
       name: '@deepseek-ai/dsh-client-ui-pet'
 
+    # Live token/throughput stats: host token-estimation projection + TPS row + settings card.
+    - id: ui-live-stats
+      name: '@deepseek-ai/dsh-client-ui-live-stats'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'
