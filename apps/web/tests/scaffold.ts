@@ -818,6 +818,10 @@ function normalizeAria(snapshot: string, workspaceCwd: string): string {
     .replace(/\d{1,2}月\d{1,2}日 \d{2}:\d{2}/g, '{{clock}}')
     .replace(/(?<!\d)\d{1,2}:\d{2}:\d{2}(?:\.\d+)?(?:\s*[AP]M)?(?!\d)/gi, '{{clock}}')
     .replace(/(?<!\d)\d{2}:\d{2}(?!\d)/g, '{{clock}}')
+    // The pet companion greets by time-of-day; collapse every variant so goldens
+    // stay stable across the clock (label and detail are separate phrases).
+    .replace(/(?:夜深了，已经睡着啦|夜深了，好困啊|早上好，今天又是新的一天|中午好|下午好|晚上好)/g, '{{pet-greeting}}')
+    .replace(/(?:记得早点休息|一起把今天的任务做好吧|别忘了按时吃饭|继续加油，也记得活动一下|今天也辛苦啦)/g, '{{pet-greeting-detail}}')
 }
 
 /**

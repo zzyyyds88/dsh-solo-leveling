@@ -41,7 +41,7 @@
 - button "Close details"
 - text: Click a tool row in the message flow to view its details
 - complementary "DeepSeek 任务状态助手":
-  - status: 晚上好 今天也辛苦啦
+  - status: {{pet-greeting}} {{pet-greeting-detail}}
   - button "拖动/单击/长按/三击 DeepSeek 状态助手"
   - region "账房面板":
     - text: 💰 账房 · 实时
