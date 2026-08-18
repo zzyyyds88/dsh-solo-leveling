@@ -26,7 +26,7 @@ export const STYLES = `
 .dsh-live2d-confetti i{position:absolute;top:-8px;left:var(--cf-x,50%);width:7px;height:12px;border-radius:2px;background:var(--cf-color,#75ddff);opacity:0;animation:dsh-confetti-fall var(--cf-dur,1.5s) ease-in var(--cf-delay,0s) forwards;transform:rotate(var(--cf-rot,0deg))}
 .dsh-live2d-mute-hint{position:absolute;z-index:6;right:6px;top:6px;font-size:15px;opacity:0;pointer-events:none;transition:opacity .25s ease}
 .dsh-live2d-mute-hint[data-visible=true]{opacity:1}
-.dsh-live2d-diag{position:relative;z-index:14;width:250px;margin-bottom:7px;padding:10px 12px;border:1px solid var(--pet-line);border-radius:13px;background:var(--pet-panel);box-shadow:0 12px 32px rgba(3,15,40,.22);backdrop-filter:blur(18px);pointer-events:auto}
+.dsh-live2d-diag{position:absolute;left:50%;transform:translateX(-50%);z-index:14;width:250px;padding:10px 12px;border:1px solid var(--pet-line);border-radius:13px;background:var(--pet-panel);box-shadow:0 12px 32px rgba(3,15,40,.22);backdrop-filter:blur(18px);pointer-events:auto}
 .dsh-live2d-diag header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px}
 .dsh-live2d-diag header button{border:0;background:none;color:var(--dsw-alias-text-tertiary,#8194b6);cursor:pointer;font-size:11px;padding:2px}
 .dsh-live2d-diag header button:hover{color:#fff}
@@ -45,7 +45,7 @@ export const STYLES = `
 .dsh-live2d-diag-alerts input{accent-color:var(--pet-cyan);cursor:pointer}
 .dsh-live2d-diag-alert-group{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin-top:6px}
 .dsh-live2d-diag-alert-group-title{grid-column:1/-1;margin:0 0 2px;font-size:9px;font-weight:600;color:var(--dsw-alias-text-primary,#eff7ff)}
-.dsh-live2d-ledger{position:relative;z-index:14;width:250px;margin-bottom:7px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--pet-cyan) 42%,var(--pet-line));border-radius:13px;background:var(--pet-panel);box-shadow:0 12px 32px rgba(3,15,40,.22);backdrop-filter:blur(18px);pointer-events:auto}
+.dsh-live2d-ledger{position:absolute;left:50%;transform:translateX(-50%);z-index:14;width:250px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--pet-cyan) 42%,var(--pet-line));border-radius:13px;background:var(--pet-panel);box-shadow:0 12px 32px rgba(3,15,40,.22);backdrop-filter:blur(18px);pointer-events:auto}
 .dsh-live2d-ledger header{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;color:var(--dsw-alias-text-primary,#eff7ff)}
 .dsh-live2d-ledger header button{border:0;background:none;color:var(--dsw-alias-text-tertiary,#8194b6);cursor:pointer;font-size:11px;padding:2px}
 .dsh-live2d-ledger header button:hover{color:#fff}
