@@ -41,6 +41,23 @@ export interface WebUpgradeRoute {
   handler: (req: IncomingMessage, socket: Duplex, head: Buffer) => void | Promise<void>
 }
 
+/**
+ * The one pre-dispatch request gate: every HTTP request and WebSocket upgrade
+ * passes here before route matching. Returns `true` to admit the request, or
+ * `false` to reject it — for HTTP the gate owns the rejection response when it
+ * returns false (redirect / 401 / login page); for upgrades the server answers
+ * 403 and destroys the socket. (Local fork: deployment authentication hook.)
+ * @param req - the inbound request.
+ * @param res - the HTTP response, or `null` for WebSocket upgrades.
+ * @param pathname - the raw request pathname.
+ * @returns whether the request is admitted.
+ */
+export type WebRequestGate = (
+  req: IncomingMessage,
+  res: ServerResponse | null,
+  pathname: string,
+) => boolean | Promise<boolean>
+
 /** Gateway config: the listen address. */
 export interface Config {
   /** Listen host; the two supported values are loopback and all-interfaces. */
@@ -68,6 +85,7 @@ export class WebServer extends Service {
   private readonly upgradedSockets = new Set<Duplex>()
   private readonly indexTaps: ((html: string) => string)[] = []
   private fallback: WebRoute['handler'] | undefined
+  private gate: WebRequestGate | undefined
   private server!: Server
   private listenedPort!: number
 
@@ -131,6 +149,25 @@ export class WebServer extends Service {
   }
 
   /**
+   * Register the request gate: the one pre-dispatch hook every HTTP request
+   * and WebSocket upgrade passes before route matching. The gate returns
+   * `true` to admit the request, or `false` to reject it — for HTTP the gate
+   * owns the rejection response when it returns false (redirect / 401 / login
+   * page); for upgrades the server answers 403 and destroys the socket. One
+   * gate only; a second registration throws. (Local fork: deployment
+   * authentication hook.)
+   * @param check - `(req, res, pathname) => boolean | Promise<boolean>`; `res` is `null` for upgrades.
+   * @returns the disposer removing the gate.
+   */
+  registerGate(check: WebRequestGate): () => void {
+    if (this.gate !== undefined) {
+      throw new Error('webserver: gate already registered')
+    }
+    this.gate = check
+    return () => { this.gate = undefined }
+  }
+
+  /**
    * Register an index.html transform, applied by the fallback owner to every
    * index response ({@link applyIndexTaps}) in registration order.
    * @param transform - pure html-to-html function.
@@ -150,6 +187,19 @@ export class WebServer extends Service {
       /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server
       requests; the field is only optional on the client-side IncomingMessage type */
       const rawPath = new URL(req.url ?? '/', 'http://x').pathname
+      const gate = this.gate
+      if (gate !== undefined) {
+        let admit: boolean
+        try {
+          admit = await gate(req, res, rawPath)
+        } catch (error) {
+          this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+          res.writeHead(500)
+          res.end()
+          return
+        }
+        if (!admit) return
+      }
       const route = this.match(rawPath)
       if (route !== undefined) {
         await route.handler(req, res)
@@ -178,7 +228,31 @@ export class WebServer extends Service {
         res.end()
       })
     })
-    this.server.on('upgrade', (req, socket, head) => {
+    // oxlint-disable-next-line typescript/no-misused-promises -- async body catches all errors
+    this.server.on('upgrade', async (req, socket, head) => {
+      const gate = this.gate
+      if (gate !== undefined) {
+        let admit: boolean
+        try {
+          /* v8 ignore next -- `?? '/'` arm: node:http always sets url on server requests. */
+          admit = await gate(req, null, new URL(req.url ?? '/', 'http://x').pathname)
+        } catch (error) {
+          this.ctx.logger.warn(error instanceof Error ? error : new Error(String(error)))
+          socket.destroy()
+          return
+        }
+        if (!admit) {
+          socket.end([
+            'HTTP/1.1 403 Forbidden',
+            'Connection: close',
+            'Content-Type: text/plain; charset=utf-8',
+            'Content-Length: 9',
+            '',
+            'forbidden',
+          ].join('\r\n'))
+          return
+        }
+      }
       const onError = (error: Error): void => {
         this.ctx.logger.warn(error)
         socket.destroy()
