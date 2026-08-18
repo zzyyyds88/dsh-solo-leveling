@@ -67,6 +67,17 @@ export const Config: z<ConnectionConfig> = z.object({
 })
 
 /**
+ * Whether the request carries a valid auth session (LAN settings write).
+ * Local fork: the webserver gate adds real authentication on top of the trust
+ * fence; an authenticated caller may use the whole configuration plane —
+ * settings, credentials, agent presets, and host actions alike.
+ */
+function webAuthAuthed(ctx: Context, request: Request): boolean {
+  const webAuth = ctx.get('webAuth') as { isAuthenticated?: (request: Request) => boolean } | undefined
+  return webAuth?.isAuthenticated?.(request) === true
+}
+
+/**
  * Methods gated to loopback even on a trusted-host deployment. Native dialogs
  * act on the host machine; the settings and credential domains mutate the
  * user's configuration and secret store, and READING them is equally
@@ -144,7 +155,8 @@ export function apply(ctx: Context, config?: ConnectionConfig): void {
         : undefined
       if (method !== undefined
         && PRIVILEGED_METHODS.has(method)
-        && !isTrustedApiRequest(request, [])) {
+        && !isTrustedApiRequest(request, [])
+        && !webAuthAuthed(ctx, request)) {
         return new Response('forbidden', { status: 403 })
       }
       if (request.method === 'GET' && (pathname === MUX_EVENTS_PATH || pathname === HOST_EVENTS_PATH)) {
