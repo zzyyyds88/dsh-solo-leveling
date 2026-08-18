@@ -15,6 +15,9 @@
       "path": "../directory-picker"
     },
     {
+      "path": "../../settings/settings"
+    },
+    {
       "path": "../../runtime-diagnostics/invariants"
     }
   ]

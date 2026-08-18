@@ -20,6 +20,7 @@ import {
 import type {
   DirectoryEntry, DirectoryListing, DirectoryPickerCapability,
 } from '@deepseek-ai/dsh-host-directory-picker'
+import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 
 /**
  * Ancestor chain from the filesystem root to `target` inclusive — the
@@ -214,6 +215,20 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
     return this.browseCapability
   }
 
+  /**
+   * The start directory for an opener that names no path: the `dsh-defaults`
+   * settings namespace's `defaultWorkingDirectory` when it is a fully
+   * qualified path, otherwise undefined (official behavior — the host home
+   * directory). Read per call, so a settings change reaches the next picker
+   * open without a restart. (Local fork.)
+   */
+  private configuredStartPath(): string | undefined {
+    const settings = this.ctx.get('settings')
+    const value = (settings?.get(settingsNamespace('dsh-defaults')) as { defaultWorkingDirectory?: string } | undefined)
+      ?.defaultWorkingDirectory
+    return typeof value === 'string' && value.length > 0 && fullyQualified(value) ? value : undefined
+  }
+
   private async list(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
     const home = homedir()
     // The seam contract takes fully qualified paths only; resolve() would
@@ -222,7 +237,7 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
     if (path !== undefined && !fullyQualified(path)) {
       throw new DirectoryPickerError('directory-unreadable', path, `cannot list "${path}": not a fully qualified path`)
     }
-    const target = resolve(path ?? home)
+    const target = resolve(path ?? this.configuredStartPath() ?? home)
     // Stream the level (opendir, one dirent at a time) into a name-sorted
     // window of maxEntries + 1 candidates: memory stays bounded no matter how
     // many children the directory holds, the window keeps the name-sorted
