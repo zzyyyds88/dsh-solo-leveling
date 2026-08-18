@@ -42,6 +42,17 @@ The browser side of the dsh web GUI: shell boot, browser-host communication, sha
 | [`ui-settings-general/`](ui-settings-general/README.md) | Provides the general settings section. |
 | [`ui-settings-models/`](ui-settings-models/README.md) | Provides model-provider configuration and DeepSeek onboarding. |
 | [`ui-settings-plugin-inventory/`](ui-settings-plugin-inventory/README.md) | Contributes the read-only Host Loader inventory tab to Plugins settings. |
+| [`ui-access-gate/`](ui-access-gate/README.md) | Access-gate settings card: password and HTTPS reverse-proxy parameters. |
+| [`ui-defaults/`](ui-defaults/README.md) | Defaults settings card: working directory and retry count. |
+| [`ui-mobile-adapt/`](ui-mobile-adapt/README.md) | Mobile viewport adaptation: full-width chat, drawer panels, input scaling. |
+| [`ui-pet/`](ui-pet/README.md) | Desktop pet: task-state expression, WebAudio cues, voice, token ledger. |
+| [`ui-task-board/`](ui-task-board/README.md) | Task board: five columns, cron schedule, real-session execution. |
+| [`ui-live-stats/`](ui-live-stats/README.md) | Live token stats: TPS, latency, context, cache hit rate. |
+| [`ui-describe-image/`](ui-describe-image/README.md) | Image understanding tool plus its settings card. |
+| [`ui-git-graph/`](ui-git-graph/README.md) | Git graph browser half: branch selector and history lanes. |
+| [`ui-aionui-panel/`](ui-aionui-panel/README.md) | Right panel: explorer file tree, multi-tab preview, git SCM. |
+| [`ui-skin-maid-atelier/`](ui-skin-maid-atelier/README.md) | Abyssal Maid Atelier skin asset. |
+| [`ui-skin-center/`](ui-skin-center/README.md) | Skin center: live try-on and one-command apply. |
 
 Each child reference owns its contract and detailed behavior. The [slot system standard](../../.agents/notes/implemented/architecture/2026-07-22-slot-type-chain-implementation.md) and [web client architecture note](../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) own the cross-package composition and loading decisions.
 
