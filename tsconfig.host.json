@@ -289,6 +289,7 @@
     { "path": "./packages/host/frontend-static" },
     { "path": "./packages/host/plugin-inventory" },
     { "path": "./packages/host/webserver" },
+    { "path": "./packages/host/access-gate" },
     { "path": "./packages/sdk/client" },
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/lsp/lsp" },

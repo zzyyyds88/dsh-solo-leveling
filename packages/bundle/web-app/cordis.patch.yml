@@ -119,6 +119,14 @@
         host: !!js ctx.webStartup.host ?? '127.0.0.1'
         port: !!js ctx.webStartup.port ?? 3080
 
+    # 访问门禁：登录门闸（口令登录 / 首次设置 / 会话 Cookie / 限速）。inject
+    # webServer → 仅在 web 模式激活；mode 默认 auto（仅当 webserver 监听
+    # 0.0.0.0 时启用）。口令优先级：settings 命名空间 access-gate（GUI 设置卡
+    # 或 /setup 首次设置）> DSH_ACCESS_GATE_PASSWORD / DSH_WEB_PASSWORD >
+    # passwordFile。首次运行（0.0.0.0 且无口令）自动跳 /setup。
+    - id: access-gate
+      name: '@deepseek-ai/dsh-host-access-gate'
+
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
