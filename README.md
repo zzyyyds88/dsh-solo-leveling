@@ -3,7 +3,7 @@
 > **DeepSeek Harness 定制整合包 —— 不跟随官方更新，fork 自玩。**
 > 基线：`deepseek-ai/deepseek-harness` @ [`dsh-v0.1.0-rc.7`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.0-rc.7)
 > （commit `99f6f02fecdb7dff40c3fbc9470f5907c29f74ca`）。
-> 官方原版说明见 [README.upstream.md](README.upstream.md)（中文 [README.zh.md](README.zh.md)）。
+> 官方原文见 [GitHub tag `dsh-v0.1.0-rc.7`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.0-rc.7)。
 
 ## 为什么 fork（背景）
 
@@ -46,10 +46,7 @@
 ├── apps/              ← dsh CLI 与 Web 前端产品装配
 ├── vendor/            ← 上游 vendored 框架包
 ├── docs/              ← harness 文档 + 本工作区文档
-├── scripts/           ← harness 脚本 + 本工作区测试环境脚本
-├── test-envs/         ← 本工作区专用测试环境（独立 DSH_HOME + 端口 3090~3093）
-├── dsh-*/             ← 迁移前的插件源码（迁入 packages/ 后退役归档）
-├── AGENTS.upstream.md / CONTRIBUTING.upstream.md / README.upstream.md  ← 官方原文存档
+├── scripts/           ← harness 脚本 + 本工作区打包脚本
 ```
 
 ## 构建与运行

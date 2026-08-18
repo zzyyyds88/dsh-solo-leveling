@@ -12,31 +12,28 @@
    - `$HOME/.dsh`（当前 `/root/.dsh`，含 `profiles/web`、`cordis.patch.yml`、settings.yaml）
    - 全局安装 `/usr/lib/node_modules/@deepseek-ai/dsh`
    - 正式实例（端口 3080 的 `dsh web` 进程）
-   所有打包测试只允许在 `test-envs/`（独立 DSH_HOME + 独立端口）进行。
+   所有验证/打包测试只允许在独立环境（独立 DSH_HOME + 非 3080 端口）进行。
 2. **绝不自杀式重启。** 你运行在 dsh web 进程里，**禁止 pkill/kill/重启任何
    `dsh web`**（包括自己进程树内的），执行中的工具调用会因此中断。
-   需要「停→改→起」的操作一律封装成脚本（如 `install-to-profile.sh`、
-   `switch-to-https.sh`、`scripts/formal-reinstall.sh`），**交 opencode / 用户
-   在 SSH 终端执行**（不在本 dsh web 进程内执行）。
+   需要「停→改→起」正式 dsh web 的操作，**交用户在 SSH 终端执行**
+   （不在本 dsh web 进程内执行）。
 3. **绝不直接改产物。** 禁止修改 node_modules / 安装包里的文件（lib/*.js 等）。
-   改插件 = 改源码（src/）→ 构建 → 装进 `test-env` 验证。插件源码由用户掌握
+   改插件 = 改源码（src/）→ `pnpm run build` → 本地打包验证。插件源码由用户掌握
    改造方向，动手前先确认改造方案。
 4. **profile 配置原子化。** 运行中的 dsh web 会热重载 `cordis.patch.yml`；
    服务存活时改写会搞崩进程。必须：停服务 → 写配置 → 再启动（启动由用户执行）。
 5. **不创建散落文件。** 仓库根即 harness monorepo：`packages/`、`apps/`、`vendor/`、
    `website/`、`python/`、`native/`、`examples/` 等是 harness 结构，不得另建散落目录。
    自研/收录插件按官方分组迁入 `packages/<group>/<pkg>/`；迁移前的旧源码暂留
-   `dsh-*/`（迁完后归档删除）。工作区运维文件（`docs/`、`scripts/`、`test-envs/`）
-   与原上游文档（`*upstream.md`、`*.zh.md`）保持在根。
-6. **不把测试当正式，但 opencode 可执行正式安装器。** 测试环境验证通过 ≠ 可以
-   自行正式安装。正式安装/升级统一由 **opencode 在 SSH 终端**执行（安装器本身
-   幂等可重跑，一键入口 `scripts/formal-reinstall.sh`）；本工作区 agent（运行在
-   dsh web 进程内）仍**禁止**执行会停/起正式 dsh web 的操作——停/起正式 web
-   由用户确认后交给 opencode。
+   `dsh-*/`（迁完后归档删除）。工作区运维文件（`docs/`、`scripts/`）保持在根。
+6. **不把本地验证当正式。** 本地验证通过 ≠ 可以自行正式安装。正式安装/升级
+   统一由**用户在 SSH 终端**执行（`npm i -g ./dist/npm/*.tgz`，会停/起正式
+   dsh web）；本工作区 agent（运行在 dsh web 进程内）仍**禁止**执行会停/起
+   正式 dsh web 的操作——停/起正式 web 由用户确认后执行。
 7. **改 harness 源码，不碰产物。** 本仓库已 fork 官方源码：自研/收录能力一律以
    **第一方包**形式整合进 `packages/<group>/<pkg>/`（包名 `@deepseek-ai/dsh-*`），
    **不再**走「`@deepseek-ai/*` 同包名覆盖 fork + 脚本铺 profile」的旧路（该路已被本 fork 取代）。
-   改插件 = 改对应包的 `src/` → `pnpm run build` → 装进 `test-envs/` 验证；
+   改插件 = 改对应包的 `src/` → `pnpm run build` → 本地打包验证；
    **禁止直接改 node_modules / 安装包产物**（与红线 3 一致）。整合的逐项映射与装配点见
    [docs/整合迁移路线图.md](docs/整合迁移路线图.md)。
 8. **一切可调参数必须进「设置 → 插件 → 插件配置」卡片，禁止固化。** 整合包内今后
@@ -46,48 +43,23 @@
    配置口径见 [docs/开发规范.md §2.5](docs/开发规范.md)；需要默认值时在 schema 里给
    默认值（如 `dsh-defaults`），由设置卡覆盖，而非写死在代码里。
 
-## 测试环境速查（打包测试唯一去处）
+## 打包 / 验证速查（整合包）
 
 ```bash
-scripts/test-env-status.sh                      # 状态：实例/端口/已装插件/使用声明
-scripts/test-env-reset.sh --verified            # 验收后恢复基线（正式克隆基线；必须 --verified）
-scripts/test-env-reset.sh --check               # 检查环境是否已是基线
-scripts/test-env-install.sh --from-project <项目>  # 装已构建插件进测试 profile
-scripts/test-env-stop.sh && scripts/test-env-start.sh   # 重启测试实例（端口 3090）
-scripts/test-env-init.sh --force                # 重建基线（DSH 升级后适配）
-
-# opencode 部署（正式环境，由 opencode 在 SSH 终端执行；本 agent 不执行）
-scripts/formal-reinstall.sh                     # 一键：备份→停→按依赖序装 5 插件→起→逐项 verify
-scripts/formal-reinstall.sh --no-restart        # 只装不重启；--rebuild 先重建产物；--skip-verify 跳过 verify
-scripts/check-fork-versions.sh                  # 检查 @deepseek-ai/* 同包名 fork 与全局 DSH 版本是否一致（升级前必跑）
+pnpm install && pnpm run build                 # 构建：tsc -b（host/client）+ tsdown + web bundle
+bash scripts/package-npm.sh [--scope <个人>]   # 打包：dsh CLI + 23 个 workspace 依赖包 → dist/npm/*.tgz
+npm i -g ./dist/npm/*.tgz                      # 本地安装（体验同 npx @deepseek-ai/dsh web）
+dsh web --port 3090                            # 起独立实例验证（端口避开正式 3080）
 ```
 
-**多测试环境**（`TEST_ENV_INDEX` 选择，默认 1；所有 `test-env-*.sh` 均支持），
-统一收纳在 `test-envs/` 下：
-
-| 索引 | 目录 | 端口 |
-|---|---|---|
-| 1 | `test-envs/test-env-1/` | 3090 |
-| 2 | `test-envs/test-env-2/` | 3091 |
-| 3 | `test-envs/test-env-3/` | 3092 |
-| 4 | `test-envs/test-env-4/` | 3093 |
-
-**基线定义**：测试环境基线 = **从正式 profile 克隆**（含正式环境已装插件/fork，
-贴近真实环境），**不是**官方空模板。`test-env-reset.sh --verified` 重建基线时
-克隆正式 profile + 写最小测试设置（不复制正式口令/密钥），并清空使用声明。
-
-- **独占纪律（强制）**：**同一时刻一个测试环境只允许一个项目使用**（多 Agent
-  并行时防止互相污染）。使用前必须在该环境 `USAGE.md` 填写「项目 / 用途 /
-  开始时间」；`test-env-start.sh` 会检查声明——已被其他项目占用时拒绝启动。
-- **验收纪律（强制）**：**测试完成后必须等用户验收通过，才允许清理测试环境**。
-  `test-env-reset.sh` 恢复基线必须带 `--verified`（用户验收标记），不带参数
-  直接拒绝，防止 Agent 误清未验收环境。USAGE.md 中「验收状态」字段记录
-  待验收 / 已验收。
-- **测试实例**：端口见上表（默认 3090）；基线从正式克隆，**不预置任何口令**
-  （无门闸；装 access-gate 后首次访问自动进 `/setup` 由用户设置口令）。
-  正式实例端口 **3080**，永远别碰。
-- 用 `test-env-stop.sh` 停实例（按 PID 文件精确停止），不要 pkill -f 模糊匹配
-  （模式含自身命令行会误杀自己）。
+- **整合包形态**：本仓库 = `@deepseek-ai/dsh` CLI（`apps/cli`，`bin.dsh = lib/bin.js`）
+  + 第一方插件（`packages/*/*`，包名 `@deepseek-ai/dsh-*`），全部打包进 npm tarball，
+  官方用法 `npx @deepseek-ai/dsh web` / `dsh web`。
+- **验证口径**：构建全绿 → 打包 → 本地全局安装 → 起独立实例逐项实测；
+  **旧的 `test-envs/` 逐插件测试环境已移除**（整合包无法逐插件上测试环境）。
+- **scope 约束**：`@deepseek-ai` scope 归官方所有、无法发布；正式发布需换个人
+  scope（`--scope <个人>`，bin 仍叫 `dsh`）。
+- 正式实例端口 **3080** 永远别碰；验证用其它端口（如 3090）。
 
 ## 工作流速查
 
@@ -103,12 +75,10 @@ scripts/check-fork-versions.sh                  # 检查 @deepseek-ai/* 同包�
    开发基础以 <https://deepseek-harness.github.io/deepseek-harness/develop/basic/> 为准。
 2. 每个项目：先写思路库 README → 定位链路（前端 bundle 实时读盘刷新即生效；
    后端插件需重启，风险高不优先）→ 实施 → 语法校验（`node --check`）→
-   **test-env 验证** → 记录变更/回退。
+   **本地打包验证** → 记录变更/回退。
 3. 整合插件时读 [docs/整合迁移路线图.md](docs/整合迁移路线图.md) 与
-   `packages/README.md`（分组规范、包名 `@deepseek-ai/dsh-*`、层级表）；fork 的
-   rc.6 改动对照各项目 `定制记录/本次diff.patch` 重 base 到 rc.7 源码
-   （`dsh-AccessGate/`、`dsh-Moresettings/` 的 `packages/` 内）。迁移前先读懂
-   `apps/cli/composition.md` 与 `packages/preset/` 确定装配点。
+   `packages/README.md`（分组规范、包名 `@deepseek-ai/dsh-*`、层级表）；
+   迁移前先读懂 `apps/cli/composition.md` 与 `packages/preset/` 确定装配点。
 4. 提交信息用 Conventional Commits（`type(scope): subject`），避免 emoji；
    **有意义的改动即 git 提交**，禁止把 node_modules / 测试环境 / 密钥提交入库。
 5. 根 [README.md](README.md)、[PLUGINS.md](PLUGINS.md)、[docs/整合迁移路线图.md](docs/整合迁移路线图.md)
@@ -118,13 +88,14 @@ scripts/check-fork-versions.sh                  # 检查 @deepseek-ai/* 同包�
 
 - 本仓库基线 = deepseek-harness `dsh-v0.1.0-rc.7`（commit `99f6f02`，已平铺仓库根）；
   **不跟随官方更新**，自维护基线。
-- 运行中的正式 DSH：`/usr/lib/node_modules/@deepseek-ai/dsh`（当前 `0.1.0-rc.6`）、
-  DSH_HOME `/root/.dsh`、端口 3080 —— **永远别碰**；测试端口 3090~3093。
+- 运行中的正式 DSH：`/usr/lib/node_modules/@deepseek-ai/dsh`（当前 `0.1.0-rc.7`）、
+  DSH_HOME `/root/.dsh`、端口 3080 —— **永远别碰**。
 - 整合迁移铁律：**官方 rc.7 已实现同功能 → 优先用官方、弃用对应 fork/适配层**；
   保留的 fork 必须重 base 到 rc.7 源码（见 docs/整合迁移路线图.md、docs/升级适配指南.md）。
-- 构建入口：`pnpm install && pnpm run build`；验证走 `test-envs/`；正式安装由用户在
+- 构建入口：`pnpm install && pnpm run build`；打包 `bash scripts/package-npm.sh`；
+  验证走本地全局安装（`npm i -g ./dist/npm/*.tgz` → `dsh web`）；正式安装由用户在
   SSH 终端执行（会停/起正式 dsh web）。
 - 皮肤中心只保留 **maid-atelier（Abyssal Maid Atelier）**，其余皮肤源码已删除。
-- **完成定义（验收/打包/发布）**：迁移完成后由我测（`test-envs/`）→ 打包成 npm 包
+- **完成定义（验收/打包/发布）**：迁移完成后由我本地测 → 打包成 npm 包
   （同官方 `npx @deepseek-ai/dsh web` 用法，见 `apps/cli` 的 `bin.dsh`）→ 用户自测 →
   **用户测试通过后才 push GitHub**（通过前禁止 push）。
