@@ -261,7 +261,9 @@ describe('web e2e: agent-preset selection', () => {
     await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 15_000 }).toBe('standard')
 
     await composer.fill('/')
-    await expect.poll(() => menuOptions(page), { timeout: 15_000 })
+    // The client re-warms its slash catalog after the host switch; under a
+    // parallel test run that fetch can outrun the 15s floor.
+    await expect.poll(() => menuOptions(page), { timeout: 45_000 })
       .toEqual(expect.arrayContaining([expect.stringContaining(SKILL_NAME)]))
     const onStandard = await menuOptions(page)
     expect(onStandard.some(option => option.startsWith('compact'))).toBe(true)
