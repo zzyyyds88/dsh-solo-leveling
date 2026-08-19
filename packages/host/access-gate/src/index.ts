@@ -253,10 +253,11 @@ const PAGE_STYLE = `
                box-shadow: 0 8px 22px rgba(59,109,255,.5), inset 0 1px 0 rgba(255,255,255,.35); }
   h1 { font-size: 20px; margin: 0; color: #f4f7fd; letter-spacing: .2px; text-shadow: 0 2px 10px rgba(0,0,0,.35); }
   .sub { color: #b3bfd6; font-size: 13px; margin: 10px 0 22px; line-height: 1.7; }
-  label { display: block; font-size: 13px; color: #bcc6dc; margin: 16px 0 8px; }
+  label { display: block; font-size: 13px; color: #bcc6dc; margin: 18px 0 10px; }
   input { width: 100%; padding: 12px 14px; border-radius: 13px; border: 1px solid rgba(255,255,255,.20);
           background: rgba(9,14,28,.5); color: #eef2fa; font-size: 15px; outline: none;
           transition: border-color .15s, box-shadow .15s; }
+  input::placeholder { color: #93a0b8; opacity: 1; }
   input:focus { border-color: rgba(79,124,255,.95); box-shadow: 0 0 0 3px rgba(79,124,255,.24); }
   button { width: 100%; margin-top: 22px; padding: 12px; border: 0; border-radius: 13px; cursor: pointer;
            color: #fff; font-size: 15px; font-weight: 600; letter-spacing: 4px;
@@ -267,7 +268,7 @@ const PAGE_STYLE = `
   button:active { transform: translateY(1px); }
   .error { display: none; margin-top: 16px; padding: 10px 12px; border-radius: 11px;
            background: rgba(255,80,80,.16); border: 1px solid rgba(255,80,80,.42); color: #ffb8b8; font-size: 13px; line-height: 1.5; }
-  .foot { margin-top: 26px; text-align: center; color: rgba(212,222,242,.55); font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+  .foot { margin-top: 26px; text-align: left; color: rgba(212,222,242,.55); font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
 `
 /** Login page (normal mode), blue liquid glass. */
 const LOGIN_PAGE = `<!doctype html>

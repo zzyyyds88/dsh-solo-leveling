@@ -43,6 +43,50 @@ const FRAME_FOR_REACTION = Object.freeze({
   'desk-coding': 'desk-coding-hands-up',
   thinking: 'thinking-keypress',
 })
+
+/**
+ * Clamp a drag offset against the pet's base corner (CSS right/bottom) so its
+ * rendered box stays inside the viewport. Deterministic: it only needs the
+ * rendered size and the corner values, not the rect at the current offset, so
+ * it is safe to run before a freshly loaded offset has been painted.
+ */
+function clampToBaseOffset(
+  offset: { x: number; y: number },
+  size: { w: number; h: number },
+  right: number,
+  bottom: number,
+  vw: number,
+  vh: number,
+): { x: number; y: number } {
+  return {
+    x: Math.min(right, Math.max(right + size.w - vw, offset.x)),
+    y: Math.min(bottom, Math.max(bottom + size.h - vh, offset.y)),
+  }
+}
+
+/**
+ * Clamp a drag offset so the pet's rendered box stays inside the viewport.
+ * `rect` must be the pet's bounding box measured while the offset was `origin`;
+ * shifting the offset by (dx, dy) moves the box by the same delta (the scale
+ * transform is applied before the translate, so it does not distort the delta).
+ */
+function clampOffsetToViewport(
+  offset: { x: number; y: number },
+  rect: DOMRect | undefined,
+  origin: { x: number; y: number },
+): { x: number; y: number } {
+  if (rect === undefined) return offset
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const minX = origin.x - rect.left
+  const maxX = vw - rect.right + origin.x
+  const minY = origin.y - rect.top
+  const maxY = vh - rect.bottom + origin.y
+  return {
+    x: Math.min(maxX, Math.max(minX, offset.x)),
+    y: Math.min(maxY, Math.max(minY, offset.y)),
+  }
+}
 const WHIP_EVENT = 'deepseek-pet:whip'
 const WHIP_REACTION_DURATION_MS = 3600
 const WHIP_VARIANTS: readonly { reaction: string; text: string }[] = Object.freeze([
@@ -144,6 +188,8 @@ interface SessionRow {
   updatedAt?: number
   displayTitle?: string
   title?: string
+  /** 'subagent' = 子代理会话，不参与桌宠的任务统计/联动。 */
+  origin?: 'subagent' | undefined
   [key: string]: unknown
 }
 
@@ -182,11 +228,17 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const list = useSessions(value => value)
   const sessionId = list.current
   const focusedSession = sessionId ? list.byId[sessionId] : undefined
+  // 只与正式任务联动：排除子代理会话（origin === 'subagent'），
+  // 否则子代理会被误计为任务（「N 个任务同时执行」/忙碌语音/状态都会被带偏）。
   const runningSessions = useMemo(() => (list.ids ?? [])
     .map(id => list.byId[id])
-    .filter((item): item is SessionRow => item !== undefined && item.id !== sessionId && (item.running || item.pendingInteraction === true))
+    .filter((item): item is SessionRow => item !== undefined && item.id !== sessionId
+      && item.origin !== 'subagent'
+      && (item.running || item.pendingInteraction === true))
     .sort((a, b) => Number(b.running) - Number(a.running) || (b.updatedAt ?? 0) - (a.updatedAt ?? 0)), [list, sessionId])
-  const busySessions = runningSessions.filter(item =>  item.running).length + Number(Boolean(focusedSession?.running))
+  const focusedIsFormal = focusedSession?.origin !== 'subagent'
+  const busySessions = runningSessions.filter(item =>  item.running).length
+    + Number(Boolean(focusedSession?.running && focusedIsFormal))
   const session = useMemo(() => sessionId ? resolveSession(sessionId as SessionId) : undefined, [resolveSession, sessionId])
   const subscribe = useCallback((listener: () => void) => session?.subscribe(listener) ?? (() => {}), [session])
   const getSnapshot = useCallback(() => session?.getSnapshot() ?? EMPTY_SNAPSHOT, [session])
@@ -227,7 +279,9 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     questionCount, taskActive, userCorrection, waitingMs: 0,
   })
   const [visual, setVisual] = useState<DerivedVisual>(immediate)
-  const [collapsed, setCollapsed] = useState(false)
+  // 窄屏（移动端）默认折叠成小圆角标：展开态的角色会遮住底部输入框，
+  // 折叠让小圆贴角，双击再展开（桌面端保持展开默认）。
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 760)
   const [phase, setPhase] = useState(0)
   const [thinkingMs, setThinkingMs] = useState(0)
   const [visualMs, setVisualMs] = useState(0)
@@ -259,6 +313,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const humanTurnKey = useRef('')
   const drag = useRef<DragState | null>(null)
   const dragged = useRef(false)
+  const rootRef = useRef<HTMLElement | null>(null)
   const speechTimer = useRef<number | undefined>(undefined)
   const whipTimer = useRef<number | undefined>(undefined)
   const streamLineRef = useRef<HTMLDivElement | null>(null)
@@ -358,9 +413,38 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     try {
       const saved = JSON.parse(window.localStorage.getItem(POSITION_KEY) ?? 'null') as { x?: number; y?: number } | null
       if (saved !== null && typeof saved.x === 'number' && typeof saved.y === 'number') setOffset({ x: saved.x, y: saved.y })
-      const savedScale = Number(window.localStorage.getItem(SCALE_KEY))
-      if (Number.isFinite(savedScale) && savedScale >= .65 && savedScale <= 1.4) setScale(savedScale)
+      // 尺寸保持确定性：不再恢复历史滚轮缩放值。缩放值按浏览器各存一份，
+      // 会造 成 3090/3080（不同端口）桌宠大小不一致；滚轮缩放仍可在本次
+      // 会话内使用，刷新后回到默认（移动端 0.75 由 ui-mobile-adapt 强制）。
+      try { window.localStorage.removeItem(SCALE_KEY) } catch {}
     } catch {}
+  }, [])
+
+  // 把之前被拖出屏幕的位置拉回可视区：基于基准角（CSS right/bottom）+ 渲染
+  // 尺寸确定性钳制，不依赖「当前 offset 对应的 rect」——加载的旧偏移量
+  // 尚未绘制时也能算对（否则测到的是过期 rect，钳制会被跳过）。
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const root = rootRef.current
+      if (root === null) return
+      const rect = root.getBoundingClientRect()
+      const cs = getComputedStyle(root)
+      const right = Number.parseFloat(cs.right)
+      const bottom = Number.parseFloat(cs.bottom)
+      if (!Number.isFinite(right) || !Number.isFinite(bottom)) return
+      setOffset((current) => {
+        const clamped = clampToBaseOffset(
+          current,
+          { w: rect.width, h: rect.height },
+          right,
+          bottom,
+          window.innerWidth,
+          window.innerHeight,
+        )
+        return clamped.x === current.x && clamped.y === current.y ? current : clamped
+      })
+    })
+    return () => cancelAnimationFrame(frame)
   }, [])
 
   // 页面任意一次用户交互即解锁音频（自动播放策略；完成庆祝在后台触发，不能依赖点桌宠）
@@ -497,7 +581,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     const dx = event.clientX - active.x
     const dy = event.clientY - active.y
     if (Math.hypot(dx, dy) > 4) dragged.current = true
-    if (dragged.current) setOffset({ x: active.origin.x + dx, y: active.origin.y + dy })
+    if (dragged.current) {
+      const next = { x: active.origin.x + dx, y: active.origin.y + dy }
+      setOffset(clampOffsetToViewport(next, active.rect, active.origin))
+    }
   }, [updateLook])
   const pointerUp = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (!drag.current || drag.current.pointerId !== event.pointerId) return
@@ -511,7 +598,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     event.stopPropagation()
     setScale((current) => {
       const next = clampPetScale(current, event.deltaY)
-      try { window.localStorage.setItem(SCALE_KEY, String(next)) } catch {}
+      // 不持久化：历史缩放值会导致不同浏览器（3090/3080）桌宠大小不一致
       return next
     })
   }, [collapsed])
@@ -829,7 +916,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
 
   /** 诊断面板内容。 */
   const diagLines = useMemo(() => {
-    const running = runningSessions.length + (focusedSession?.running ? 1 : 0)
+    const running = runningSessions.length + (focusedSession?.running && focusedSession?.origin !== 'subagent' ? 1 : 0)
     const audio = audioState()
     const audioErr = audioError()
     return [
@@ -852,7 +939,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const visibleFrame = !collapsed && (FRAME_FOR_REACTION as Record<string, string>)[activeReaction] === activeFrame ? activeFrame : ''
   if (!petEnabled) return null
   return (
-    <aside data-dsh-live2d-root data-collapsed={collapsed ? 'true' : 'false'} data-pet-state={effectiveVisual.kind}
+    <aside ref={rootRef} data-dsh-live2d-root data-collapsed={collapsed ? 'true' : 'false'} data-pet-state={effectiveVisual.kind}
       data-reaction-pending={reactionPending ? 'true' : 'false'} data-tapped={tapText ? 'true' : 'false'}
       data-celebrating={celebrating ? 'true' : 'false'} data-muted={muted ? 'true' : 'false'}
       style={{ '--pet-drag-x': `${offset.x}px`, '--pet-drag-y': `${offset.y}px`, '--pet-scale': scale } as CSSProperties} aria-label="DeepSeek 任务状态助手">

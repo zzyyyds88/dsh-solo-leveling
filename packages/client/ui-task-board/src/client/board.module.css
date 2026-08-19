@@ -158,7 +158,9 @@ html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [class*='centerCol'] 
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--dsw-alias-bg-layer-2);
+  /* 列是长驻阅读/浏览面：用 overlay（≈实色）而非 layer-2 玻璃层，避免背景
+     插画透过列面压暗状态文字；皮肤仍通过 --dsw-alias-bg-overlay 控制。 */
+  background: var(--dsw-alias-bg-overlay);
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 12px;
   overflow: hidden;
@@ -221,6 +223,11 @@ html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [class*='centerCol'] 
 }
 
 .columnEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  box-sizing: border-box;
   padding: 24px 8px;
   text-align: center;
   font-size: 12px;

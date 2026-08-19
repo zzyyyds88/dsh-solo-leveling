@@ -100,13 +100,34 @@ body[data-dsh-maid-atelier] [data-dsh-live2d-root] {
 }
 
 /* 右侧面板（aionui-panel）核心 token：映射到皮肤 --dsw-*，自动亮/暗。
-   用高特异性选择器覆盖 aionui 自己的 :root / body[data-ds-dark-theme]。 */
-body[data-dsh-maid-atelier],
+   用高特异性选择器覆盖 aionui 自己的 :root / body[data-ds-dark-theme]。
+   面板是长驻阅读区：主界面的玻璃层（--dsw-alias-bg-layer-* 半透明）会透出
+   背景插画造成重影与低对比度，这里给面板专用不透明背景（仅面板，不影响
+   主界面的玻璃拟态）。 */
+body[data-dsh-maid-atelier] {
+  --aion-bg-base: var(--dsw-alias-bg-overlay);
+  --aion-bg-1: #f5f7fc;
+  --aion-bg-2: #eef1f9;
+  --aion-bg-3: #e4e9f4;
+  --aion-bg-hover: var(--dsw-alias-interactive-bg-hover-solid);
+  --aion-bg-active: var(--dsw-alias-interactive-bg-active);
+  --aion-text-primary: var(--dsw-alias-label-primary);
+  --aion-text-secondary: var(--dsw-alias-label-secondary);
+  --aion-text-tertiary: var(--dsw-alias-label-tertiary);
+  --aion-text-disabled: var(--dsw-alias-label-caption);
+  --aion-primary: var(--dsw-alias-brand-primary);
+  --aion-brand: var(--maid-gold);
+  --aion-warning: var(--maid-gold);
+  --aion-border-base: var(--dsw-alias-border-l2);
+  --aion-fill-2: var(--dsw-alias-interactive-bg-hover);
+  --aion-fill-3: var(--dsw-alias-interactive-bg-active);
+  --aion-aou-6: var(--maid-periwinkle);
+}
 body[data-dsh-maid-atelier][data-ds-dark-theme] {
   --aion-bg-base: var(--dsw-alias-bg-overlay);
-  --aion-bg-1: var(--dsw-alias-bg-layer-1);
-  --aion-bg-2: var(--dsw-alias-bg-layer-2);
-  --aion-bg-3: var(--dsw-alias-bg-layer-3);
+  --aion-bg-1: #101a38;
+  --aion-bg-2: #15224a;
+  --aion-bg-3: #1c2b58;
   --aion-bg-hover: var(--dsw-alias-interactive-bg-hover-solid);
   --aion-bg-active: var(--dsw-alias-interactive-bg-active);
   --aion-text-primary: var(--dsw-alias-label-primary);
@@ -136,6 +157,22 @@ body[data-dsh-maid-atelier][data-ds-dark-theme] {
   --aion-aou-3: #2c3a62;
   --aion-aou-4: #3a4c7d;
   --aion-aou-5: #4c62a0;
+}
+
+/* 语义状态色：aionui 默认用荧光绿 #00b42a / 荧光红 #f53f3f 表示 SCM
+   暂存/新增与删除/冲突，与藏青+金的柔和配色冲突。这里把它们柔化成
+   低饱和 sage / rose，保留「增/删」语义但融入主题；warning 已映射到金。 */
+body[data-dsh-maid-atelier] {
+  --aion-success: #5f8f74;
+  --aion-danger: #b56a72;
+  --aion-bg-4: #cfd7ea;
+  --aion-overlay-shadow: var(--maid-shadow);
+}
+body[data-dsh-maid-atelier][data-ds-dark-theme] {
+  --aion-success: #7fb393;
+  --aion-danger: #d58d94;
+  --aion-bg-4: #2c3a62;
+  --aion-overlay-shadow: var(--maid-shadow);
 }
 
 body[data-dsh-maid-atelier] [id='root'] {
@@ -272,6 +309,16 @@ body[data-dsh-maid-atelier][data-maid-better-sidebar-open][data-maid-chat-active
 @media (max-width: 700px) {
   body[data-dsh-maid-atelier] [data-maid-character='right'] {
     display: none;
+  }
+}
+
+/* 移动端侧栏是浮出抽屉（ui-mobile-adapt 把它改成 fixed 覆盖层），不再是
+   常驻列；ResizeObserver 会把抽屉宽写进 --maid-sidebar-width，导致顶部/底部
+   幕布与人物按 300px 平移出屏。这里把该宽度钉死为 0，幕布/纹章始终满宽，
+   抽屉打开时只是覆盖在装饰之上（!important 压过 JS CSSOM 的正常写入）。 */
+@media (max-width: 768px) {
+  body[data-dsh-maid-atelier] {
+    --maid-sidebar-width: 0px !important;
   }
 }
 
@@ -752,7 +799,8 @@ body[data-dsh-maid-atelier] [data-dsh-taskboard-entry][data-active] {
 }
 
 /* Collapsed rail: a 38px circular icon matching the round new-session/search
-   controls, not a rounded rectangle. */
+   controls, not a rounded rectangle. Visible gold-navy circle like its round
+   siblings (gold border + navy gradient + inset ring), not a transparent ghost. */
 body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry] {
   width: 38px;
   min-width: 38px;
@@ -761,6 +809,24 @@ body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-e
   padding: 0;
   justify-content: center;
   border-radius: 50%;
+  border: 1px solid rgba(225, 191, 124, 0.76);
+  background: linear-gradient(145deg, rgba(77, 103, 169, 0.48), rgba(7, 18, 52, 0.82));
+  box-shadow:
+    inset 0 0 0 2px rgba(5, 15, 45, 0.76),
+    0 3px 9px rgba(1, 7, 24, 0.24);
+  color: #efd7a1;
+}
+
+body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry]:hover,
+body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry][data-active] {
+  border-color: rgba(240, 210, 150, 0.92);
+  background: linear-gradient(145deg, rgba(99, 129, 199, 0.55), rgba(12, 26, 66, 0.88));
+  color: #fff1ce;
+}
+
+body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry] svg {
+  stroke-width: 1.9;
+  filter: drop-shadow(0 1px 2px rgba(1, 7, 24, 0.48));
 }
 
 body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry] [class*='entryLabel'] {

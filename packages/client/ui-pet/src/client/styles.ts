@@ -60,7 +60,7 @@ export const STYLES = `
 @keyframes dsh-pop{from{opacity:0;transform:translateY(5px) scale(.94)}}@keyframes dsh-caret{50%{opacity:0}}
 @keyframes dsh-pet-jump{0%,100%{transform:translateY(0)}35%{transform:translateY(-22px) scale(1.04)}60%{transform:translateY(0) scale(.98)}}
 @keyframes dsh-confetti-fall{0%{opacity:0;transform:translateY(-8px) rotate(var(--cf-rot,0deg))}12%{opacity:1}100%{opacity:0;transform:translateY(230px) translateX(var(--cf-drift,0px)) rotate(calc(var(--cf-rot,0deg) + 320deg))}}
-@media(max-width:760px){[data-dsh-live2d-root]{right:7px;bottom:74px;width:286px}.dsh-live2d-conversation{width:286px}.dsh-live2d-ledger{width:240px}.dsh-live2d-sessions{width:256px}.dsh-live2d-session-list{width:232px}}
+@media(max-width:760px){[data-dsh-live2d-root]{right:7px;bottom:74px;width:286px}.dsh-live2d-conversation{width:286px}.dsh-live2d-ledger{width:240px}.dsh-live2d-sessions{width:256px}.dsh-live2d-session-list{width:232px}.dsh-live2d-tools button{height:36px;padding:0 14px}.dsh-live2d-tools button span{font-size:10px}}
 @media(hover:none){.dsh-live2d-tools{opacity:.72;pointer-events:auto;transform:none}}
 @media(prefers-reduced-motion:reduce){[data-dsh-live2d-root] *,[data-dsh-live2d-root] *:before{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `
