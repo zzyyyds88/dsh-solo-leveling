@@ -7,11 +7,13 @@
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { once } from 'node:events'
+import { request as httpsRequest } from 'node:https'
 import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import selfsigned from 'selfsigned'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
@@ -28,14 +30,23 @@ afterEach(async () => {
 })
 
 /** Write a cordis.yml with one webserver row, then boot it through the real Loader. */
-async function loadComposition(port = 0): Promise<Context> {
+async function loadComposition(port = 0, tls?: { key: string; cert: string }): Promise<Context> {
   root = await mkdtemp(join(tmpdir(), 'dsh-webserver-loader-'))
   const configPath = join(root, 'cordis.yml')
+  const tlsRows = tls === undefined
+    ? []
+    : [
+      '    tlsKey: |',
+      ...tls.key.split('\n').filter(line => line.length > 0).map(line => `      ${line}`),
+      '    tlsCert: |',
+      ...tls.cert.split('\n').filter(line => line.length > 0).map(line => `      ${line}`),
+    ]
   await writeFile(configPath, [
     "- name: '@deepseek-ai/dsh-host-webserver'",
     '  config:',
     "    host: '127.0.0.1'",
     `    port: ${String(port)}`,
+    ...tlsRows,
     '',
   ].join('\n'))
 
@@ -222,5 +233,35 @@ describe('real Loader composition', () => {
       if (root !== undefined) await rm(root, { recursive: true, force: true })
       root = firstRoot
     }
+  })
+
+  it('serves HTTPS when tls material is configured and reports secure', { timeout: 60_000 }, async () => {
+    const pems = selfsigned.generate([{ name: 'commonName', value: 'localhost' }], {
+      days: 30,
+      keySize: 2048,
+      algorithm: 'sha256',
+      extensions: [{ name: 'subjectAltName', altNames: [{ type: 2, value: 'localhost' }, { type: 7, ip: '127.0.0.1' }] }],
+    })
+    const loaded = await loadComposition(0, { key: pems.private, cert: pems.cert })
+    expect(loaded.webServer.secure).toBe(true)
+    const port = loaded.webServer.port
+    loaded.webServer.register({ kind: 'exact', path: '/probe', handler: (_req, res) => { res.writeHead(200); res.end('EXACT') } })
+    // node:https request with certificate validation disabled: the fixture's
+    // self-signed cert is intentionally not trusted by the system store.
+    const body = await new Promise<string>((resolve, reject) => {
+      const req = httpsRequest({
+        host: '127.0.0.1',
+        port,
+        path: '/probe',
+        rejectUnauthorized: false,
+      }, (res) => {
+        const chunks: Buffer[] = []
+        res.on('data', (chunk: Buffer) => { chunks.push(chunk) })
+        res.on('end', () => { resolve(Buffer.concat(chunks).toString('utf8')) })
+      })
+      req.on('error', reject)
+      req.end()
+    })
+    expect(body.slice(0, 80)).toBe('EXACT')
   })
 })

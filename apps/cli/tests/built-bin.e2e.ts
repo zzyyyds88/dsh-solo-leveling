@@ -339,14 +339,16 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       expect(web.stdout).toContain('--port <port>')
       expect(web.stdout).not.toContain('dsh web: http://')
 
-      const wildcardHost = await runBuiltBin(['web', '--host', '0.0.0.0'], {
+      // `--host 0.0.0.0` is the default HTTPS bind now (not a usage error);
+      // a non-numeric port still is one and must not activate startup rows.
+      const badPort = await runBuiltBin(['web', '--port', 'abc'], {
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
       })
-      expect(wildcardHost.code).toBe(1)
-      expect(wildcardHost.stdout).toBe('')
-      expect(wildcardHost.stderr).toContain('--host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
-      expect(wildcardHost.stderr).not.toContain('dsh web: http://')
+      expect(badPort.code).toBe(1)
+      expect(badPort.stdout).toBe('')
+      expect(badPort.stderr).toContain('--port must be a number, got "abc"')
+      expect(badPort.stderr).not.toContain('dsh web: https://')
 
       const headlessHelp = await runBuiltBin(['--profile', 'headless', '--help'], {
         DSH_HOME: home,

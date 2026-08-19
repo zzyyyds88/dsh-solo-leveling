@@ -110,14 +110,18 @@
     # ── layer 2: transport/service ──────────────────────────────────────────────
 
     # Plain route-registration carrier; host and port come from the app's
-    # webStartup provider, with these deployment fallbacks. The dist is served by
-    # the web-runtime row below through the fallback seat.
+    # webStartup provider, with these deployment fallbacks. TLS is prepared by
+    # the same provider (auto self-signed cert, or the operator's uploaded
+    # cert), so the server always speaks HTTPS. The dist is served by the
+    # web-runtime row below through the fallback seat.
     - id: webserver
       name: '@deepseek-ai/dsh-host-webserver'
       inject: [webStartup]
       config:
-        host: !!js ctx.webStartup.host ?? '127.0.0.1'
+        host: !!js ctx.webStartup.host ?? '0.0.0.0'
         port: !!js ctx.webStartup.port ?? 3080
+        tlsKey: !!js ctx.webStartup.tls.key
+        tlsCert: !!js ctx.webStartup.tls.cert
 
     # 访问门禁：登录门闸（口令登录 / 首次设置 / 会话 Cookie / 限速）。inject
     # webServer → 仅在 web 模式激活；mode 固定 on（无论监听 127.0.0.1 还是
@@ -290,7 +294,7 @@
     - id: ui-defaults
       name: '@deepseek-ai/dsh-client-ui-defaults'
 
-    # Access-gate card (login password + HTTPS reverse proxy), keyed by the
+    # Access-gate card (login password + HTTPS certificate mode), keyed by the
     # `access-gate` namespace the host `dsh-host-access-gate` plugin registers.
     - id: ui-access-gate
       name: '@deepseek-ai/dsh-client-ui-access-gate'

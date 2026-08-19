@@ -9,6 +9,7 @@
  */
 
 import { createServer } from 'node:http'
+import { createServer as createHttpsServer } from 'node:https'
 import type { IncomingMessage, ServerResponse, Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import type { Duplex } from 'node:stream'
@@ -58,16 +59,20 @@ export type WebRequestGate = (
   pathname: string,
 ) => boolean | Promise<boolean>
 
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the optional TLS material. */
 export interface Config {
   /** Listen host; the two supported values are loopback and all-interfaces. */
   host: '127.0.0.1' | '0.0.0.0'
   /** Listen port; zero requests an OS-assigned port. */
   port: number
+  /** PEM private key; when both this and `tlsCert` are set the server speaks HTTPS. */
+  tlsKey?: string
+  /** PEM certificate; when both this and `tlsKey` are set the server speaks HTTPS. */
+  tlsCert?: string
 }
 
 /**
- * The browser HTTP carrier service. Activation listens immediately. Route
+ * The browser HTTP(S) carrier service. Activation listens immediately. Route
  * registration order does not affect requests because configured named routes
  * must be distinct, and the fallback handler answers anything not yet claimed
  * during startup with 404 until its owner registers. A listen failure rejects
@@ -77,6 +82,11 @@ export class WebServer extends Service {
   static Config: z<Config> = z.object({
     host: z.union([z.const('127.0.0.1'), z.const('0.0.0.0')]).required(),
     port: z.natural().max(65535).required(),
+    // Flat optional strings, not a nested object: schemastery's z.object
+    // default ({}) would turn an absent tls into {} and then fail the inner
+    // required keys, so the pair is expressed as two optional scalars.
+    tlsKey: z.string(),
+    tlsCert: z.string(),
   })
 
   private readonly exact = new Map<string, WebRoute>()
@@ -101,6 +111,11 @@ export class WebServer extends Service {
   /** The configured bind host (the loopback or all-interfaces literal). */
   get host(): Config['host'] {
     return this.config.host
+  }
+
+  /** Whether this server speaks HTTPS (TLS material was configured). */
+  get secure(): boolean {
+    return this.config.tlsKey !== undefined && this.config.tlsCert !== undefined
   }
 
   /**
@@ -217,17 +232,31 @@ export class WebServer extends Service {
     // rejection killing the process on one malformed request (bad %-escape,
     // client dropping mid-body). Per-request failures log and answer 400 —
     // never a process exit.
-    this.server = createServer((req, res) => {
-      handle(req, res).catch((err: unknown) => {
-        this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
-        if (res.headersSent) {
-          res.destroy()
-          return
-        }
-        res.writeHead(400)
-        res.end()
+    const tlsKey = this.config.tlsKey
+    const tlsCert = this.config.tlsCert
+    this.server = (tlsKey === undefined || tlsCert === undefined
+      ? createServer((req, res) => {
+        void handle(req, res).catch((err: unknown) => {
+          this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
+          if (res.headersSent) {
+            res.destroy()
+            return
+          }
+          res.writeHead(400)
+          res.end()
+        })
       })
-    })
+      : createHttpsServer({ key: tlsKey, cert: tlsCert }, (req, res) => {
+        void handle(req, res).catch((err: unknown) => {
+          this.ctx.logger.warn(err instanceof Error ? err : new Error(String(err)))
+          if (res.headersSent) {
+            res.destroy()
+            return
+          }
+          res.writeHead(400)
+          res.end()
+        })
+      }))
     // oxlint-disable-next-line typescript/no-misused-promises -- async body catches all errors
     this.server.on('upgrade', async (req, socket, head) => {
       const gate = this.gate

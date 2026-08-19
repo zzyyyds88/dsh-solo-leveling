@@ -1483,6 +1483,9 @@ importers:
       commander:
         specifier: ^15.0.0
         version: 15.0.0
+      selfsigned:
+        specifier: ^2.4.0
+        version: 2.4.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -5151,9 +5154,6 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      selfsigned:
-        specifier: ^2.4.0
-        version: 2.4.0
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -5465,6 +5465,9 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+      selfsigned:
+        specifier: ^2.4.0
+        version: 2.4.0
 
   packages/identity/anonymous-user-id:
     devDependencies:

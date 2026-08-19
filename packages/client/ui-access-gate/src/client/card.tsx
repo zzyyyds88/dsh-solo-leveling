@@ -1,9 +1,9 @@
 /**
  * The access-gate card component: the login password (optional) plus the HTTPS
- * reverse-proxy parameters, with a restart confirmation dialog. Self-contained
- * card chrome (inline styles + theme variables) styled after the official
- * plugin card; the card is a separate package, so it does not import
- * ui-settings-plugins' internal PluginCard.
+ * certificate mode (auto self-signed / uploaded own cert), with a restart
+ * confirmation dialog. Self-contained card chrome (inline styles + theme
+ * variables) styled after the official plugin card; the card is a separate
+ * package, so it does not import ui-settings-plugins' internal PluginCard.
  */
 
 import { useEffect, useState } from 'react'
@@ -23,8 +23,6 @@ export function AccessGateCard(props: AccessGateCardProps) {
   const [open, setOpen] = useState(false)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [lanDraft, setLanDraft] = useState('')
-  const [portDraft, setPortDraft] = useState('')
   const [certMode, setCertMode] = useState<'auto' | 'custom'>('auto')
   const [certDraft, setCertDraft] = useState('')
   const [keyDraft, setKeyDraft] = useState('')
@@ -35,28 +33,14 @@ export function AccessGateCard(props: AccessGateCardProps) {
   const [restartHelp, setRestartHelp] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const disabled = !state.available || !state.writable
-  const storedLan = state.available ? state.lanHost : undefined
-  const storedPort = state.available ? state.httpsPort : undefined
-  const storedProxyOn = state.available ? state.proxyEnabled : false
   const storedCertMode = state.available ? state.certMode : 'auto'
   const storedCustomConfigured = state.available ? state.customConfigured : false
-  const [proxyOn, setProxyOn] = useState(false)
   // Drafts follow the stored values; typing wins until a store update lands.
-  useEffect(() => { setProxyOn(storedProxyOn) }, [storedProxyOn])
-  useEffect(() => {
-    if (storedLan !== undefined) setLanDraft(storedLan)
-  }, [storedLan])
-  useEffect(() => {
-    if (storedPort !== undefined) setPortDraft(storedPort)
-  }, [storedPort])
   useEffect(() => { setCertMode(storedCertMode) }, [storedCertMode])
   // The stored password is secret and never surfaced; any typed password
   // counts as an unsaved draft. PEM content is never projected back either.
   const dirty = state.available
     && (password.length > 0 || confirm.length > 0
-      || proxyOn !== storedProxyOn
-      || (proxyOn && (lanDraft.trim() !== state.lanHost
-        || portDraft.trim() !== state.httpsPort))
       || certMode !== storedCertMode
       || (certMode === 'custom' && (certDraft.length > 0 || keyDraft.length > 0)))
   /** Read one uploaded file as trimmed text into the given draft setter. */
@@ -71,12 +55,6 @@ export function AccessGateCard(props: AccessGateCardProps) {
     reader.readAsText(file)
   }
   if (!state.available) return null
-  /** 反代启用时返回访问地址（https://<lanHost>:<port>/），否则空串。 */
-  const accessUrl = (): string => {
-    const lan = lanDraft.trim()
-    const port = Number.parseInt(portDraft.trim(), 10)
-    return proxyOn && lan.length > 0 && Number.isInteger(port) ? `https://${lan}:${port}/` : ''
-  }
   /** 重启后提示：systemd 自动重启说明 + 可复制给 AI 的配置提示词。 */
   const buildRestartHelp = (): string => {
     const cmd = 'node /usr/bin/dsh web'
@@ -91,38 +69,7 @@ export function AccessGateCard(props: AccessGateCardProps) {
       '请生成 /etc/systemd/system/dsh-web.service 单元文件，并给出 systemctl enable --now 命令。',
     ].join('\n')
   }
-  const checkPortInUse = async (port: number): Promise<boolean> => {
-    try {
-      const res = await fetch('/access-gate/check-port', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ port }),
-      })
-      return (await res.json() as { inUse?: boolean }).inUse === true
-    } catch {
-      return false // 检测不可用 → 放行（后端 ensure 仍会兜底）
-    }
-  }
   const save = async (): Promise<void> => {
-    const lanHost = lanDraft.trim()
-    const httpsPort = Number.parseInt(portDraft.trim(), 10)
-    if (proxyOn) {
-      if (lanHost.length === 0) {
-        setKind('err')
-        setMessage(t('hostEmpty'))
-        return
-      }
-      if (!Number.isInteger(httpsPort) || httpsPort < 1 || httpsPort > 65535) {
-        setKind('err')
-        setMessage(t('portInvalid'))
-        return
-      }
-      if (await checkPortInUse(httpsPort)) {
-        setKind('err')
-        setMessage(t('portInUse'))
-        return
-      }
-    }
     if (password.length > 0) {
       if (password.length < MIN_PASSWORD_LENGTH) {
         setKind('err')
@@ -135,21 +82,14 @@ export function AccessGateCard(props: AccessGateCardProps) {
         return
       }
     }
-    if (proxyOn && certMode === 'custom' && !storedCustomConfigured && (certDraft.length === 0 || keyDraft.length === 0)) {
+    if (certMode === 'custom' && !storedCustomConfigured && (certDraft.length === 0 || keyDraft.length === 0)) {
       setKind('err')
       setMessage(t('certMissing'))
       return
     }
-    // 开关关 = 关闭反代（清空参数）；开且参数非空才启用
-    const on = proxyOn && lanHost.length > 0
-    const proxyLan = on ? lanHost : ''
-    const proxyPort = on ? String(httpsPort) : ''
     setSaving(true)
     const ok = await props.save({
       password,
-      proxyEnabled: on,
-      lanHost: proxyLan,
-      httpsPort: proxyPort,
       certMode,
       customCert: certDraft,
       customKey: keyDraft,
@@ -162,6 +102,11 @@ export function AccessGateCard(props: AccessGateCardProps) {
       setConfirm('')
       setCertDraft('')
       setKeyDraft('')
+      if (certMode === 'custom' && (certDraft.length > 0 || keyDraft.length > 0)) {
+        // 新上传了自有证书：提示重启生效
+        setKind('ok')
+        setMessage(password.length > 0 ? `${t('savedWithPassword')} ${t('certRestartHint')}` : `${t('saved')} ${t('certRestartHint')}`)
+      }
     } else {
       setKind('err')
       setMessage(t('saveFailed'))
@@ -176,8 +121,7 @@ export function AccessGateCard(props: AccessGateCardProps) {
       const res = await fetch('/access-gate/restart', { method: 'POST' })
       if (res.ok) {
         setKind('ok')
-        const url = accessUrl()
-        setMessage(url !== '' ? `${t('restartSent')}${t('restartVisit')} ${url}` : t('restartSent'))
+        setMessage(t('restartSent'))
         setRestartHelp(buildRestartHelp())
       } else {
         setKind('err')
@@ -192,9 +136,6 @@ export function AccessGateCard(props: AccessGateCardProps) {
     setRestarting(false)
   }
   const discard = (): void => {
-    setProxyOn(storedProxyOn)
-    if (storedLan !== undefined) setLanDraft(storedLan)
-    if (storedPort !== undefined) setPortDraft(storedPort)
     setCertMode(storedCertMode)
     setCertDraft('')
     setKeyDraft('')
@@ -204,7 +145,7 @@ export function AccessGateCard(props: AccessGateCardProps) {
     setRestartHelp('')
     setDialogOpen(false)
   }
-  const cardStyle = { border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-3)', borderRadius: '10px', overflow: 'hidden' }
+  const cardStyle = { border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-3)', borderRadius: '10px', overflow: 'hidden' } as const
   const headerStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', width: '100%', border: 0, background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' } as const
   const titleStyle = { fontSize: '14px', fontWeight: 600, margin: 0, color: 'var(--dsw-alias-label-primary)' } as const
   const descStyle = { fontSize: '12px', lineHeight: '1.6', margin: '2px 0 0', color: 'var(--dsw-alias-label-tertiary)' } as const
@@ -221,13 +162,11 @@ export function AccessGateCard(props: AccessGateCardProps) {
   const dangerButtonStyle = { border: '1px solid var(--dsw-alias-label-error, #f87171)', borderRadius: '8px', background: 'transparent', color: 'var(--dsw-alias-label-error, #f87171)', height: '32px', padding: '0 18px', fontSize: '13px', cursor: 'pointer' } as const
   const messageStyle = { margin: '10px 0 0', fontSize: '12px', lineHeight: '1.6', color: kind === 'ok' ? 'var(--dsw-alias-label-success, #4ade80)' : 'var(--dsw-alias-label-error)' } as const
   const readOnlyStyle = { color: 'var(--dsw-alias-label-tertiary)', fontSize: '12px', margin: '8px 0 0' } as const
-  const accessUrlStyle = { margin: '8px 0 0', fontSize: '13px', fontWeight: 600, lineHeight: '1.6', color: 'var(--dsw-alias-label-success, #4ade80)' } as const
   const restartHelpStyle = { margin: '10px 0 0', padding: '10px 12px', background: 'var(--dsw-alias-bg-layer-1)', border: '1px dashed var(--dsw-alias-border-l2)', borderRadius: '8px', fontSize: '12px', lineHeight: '1.7', color: 'var(--dsw-alias-label-secondary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', userSelect: 'text', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' } as const
   const overlayStyle = { position: 'fixed', inset: '0', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' } as const
   const dialogStyle = { background: 'var(--dsw-alias-bg-layer-3)', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: '12px', padding: '18px 20px', maxWidth: '580px', width: '100%', maxHeight: '82vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.35)' } as const
   const dialogTitleStyle = { fontSize: '15px', fontWeight: 600, margin: '0 0 6px', color: 'var(--dsw-alias-label-primary)' } as const
   const dialogTodoStyle = { fontSize: '12px', fontWeight: 600, margin: '12px 0 0', color: 'var(--dsw-alias-label-secondary)' } as const
-  const url = accessUrl()
   const messageLines = message.split('\n')
   return (
     <li style={cardStyle}>
@@ -259,65 +198,36 @@ export function AccessGateCard(props: AccessGateCardProps) {
               </div>
             </div>
             <div style={sectionStyle}>
-              <p style={sectionTitleStyle}>{t('proxySection')}</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
-                <input type="checkbox" checked={proxyOn} disabled={disabled} style={{ width: '16px', height: '16px', accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={(event) =>{  setProxyOn(event.target.checked) }} />
-                <label style={labelStyle}>{t('proxyToggleLabel')}</label>
+              <p style={sectionTitleStyle}>{t('certSection')}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' }}>
+                  <input type="radio" name="access-gate-cert-mode" checked={certMode === 'auto'} disabled={disabled} style={{ accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={() =>{  setCertMode('auto') }} />
+                  {t('certModeAuto')}
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' }}>
+                  <input type="radio" name="access-gate-cert-mode" checked={certMode === 'custom'} disabled={disabled} style={{ accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={() =>{  setCertMode('custom') }} />
+                  {t('certModeCustom')}
+                </label>
               </div>
-              <p style={hintStyle}>{t('proxyToggleHint')}</p>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>{t('lanHostLabel')}</label>
-                <input type="text" value={lanDraft} disabled={disabled || !proxyOn} style={inputStyle} placeholder={t('lanHostPlaceholder')} onChange={(event) =>{  setLanDraft(event.target.value) }} />
-                <p style={hintStyle}>{t('lanHostHint')}</p>
-              </div>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>{t('httpsPortLabel')}</label>
-                <input type="number" inputMode="numeric" min={1} max={65535} step={1} value={portDraft} disabled={disabled || !proxyOn} style={inputStyle} onChange={(event) =>{  setPortDraft(event.target.value) }} />
-                <p style={hintStyle}>{t('httpsPortHint')}</p>
-              </div>
-              {url === ''
-                ? null
-                : (
-                  <p style={accessUrlStyle}>
-                    <span>
-                      {t('accessUrlLabel')}
-                      {' '}
-                      <b style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'var(--dsw-alias-label-success, #4ade80)', wordBreak: 'break-all' }}>{url}</b>
-                    </span>
-                  </p>
-                )}
-              <div style={sectionStyle}>
-                <p style={sectionTitleStyle}>{t('certSection')}</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0', flexWrap: 'wrap' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' }}>
-                    <input type="radio" name="access-gate-cert-mode" checked={certMode === 'auto'} disabled={disabled || !proxyOn} style={{ accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={() =>{  setCertMode('auto') }} />
-                    {t('certModeAuto')}
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' }}>
-                    <input type="radio" name="access-gate-cert-mode" checked={certMode === 'custom'} disabled={disabled || !proxyOn} style={{ accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={() =>{  setCertMode('custom') }} />
-                    {t('certModeCustom')}
-                  </label>
-                </div>
-                <p style={hintStyle}>{t('certModeHint')}</p>
-                {certMode === 'custom'
-                  ? (
-                    <>
-                      <div style={fieldStyle}>
-                        <label style={labelStyle}>{t('certFileLabel')}</label>
-                        <input type="file" accept=".crt,.cer,.pem,text/plain" disabled={disabled || !proxyOn} style={inputStyle} onChange={(event) =>{  readFileInto(event, setCertDraft) }} />
-                        {storedCustomConfigured && certDraft.length === 0
-                          ? <p style={hintStyle}>{t('customConfigured')}</p>
-                          : <p style={hintStyle}>{t('certFileHint')}</p>}
-                      </div>
-                      <div style={fieldStyle}>
-                        <label style={labelStyle}>{t('keyFileLabel')}</label>
-                        <input type="file" accept=".key,.pem,text/plain" disabled={disabled || !proxyOn} style={inputStyle} onChange={(event) =>{  readFileInto(event, setKeyDraft) }} />
-                        <p style={hintStyle}>{t('keyFileHint')}</p>
-                      </div>
-                    </>
-                  )
-                  : null}
-              </div>
+              <p style={hintStyle}>{t('certModeHint')}</p>
+              {certMode === 'custom'
+                ? (
+                  <>
+                    <div style={fieldStyle}>
+                      <label style={labelStyle}>{t('certFileLabel')}</label>
+                      <input type="file" accept=".crt,.cer,.pem,text/plain" disabled={disabled} style={inputStyle} onChange={(event) =>{  readFileInto(event, setCertDraft) }} />
+                      {storedCustomConfigured && certDraft.length === 0
+                        ? <p style={hintStyle}>{t('customConfigured')}</p>
+                        : <p style={hintStyle}>{t('certFileHint')}</p>}
+                    </div>
+                    <div style={fieldStyle}>
+                      <label style={labelStyle}>{t('keyFileLabel')}</label>
+                      <input type="file" accept=".key,.pem,text/plain" disabled={disabled} style={inputStyle} onChange={(event) =>{  readFileInto(event, setKeyDraft) }} />
+                      <p style={hintStyle}>{t('keyFileHint')}</p>
+                    </div>
+                  </>
+                )
+                : null}
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => { void save() }} disabled={disabled || saving} style={buttonStyle}>{t('saveLabel')}</button>

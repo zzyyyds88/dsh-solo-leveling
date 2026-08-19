@@ -54,7 +54,7 @@
 ```bash
 pnpm install
 pnpm run build
-pnpm dsh web          # http://127.0.0.1:3080
+pnpm dsh web          # 默认 HTTPS：https://0.0.0.0:3080（局域网 https://<主机IP>:3080，首次访问需在 /setup 设口令）
 ```
 
 > 前置：Node.js `^22.19.0 || >=24.0.0`、pnpm `11.7.0`（见根 `package.json`）。

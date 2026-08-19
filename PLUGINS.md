@@ -12,7 +12,7 @@
 
 | 包 | 组 | 作用 |
 |---|---|---|
-| `dsh-host-access-gate` + `dsh-client-ui-access-gate` | host / client | **访问门禁**：登录门闸（首次 `/setup` 设口令、会话 Cookie + 限速、`access-gate` 口令命名空间）+「设置 → 插件 → 插件配置 → 访问门禁」卡片（改口令 + HTTPS 反代参数） |
+| `dsh-host-access-gate` + `dsh-client-ui-access-gate` | host / client | **访问门禁**：登录门闸（首次 `/setup` 设口令、会话 Cookie + 限速、`access-gate` 口令命名空间）+「设置 → 插件 → 插件配置 → 访问门禁」卡片（改口令 + HTTPS 证书方式：自动自签 / 上传自有证书） |
 | `dsh-defaults` + `dsh-client-ui-defaults` | settings / client | 默认工作目录 / 默认重试次数的设置命名空间 +「默认值」卡片 |
 | `dsh-client-ui-mobile-adapt` | client | **手机端适配**：窄屏聊天区占满全宽、右侧面板变抽屉、输入框 16px 防 iOS 缩放、桌宠缩小让位 |
 | `dsh-client-ui-pet` | client | **网页桌宠**：随任务/工具/上下文/活跃会话切换表情，WebAudio 音效（基础+附加分组）、edge-tts 离线语音、账房 token 统计、纸屑庆祝 |
@@ -39,7 +39,7 @@
 |---|---|---|
 | ~~修改默认工作目录~~ | Web GUI 目录选择器默认打开 `/home/user/Projects` | 已被 **dsh-defaults 统一插件**替代，原文件夹已删除 |
 | ~~思考强度与重试默认值~~ | 思考强度档位 + 默认重试 2→5 | 已被 **dsh-defaults 统一插件**替代 |
-| ~~全网监听与登录鉴权~~ | HTTPS 反代 + 口令门闸 | 已插件化为「访问门禁」（`dsh-host-access-gate` / `dsh-client-ui-access-gate`，反代为进程内实现，已移除 caddy 二进制） |
+| ~~全网监听与登录鉴权~~ | HTTPS 监听 0.0.0.0 + 口令门闸 | 已插件化并收敛为「访问门禁」+ 默认 HTTPS（`dsh-host-access-gate` / `dsh-client-ui-access-gate`；TLS 由 `dsh-web-app` 原生提供：纯 JS 自签或上传自有证书，caddy 二进制已移除） |
 
 ### 1.3 环境
 
@@ -55,7 +55,7 @@
 
 | 插件 | 验证方法 |
 |---|---|
-| 访问门禁 | 首次 `/setup` 设口令；设置 → 插件 → 插件配置 →「访问门禁」卡片改口令 + 配置反代参数；未登录 302/401/403 |
+| 访问门禁 | 首次 `/setup` 设口令；设置 → 插件 → 插件配置 →「访问门禁」卡片改口令 + 证书方式（自签 / 上传自有证书）；未登录 302/401/403；默认 HTTPS 0.0.0.0:3080 开箱可用 |
 | 默认值 | 设置 → 插件 → 插件配置 →「默认值」卡片可读写；改默认工作目录后选择器即时定位 |
 | 手机端适配 | 手机视口（≤768px）打开 GUI：聊天区占满全宽、右侧面板变抽屉、设置面板无竖排 |
 | 桌宠 | 页面右下角出现桌宠；音效/语音/账房/诊断面板正常 |

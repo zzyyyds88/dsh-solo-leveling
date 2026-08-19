@@ -3,8 +3,9 @@
  *
  * 在「设置 → 插件 → 插件配置」区注册一张卡片，绑定 `access-gate` 设置
  * 命名空间（由 `dsh-host-access-gate` 宿主插件注册、`dsh-host-apiproxy`
- * 动态暴露）。字段：访问口令（可留空不修改）+ 反向代理参数 lanHost /
- * httpsPort。保存口令后 host 轮换 HMAC key，旧会话立即失效。
+ * 动态暴露）。字段：访问口令（可留空不修改）+ 证书方式（auto 自签 /
+ * custom 上传自有证书）。保存口令后 host 轮换 HMAC key，旧会话立即失效；
+ * 自有证书保存后写入 `$DSH_HOME/https/custom.{crt,key}`，重启后生效。
  * @module @deepseek-ai/dsh-client-ui-access-gate
  */
 
@@ -22,20 +23,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       | 'title' | 'description'
       | 'passwordSection' | 'passwordLabel' | 'passwordPlaceholder' | 'passwordHint'
       | 'confirmLabel' | 'confirmPlaceholder' | 'confirmHint'
-      | 'proxySection' | 'proxyToggleLabel' | 'proxyToggleHint'
-      | 'lanHostLabel' | 'lanHostPlaceholder' | 'lanHostHint'
-      | 'httpsPortLabel' | 'httpsPortPlaceholder' | 'httpsPortHint'
       | 'certSection' | 'certModeLabel' | 'certModeAuto' | 'certModeCustom' | 'certModeHint'
       | 'certFileLabel' | 'keyFileLabel' | 'certFileHint' | 'keyFileHint' | 'customConfigured'
-      | 'certMissing'
-      | 'accessUrlLabel' | 'restartVisit'
+      | 'certMissing' | 'certRestartHint'
       | 'saveLabel' | 'discard' | 'restart'
       | 'restartConfirm' | 'restartDialogTitle' | 'restartDialogTodo'
       | 'restartCancel' | 'restartConfirmLabel'
       | 'restartSent' | 'restartHelpIntro' | 'restartFailed'
       | 'unsaved' | 'readOnly'
       | 'tooShort' | 'mismatch' | 'saved' | 'savedWithPassword' | 'saveFailed'
-      | 'hostEmpty' | 'portInvalid' | 'portInUse'
   }
 }
 
@@ -45,9 +41,6 @@ export const NS = 'dsh-client-ui-access-gate'
 /** The `access-gate` fields this card edits. */
 interface AccessGateSettings {
   password?: string
-  proxyEnabled?: boolean
-  lanHost?: string
-  httpsPort?: string
   certMode?: 'auto' | 'custom'
   customCert?: string
   customKey?: string
@@ -59,9 +52,6 @@ export interface AccessGateCardState {
   available: boolean
   /** Whether the Host accepts writes; false disables the controls. */
   writable: boolean
-  proxyEnabled: boolean
-  lanHost: string
-  httpsPort: string
   /** Certificate mode: `auto` = pure-JS self-signed, `custom` = uploaded cert. */
   certMode: 'auto' | 'custom'
   /** Whether a custom cert/key pair is stored (PEM content itself is never surfaced). */
@@ -77,9 +67,6 @@ export interface AccessGateCardFace {
   /** Write the editable fields; resolves true only when the store confirms them. */
   save: (fields: {
     password: string
-    proxyEnabled: boolean
-    lanHost: string
-    httpsPort: string
     certMode: 'auto' | 'custom'
     customCert: string
     customKey: string
@@ -112,9 +99,6 @@ export class AccessGateCardController {
     return {
       available: ready,
       writable: snapshot.writable,
-      proxyEnabled: ready && value !== undefined && value.proxyEnabled === true,
-      lanHost: ready && value !== undefined ? (value.lanHost ?? '') : '',
-      httpsPort: ready && value !== undefined ? (value.httpsPort ?? '') : '',
       certMode: ready && value !== undefined && value.certMode === 'custom' ? 'custom' : 'auto',
       customConfigured: ready && value !== undefined
         && typeof value.customCert === 'string' && value.customCert.length > 0
@@ -130,18 +114,12 @@ export class AccessGateCardController {
    */
   async save(fields: {
     password: string
-    proxyEnabled: boolean
-    lanHost: string
-    httpsPort: string
     certMode: 'auto' | 'custom'
     customCert: string
     customKey: string
   }): Promise<boolean> {
     try {
       if (fields.password.length > 0) await this.scope.set('password', fields.password)
-      await this.scope.set('proxyEnabled', fields.proxyEnabled)
-      await this.scope.set('lanHost', fields.lanHost)
-      await this.scope.set('httpsPort', fields.httpsPort)
       await this.scope.set('certMode', fields.certMode)
       if (fields.certMode === 'custom') {
         if (fields.customCert.length > 0) await this.scope.set('customCert', fields.customCert)
@@ -152,13 +130,10 @@ export class AccessGateCardController {
     }
     const snapshot = this.scope.getSnapshot()
     const value = snapshot.value
-    const proxyLanded = snapshot.status === 'ready'
+    const modeLanded = snapshot.status === 'ready'
       && value !== undefined
-      && value.proxyEnabled === fields.proxyEnabled
-      && value.lanHost === fields.lanHost
-      && value.httpsPort === fields.httpsPort
       && value.certMode === fields.certMode
-    if (!proxyLanded) return false
+    if (!modeLanded) return false
     if (fields.certMode !== 'custom') return true
     // custom mode: confirm the newly uploaded PEMs landed (or the existing pair is still stored).
     const certLanded = typeof value.customCert === 'string'
@@ -184,7 +159,7 @@ export class AccessGateCardController {
 
 const zh = {
   title: '访问门禁',
-  description: '配置 Web 界面登录口令与 HTTPS 反向代理（进程内实现，无需外部软件）。口令保存后旧会话失效；填写反代参数并保存后立即生效。',
+  description: '配置 Web 界面登录口令与 HTTPS 证书。默认 HTTPS（自动自签证书）开箱即用，监听 0.0.0.0，局域网内浏览器访问 https://<主机IP>:3080 即可；设置口令后旧会话失效。',
   passwordSection: '访问口令',
   passwordLabel: '新访问口令（至少 6 位，留空 = 不修改）',
   passwordPlaceholder: '输入新口令',
@@ -192,28 +167,18 @@ const zh = {
   confirmLabel: '确认新访问口令',
   confirmPlaceholder: '再次输入新口令',
   confirmHint: '两次输入需保持一致。',
-  proxySection: 'HTTPS 反向代理',
-  proxyToggleLabel: '启用 HTTPS 反向代理',
-  proxyToggleHint: '默认关闭。开启后填写下方地址与端口并保存，HTTPS 反代立即生效（无需安装任何软件 / 无需手动跑脚本）。',
-  lanHostLabel: '局域网地址 / 域名',
-  lanHostPlaceholder: '例如 192.168.1.100',
-  lanHostHint: 'HTTPS 反代绑定的地址，也是浏览器访问地址；证书需覆盖该地址。',
-  httpsPortLabel: 'HTTPS 端口',
-  httpsPortPlaceholder: '例如 5700',
-  httpsPortHint: '对外 HTTPS 端口（1-65535）。改动保存后立即生效。',
-  certSection: '证书',
+  certSection: 'HTTPS 证书',
   certModeLabel: '证书方式',
   certModeAuto: '自动生成（自签）',
   certModeCustom: '使用自有证书',
-  certModeHint: '自动生成：程序用纯代码生成自签证书（免安装、免命令）。使用自有证书：上传你申请/购买的证书与私钥，证书需覆盖上方地址（SAN）。',
+  certModeHint: '自动生成：程序用纯代码生成自签证书（免安装、免命令）。使用自有证书：上传你申请/购买的证书与私钥（SAN 需覆盖你的访问地址）。',
   certFileLabel: '证书文件（.crt / .pem）',
   keyFileLabel: '私钥文件（.key / .pem）',
   certFileHint: 'PEM 格式证书，选择文件后自动填入。',
   keyFileHint: '与证书匹配的未加密 PEM 私钥，选择文件后自动填入。',
-  customConfigured: '已配置自有证书（当前使用中）',
+  customConfigured: '已配置自有证书（重启后生效）',
   certMissing: '选择「使用自有证书」时，需上传证书与私钥文件。',
-  accessUrlLabel: '🔒 保存后请访问：',
-  restartVisit: '重启后请访问',
+  certRestartHint: '自有证书在保存后写入磁盘，需要「重启」dsh 后由服务端加载生效。',
   saveLabel: '保存',
   discard: '放弃',
   restart: '重启',
@@ -229,17 +194,14 @@ const zh = {
   readOnly: '当前设置不可写。',
   tooShort: '口令至少需要 6 位。',
   mismatch: '两次输入的口令不一致。',
-  saved: '已保存：反代开关、参数与证书已生效。',
-  savedWithPassword: '已保存：口令已更新，旧会话已失效，请重新登录；反代开关、参数与证书已同时生效。',
+  saved: '已保存：口令与证书方式已更新。',
+  savedWithPassword: '已保存：口令已更新，旧会话已失效，请重新登录；证书方式已同步更新。',
   saveFailed: '保存失败：可能已被其它修改覆盖或权限不足，请重试。',
-  hostEmpty: '启用反代时「局域网地址 / 域名」不能为空。',
-  portInvalid: 'HTTPS 端口必须是 1-65535 的整数。',
-  portInUse: '该 HTTPS 端口已被占用（可能是其它服务或另一实例的反代），请换一个端口。',
 }
 
 const en = {
   title: 'Access Gate',
-  description: 'Configure the web GUI login password and the HTTPS reverse proxy (in-process, no external software). A saved password invalidates all sessions; proxy parameters take effect as soon as you save.',
+  description: 'Configure the web GUI login password and the HTTPS certificate. HTTPS is on by default (auto self-signed cert) listening on 0.0.0.0 — visit https://<host-ip>:3080 from the LAN. A saved password invalidates all sessions.',
   passwordSection: 'Access password',
   passwordLabel: 'New access password (6+ chars, leave empty to keep)',
   passwordPlaceholder: 'Enter new password',
@@ -247,28 +209,18 @@ const en = {
   confirmLabel: 'Confirm new access password',
   confirmPlaceholder: 'Enter it again',
   confirmHint: 'Both entries must match.',
-  proxySection: 'HTTPS reverse proxy',
-  proxyToggleLabel: 'Enable HTTPS reverse proxy',
-  proxyToggleHint: 'Disabled by default. Turn it on, fill in the address and port below and save — the HTTPS proxy starts immediately (no software install, no script).',
-  lanHostLabel: 'LAN host / domain',
-  lanHostPlaceholder: 'e.g. 192.168.1.100',
-  lanHostHint: 'The address the HTTPS reverse proxy binds and the browser visits; the certificate must cover it.',
-  httpsPortLabel: 'HTTPS port',
-  httpsPortPlaceholder: 'e.g. 5700',
-  httpsPortHint: 'The external HTTPS port (1-65535). Takes effect as soon as you save.',
-  certSection: 'Certificate',
+  certSection: 'HTTPS certificate',
   certModeLabel: 'Certificate mode',
   certModeAuto: 'Auto-generated (self-signed)',
   certModeCustom: 'Use own certificate',
-  certModeHint: 'Auto: the program generates a self-signed certificate in pure code (no tools, no commands). Own certificate: upload your certificate and key; the cert must cover the address above (SAN).',
+  certModeHint: 'Auto: the program generates a self-signed certificate in pure code (no tools, no commands). Own certificate: upload your certificate and key (the SAN must cover your access address).',
   certFileLabel: 'Certificate file (.crt / .pem)',
   keyFileLabel: 'Private key file (.key / .pem)',
   certFileHint: 'PEM certificate; picked up automatically when you select a file.',
   keyFileHint: 'Unencrypted PEM private key matching the certificate; picked up automatically when you select a file.',
-  customConfigured: 'Own certificate configured (in use)',
+  customConfigured: 'Own certificate configured (applies after restart)',
   certMissing: 'When using your own certificate, both the certificate and the key files are required.',
-  accessUrlLabel: '🔒 Visit after saving:',
-  restartVisit: 'after restart visit',
+  certRestartHint: 'An uploaded certificate is written to disk on save and loaded by the server after Restart.',
   saveLabel: 'Save',
   discard: 'Discard',
   restart: 'Restart',
@@ -284,12 +236,9 @@ const en = {
   readOnly: 'Settings are not writable.',
   tooShort: 'The password needs at least 6 characters.',
   mismatch: 'The two entries do not match.',
-  saved: 'Saved: the proxy toggle, parameters and certificate are live now.',
-  savedWithPassword: 'Saved: password changed and all old sessions are invalid — please sign in again; the proxy toggle, parameters and certificate are live now.',
+  saved: 'Saved: the password and certificate mode are updated.',
+  savedWithPassword: 'Saved: password changed and all old sessions are invalid — please sign in again; the certificate mode is updated too.',
   saveFailed: 'Save failed: possibly overwritten concurrently or not permitted. Retry.',
-  hostEmpty: 'The LAN host must not be empty when the proxy is enabled.',
-  portInvalid: 'The HTTPS port must be an integer between 1 and 65535.',
-  portInUse: "This HTTPS port is already in use (another service or another instance's proxy). Pick a different port.",
 }
 
 /**

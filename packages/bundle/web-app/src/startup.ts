@@ -9,6 +9,7 @@
 import { Command } from 'commander'
 import type { Context } from '@deepseek-ai/cordis'
 import { parseCmdline } from '@deepseek-ai/dsh-cmdline'
+import { ensureWebTls, type TlsMaterial } from './tls.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'web-startup'
@@ -27,6 +28,12 @@ export interface WebStartupValues {
   port?: number
   /** Explicit `--trusted-host` authorities, in argument order. */
   trustedHosts: string[]
+  /**
+   * PEM key/cert pair for the HTTPS listener. Always present: `dsh web`
+   * serves HTTPS out of the box (auto-generated self-signed cert, or the
+   * operator's own cert uploaded through the access-gate settings card).
+   */
+  tls: TlsMaterial
 }
 
 /** The web flag family, as commander parsed it. */
@@ -43,32 +50,30 @@ interface WebOptions {
 function webCommand(): Command {
   return new Command()
     .name('dsh --profile web')
-    .description('Serve the DeepSeek Harness browser UI.')
+    .description('Serve the DeepSeek Harness browser UI over HTTPS (auto self-signed cert).')
     .helpOption('-h, --help', 'show this help')
-    .option('--host <host>', 'bind host')
-    .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
+    .option('--host <host>', 'bind host (default 0.0.0.0: reachable from the LAN)')
+    .option('--port <port>', 'listen port (default 3080); pass 0 to let the OS pick a free one')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
     .addHelpText('after', `
 Examples:
-  dsh --profile web                          serve on the composed host and port
+  dsh --profile web                          serve HTTPS on 0.0.0.0:3080
   dsh --profile web --port 8080              serve on another port
 `)
 }
 
 /**
  * Parse and provide the Web invocation as an ordinary Cordis service. The
- * command's action publishes the flags this invocation named; `--host 0.0.0.0`
- * or a non-numeric `--port` is a usage error, so on rejection (and on `--help`)
- * nothing is provided.
+ * command's action publishes the flags this invocation named; a non-numeric
+ * `--port` is a usage error, so on rejection (and on `--help`) nothing is
+ * provided. TLS material is prepared here so every flag-configured row (the
+ * webserver) reads one consistent HTTPS key/cert pair.
  * @param ctx - plugin context carrying the command line.
  */
 export function apply(ctx: Context): void {
   const program = webCommand()
   program.action(() => {
     const options = program.opts<WebOptions>()
-    if (options.host === '0.0.0.0') {
-      program.error('error: --host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
-    }
     if (options.port !== undefined && !/^\d+$/.test(options.port)) {
       program.error(`error: --port must be a number, got ${JSON.stringify(options.port)}`)
     }
@@ -76,6 +81,7 @@ export function apply(ctx: Context): void {
       ...options.host !== undefined && { host: options.host },
       ...options.port !== undefined && { port: Number(options.port) },
       trustedHosts: options.trustedHost ?? [],
+      tls: ensureWebTls(),
     } satisfies WebStartupValues)
   })
   parseCmdline(ctx, program)
