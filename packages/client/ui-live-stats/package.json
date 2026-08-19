@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-live-stats",
   "description": "Live token/throughput statistics for the DSH web GUI: a host token-estimation projection plus a TPS row and plugin settings card",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0-rc.7-local.1",
   "publishConfig": {
     "access": "public"
   },

@@ -157,12 +157,15 @@
         surfaceContext: true
         trustedHosts: !!js ctx.webStartup.trustedHosts
 
-    # The client-plugin reload chain, always mounted: it is idle until a
-    # rebuild watcher (pnpm run dev:web) actually rewrites client bundles. It
-    # is a row rather than a child of web-runtime because its node half is a
-    # client-side package, which a host-side bundle cannot import.
+    # The client-plugin reload chain. Disabled in production web boots: its
+    # node half constructs an HMR service that requires the Node process to run
+    # with --expose-internals (a dev-only flag), and HMR has no use without a
+    # live rebuild watcher (pnpm run dev:web). Development overlays re-enable
+    # the row. It is a row rather than a child of web-runtime because its node
+    # half is a client-side package, which a host-side bundle cannot import.
     - id: client-hmr
       name: '@deepseek-ai/dsh-client-hmr'
+      disabled: true
 
     # ── browser plugin roster (dsh.client rows; node halves are layer-2 hosts) ──
 
