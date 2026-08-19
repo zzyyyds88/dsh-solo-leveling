@@ -269,7 +269,7 @@ describe('web e2e: agent-preset selection', () => {
       await composer.fill('')
       await composer.fill('/')
       return menuOptions(page)
-    }, { timeout: 45_000, intervals: [250, 500, 1000, 2000] })
+    }, { timeout: 45_000, interval: 250 })
       .toEqual(expect.arrayContaining([expect.stringContaining(SKILL_NAME)]))
     const onStandard = await menuOptions(page)
     expect(onStandard.some(option => option.startsWith('compact'))).toBe(true)
