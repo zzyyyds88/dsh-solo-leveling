@@ -22,6 +22,7 @@ body[data-dsh-maid-atelier] {
   --dsw-alias-bg-layer-2: rgba(235, 240, 250, 0.84);
   --dsw-alias-bg-layer-3: rgba(224, 231, 246, 0.88);
   --dsw-alias-bg-overlay: rgba(248, 250, 255, 0.96);
+  --dsw-alias-bg-module-platform: #eef1f8;
   --dsw-alias-border-l1: rgba(71, 91, 145, 0.18);
   --dsw-alias-border-l2-darkmode-thin: rgba(71, 91, 145, 0.25);
   --dsw-alias-border-l2: rgba(71, 91, 145, 0.3);
@@ -59,6 +60,7 @@ body[data-dsh-maid-atelier][data-ds-dark-theme] {
   --dsw-alias-bg-layer-2: rgba(24, 40, 80, 0.92);
   --dsw-alias-bg-layer-3: rgba(32, 49, 91, 0.94);
   --dsw-alias-bg-overlay: rgba(13, 25, 59, 0.97);
+  --dsw-alias-bg-module-platform: rgba(16, 26, 56, 0.92);
   --dsw-alias-border-l1: rgba(151, 169, 216, 0.2);
   --dsw-alias-border-l2-darkmode-thin: rgba(151, 169, 216, 0.3);
   --dsw-alias-border-l2: rgba(151, 169, 216, 0.34);
@@ -141,6 +143,12 @@ body[data-dsh-maid-atelier][data-ds-dark-theme] {
   --aion-fill-2: var(--dsw-alias-interactive-bg-hover);
   --aion-fill-3: var(--dsw-alias-interactive-bg-active);
   --aion-aou-6: var(--maid-periwinkle);
+}
+
+/* 暗色下外观（Appearance）未选中 cube 默认透明、仅细边框，与面板几乎
+   融为一体；补一层深蓝微背景使其仍可辨识为可选控件（选中态保持原样）。 */
+body[data-dsh-maid-atelier][data-ds-dark-theme] [class*='themeCube']:not([class*='selected']) {
+  background: rgba(16, 26, 56, 0.55);
 }
 
 /* --aion-aou-* 是 aionui 专属的 6 阶蓝灰 ramp，需显式亮/暗。 */
