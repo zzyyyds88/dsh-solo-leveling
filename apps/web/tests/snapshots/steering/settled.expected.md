@@ -16,10 +16,10 @@
   - img
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
-- button "Think The user wants me to use the ask_user_question tool to ask them a specific question with the given parameters. Let me do exactly that.":
+- button "Think The user wants me to use the ask_user_question tool with specific parameters. Let me do that exactly as instructed.":
   - img
   - img
-  - text: Think The user wants me to use the ask_user_question tool to ask them a specific question with the given parameters. Let me do exactly that.
+  - text: Think The user wants me to use the ask_user_question tool with specific parameters. Let me do that exactly as instructed.
 - button "Ask question 1/1 answered":
   - img
   - img
@@ -27,11 +27,11 @@
 - text: "Interjection: include the word BANANA in your final reply. {{clock}}"
 - button "Copy":
   - img
-- button "Think The user selected \"Yes\" and wants me to include the word \"BANANA\" in my final reply. Let me acknowledge their answer.":
+- button "Think The user answered \"Yes\" to the checkpoint question. I need to acknowledge their answer in one short sentence and include the word BANANA as instructed.":
   - img
   - img
-  - text: Think The user selected "Yes" and wants me to include the word "BANANA" in my final reply. Let me acknowledge their answer.
-- paragraph: Great, let's move forward. BANANA!
+  - text: Think The user answered "Yes" to the checkpoint question. I need to acknowledge their answer in one short sentence and include the word BANANA as instructed.
+- paragraph: Got it, let's keep going — BANANA.
 - button "Copy":
   - img
 - button "Good response":
@@ -48,6 +48,6 @@
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
-- button "6% of context used"
+- button "7% of context used"
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 98% Input 15.8K tok · Output 156 tok ·TPS {{throughput}} tok/s
+- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 49% Input 17.3K tok · Output 156 tok ·TPS {{throughput}} tok/s
