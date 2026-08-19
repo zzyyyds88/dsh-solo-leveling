@@ -146,11 +146,11 @@ export function AccessGateCard(props: AccessGateCardProps) {
     setDialogOpen(false)
   }
   const cardStyle = { border: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-layer-3)', borderRadius: '10px', overflow: 'hidden' } as const
-  const headerStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', width: '100%', border: 0, background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' } as const
+  const headerStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '14px 16px', width: '100%', border: 0, background: 'transparent', color: 'inherit', font: 'inherit', textAlign: 'left', cursor: 'pointer' } as const
   const titleStyle = { fontSize: '14px', fontWeight: 600, margin: 0, color: 'var(--dsw-alias-label-primary)' } as const
   const descStyle = { fontSize: '12px', lineHeight: '1.6', margin: '2px 0 0', color: 'var(--dsw-alias-label-tertiary)' } as const
   const pendingStyle = { fontSize: '11px', color: 'var(--dsw-alias-label-secondary)', background: 'var(--dsw-alias-bg-layer-1)', borderRadius: '5px', padding: '1px 6px', whiteSpace: 'nowrap' } as const
-  const bodyStyle = { borderTop: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-module-platform)', padding: '10px 14px 12px' } as const
+  const bodyStyle = { borderTop: '1px solid var(--dsw-alias-border-l2)', background: 'var(--dsw-alias-bg-module-platform)', padding: '12px 16px 14px' } as const
   const sectionStyle = { padding: '6px 0 4px', display: 'flex', flexDirection: 'column', gap: '4px' } as const
   const sectionTitleStyle = { fontSize: '12px', fontWeight: 600, margin: '8px 0 0', color: 'var(--dsw-alias-label-secondary)' } as const
   const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '6px', padding: '8px 0' } as const
