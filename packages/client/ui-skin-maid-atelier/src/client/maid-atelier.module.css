@@ -94,6 +94,9 @@ body[data-dsh-maid-atelier][data-ds-dark-theme] {
 body[data-dsh-maid-atelier] [data-dsh-live2d-root] {
   --pet-blue: var(--maid-periwinkle);
   --pet-cyan: var(--maid-gold);
+  /* Keep the floating pet clear of the hero card's gilded frame corner. */
+  right: 22px;
+  bottom: 20px;
 }
 
 /* 右侧面板（aionui-panel）核心 token：映射到皮肤 --dsw-*，自动亮/暗。
@@ -1754,6 +1757,12 @@ body[data-dsh-maid-atelier] [data-phase='hero'] [class*='headlineText'] {
   align-self: center;
   font-weight: 600;
   letter-spacing: 0.012em;
+  /* The headline straddles the light apron and the dark skirt of the artwork;
+     a soft white halo keeps the dark-on-dark half readable without a scrim. */
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0 14px rgba(255, 255, 255, 0.6),
+    0 6px 24px rgba(32, 49, 96, 0.3);
 }
 
 body[data-dsh-maid-atelier] [data-phase='hero'] [class*='previewBadge'] {
@@ -1872,6 +1881,12 @@ body[data-dsh-maid-atelier] [data-phase='hero'] [data-composer-card] {
 body[data-dsh-maid-atelier] [data-phase='hero'] [class*='input']::placeholder {
   color: var(--dsw-alias-label-secondary);
   opacity: 1;
+}
+
+/* The workspace/preset row sits only 8px above the card's raised porcelain
+   rim and bow; restore the figma 12px rhythm so the chip clears the trim. */
+body[data-dsh-maid-atelier] [data-phase='hero'] [class*='composerStack'] {
+  gap: 12px;
 }
 
 body[data-dsh-maid-atelier][data-ds-dark-theme]
