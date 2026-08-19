@@ -345,7 +345,7 @@ async function wheelUntilVisible(page: Page, selector: string, deltaY: number): 
       const composer = host.querySelector<HTMLElement>('[data-composer-seat]')
       const visibleBottom = composer?.getBoundingClientRect().top ?? viewport.bottom
       const rect = row.getBoundingClientRect()
-      return rect.bottom > viewport.top && rect.top < visibleBottom
+      return rect.top >= viewport.top && rect.top < visibleBottom
     })) return
     await wheelTranscript(page, deltaY)
   }
