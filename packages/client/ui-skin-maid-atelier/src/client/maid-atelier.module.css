@@ -730,26 +730,41 @@ body[data-dsh-maid-atelier] button[class*='newSession'] svg {
   stroke-width: 1.8;
 }
 
-/* Task-board sidebar entry: a standalone framed control so it reads as an
-   atelier fixture rather than a stock flat nav row. A hairline gold frame and
-   gold-tinted copy sit on the navy rail; hover/active deepen the frame. */
+/* Task-board sidebar entry: same ghost gold-navy language as the other
+   sidebar controls — transparent until hover/active, framing only on state,
+   and a circular icon in the collapsed rail like its round siblings. */
 body[data-dsh-maid-atelier] [data-dsh-taskboard-entry] {
-  border: 1px solid rgba(197, 164, 104, 0.42);
-  border-radius: 10px;
-  background: rgba(255, 253, 248, 0.04);
+  border: 1px solid transparent;
+  background: transparent;
   color: #d9c48f;
 }
 
 body[data-dsh-maid-atelier] [data-dsh-taskboard-entry]:hover {
-  border-color: rgba(197, 164, 104, 0.78);
-  background: rgba(197, 164, 104, 0.14);
+  border-color: rgba(197, 164, 104, 0.68);
+  background: rgba(197, 164, 104, 0.12);
   color: #f0dfba;
 }
 
 body[data-dsh-maid-atelier] [data-dsh-taskboard-entry][data-active] {
-  border-color: rgba(197, 164, 104, 0.9);
-  background: rgba(197, 164, 104, 0.2);
+  border-color: rgba(197, 164, 104, 0.82);
+  background: rgba(197, 164, 104, 0.16);
   color: #f6eedf;
+}
+
+/* Collapsed rail: a 38px circular icon matching the round new-session/search
+   controls, not a rounded rectangle. */
+body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry] {
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+body[data-dsh-maid-atelier][data-maid-sidebar-size='rail'] [data-dsh-taskboard-entry] [class*='entryLabel'] {
+  display: none;
 }
 
 /* The lower sidebar keeps the U-shaped textile ornament independent from the
