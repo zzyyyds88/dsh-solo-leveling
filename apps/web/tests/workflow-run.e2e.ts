@@ -52,7 +52,10 @@ describe.skipIf(MODE === 'record')('web e2e: durable workflow run in Chat', () =
     scaffold = await launchWebScaffold({
       replayFixture: PARENT_FIXTURE,
       replayChildFixtures: [CHILD_FIXTURE],
-      paceMs: 25,
+      // The child session streams only a handful of chunks; a slower pace keeps
+      // its "running" member navigable through the geometry checks below instead
+      // of completing (and replacing the button with a static row) mid-click.
+      paceMs: 80,
     })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
