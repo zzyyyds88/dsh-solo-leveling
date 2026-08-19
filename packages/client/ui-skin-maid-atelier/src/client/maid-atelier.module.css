@@ -1762,9 +1762,12 @@ body[data-dsh-maid-atelier] [data-phase='hero'] [class*='previewBadge'] {
   grid-row: 2;
   align-self: center;
   justify-self: start;
-  border-color: rgba(197, 164, 104, 0.48);
-  color: #526487;
-  background: rgba(255, 253, 248, 0.48);
+  font-size: 13px;
+  line-height: 1.2;
+  border-color: rgba(197, 164, 104, 0.56);
+  color: #3d537f;
+  background: rgba(255, 253, 248, 0.82);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
 }
 
 body[data-dsh-maid-atelier][data-ds-dark-theme] [data-phase='hero']
@@ -1862,6 +1865,13 @@ body[data-dsh-maid-atelier] [data-phase='hero'] [data-composer-card] {
     0 18px 52px rgba(29, 48, 94, 0.18),
     inset 0 1px rgba(255, 255, 255, 0.76);
   backdrop-filter: blur(2.5px) saturate(0.94);
+}
+
+/* The workspace placeholder sits over a translucent plate on a busy
+   illustration: caption grey reads too faint, so use the secondary label. */
+body[data-dsh-maid-atelier] [data-phase='hero'] [class*='input']::placeholder {
+  color: var(--dsw-alias-label-secondary);
+  opacity: 1;
 }
 
 body[data-dsh-maid-atelier][data-ds-dark-theme]
