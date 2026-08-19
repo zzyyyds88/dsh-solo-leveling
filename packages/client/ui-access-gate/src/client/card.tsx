@@ -25,6 +25,9 @@ export function AccessGateCard(props: AccessGateCardProps) {
   const [confirm, setConfirm] = useState('')
   const [lanDraft, setLanDraft] = useState('')
   const [portDraft, setPortDraft] = useState('')
+  const [certMode, setCertMode] = useState<'auto' | 'custom'>('auto')
+  const [certDraft, setCertDraft] = useState('')
+  const [keyDraft, setKeyDraft] = useState('')
   const [message, setMessage] = useState('')
   const [kind, setKind] = useState<'ok' | 'err'>('ok')
   const [saving, setSaving] = useState(false)
@@ -35,6 +38,8 @@ export function AccessGateCard(props: AccessGateCardProps) {
   const storedLan = state.available ? state.lanHost : undefined
   const storedPort = state.available ? state.httpsPort : undefined
   const storedProxyOn = state.available ? state.proxyEnabled : false
+  const storedCertMode = state.available ? state.certMode : 'auto'
+  const storedCustomConfigured = state.available ? state.customConfigured : false
   const [proxyOn, setProxyOn] = useState(false)
   // Drafts follow the stored values; typing wins until a store update lands.
   useEffect(() => { setProxyOn(storedProxyOn) }, [storedProxyOn])
@@ -44,13 +49,27 @@ export function AccessGateCard(props: AccessGateCardProps) {
   useEffect(() => {
     if (storedPort !== undefined) setPortDraft(storedPort)
   }, [storedPort])
+  useEffect(() => { setCertMode(storedCertMode) }, [storedCertMode])
   // The stored password is secret and never surfaced; any typed password
-  // counts as an unsaved draft.
+  // counts as an unsaved draft. PEM content is never projected back either.
   const dirty = state.available
     && (password.length > 0 || confirm.length > 0
       || proxyOn !== storedProxyOn
       || (proxyOn && (lanDraft.trim() !== state.lanHost
-        || portDraft.trim() !== state.httpsPort)))
+        || portDraft.trim() !== state.httpsPort))
+      || certMode !== storedCertMode
+      || (certMode === 'custom' && (certDraft.length > 0 || keyDraft.length > 0)))
+  /** Read one uploaded file as trimmed text into the given draft setter. */
+  const readFileInto = (event: { target: { files?: FileList | null } }, set: (text: string) => void): void => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : ''
+      set(text.trim())
+    }
+    reader.readAsText(file)
+  }
   if (!state.available) return null
   /** 反代启用时返回访问地址（https://<lanHost>:<port>/），否则空串。 */
   const accessUrl = (): string => {
@@ -116,18 +135,33 @@ export function AccessGateCard(props: AccessGateCardProps) {
         return
       }
     }
+    if (proxyOn && certMode === 'custom' && !storedCustomConfigured && (certDraft.length === 0 || keyDraft.length === 0)) {
+      setKind('err')
+      setMessage(t('certMissing'))
+      return
+    }
     // 开关关 = 关闭反代（清空参数）；开且参数非空才启用
     const on = proxyOn && lanHost.length > 0
     const proxyLan = on ? lanHost : ''
     const proxyPort = on ? String(httpsPort) : ''
     setSaving(true)
-    const ok = await props.save({ password, proxyEnabled: on, lanHost: proxyLan, httpsPort: proxyPort })
+    const ok = await props.save({
+      password,
+      proxyEnabled: on,
+      lanHost: proxyLan,
+      httpsPort: proxyPort,
+      certMode,
+      customCert: certDraft,
+      customKey: keyDraft,
+    })
     setSaving(false)
     if (ok) {
       setKind('ok')
       setMessage(password.length > 0 ? t('savedWithPassword') : t('saved'))
       setPassword('')
       setConfirm('')
+      setCertDraft('')
+      setKeyDraft('')
     } else {
       setKind('err')
       setMessage(t('saveFailed'))
@@ -161,6 +195,9 @@ export function AccessGateCard(props: AccessGateCardProps) {
     setProxyOn(storedProxyOn)
     if (storedLan !== undefined) setLanDraft(storedLan)
     if (storedPort !== undefined) setPortDraft(storedPort)
+    setCertMode(storedCertMode)
+    setCertDraft('')
+    setKeyDraft('')
     setPassword('')
     setConfirm('')
     setMessage('')
@@ -249,6 +286,38 @@ export function AccessGateCard(props: AccessGateCardProps) {
                     </span>
                   </p>
                 )}
+              <div style={sectionStyle}>
+                <p style={sectionTitleStyle}>{t('certSection')}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '8px 0', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' }}>
+                    <input type="radio" name="access-gate-cert-mode" checked={certMode === 'auto'} disabled={disabled || !proxyOn} style={{ accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={() =>{  setCertMode('auto') }} />
+                    {t('certModeAuto')}
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--dsw-alias-label-primary)', cursor: 'pointer' }}>
+                    <input type="radio" name="access-gate-cert-mode" checked={certMode === 'custom'} disabled={disabled || !proxyOn} style={{ accentColor: 'var(--dsw-alias-brand-primary)' }} onChange={() =>{  setCertMode('custom') }} />
+                    {t('certModeCustom')}
+                  </label>
+                </div>
+                <p style={hintStyle}>{t('certModeHint')}</p>
+                {certMode === 'custom'
+                  ? (
+                    <>
+                      <div style={fieldStyle}>
+                        <label style={labelStyle}>{t('certFileLabel')}</label>
+                        <input type="file" accept=".crt,.cer,.pem,text/plain" disabled={disabled || !proxyOn} style={inputStyle} onChange={(event) =>{  readFileInto(event, setCertDraft) }} />
+                        {storedCustomConfigured && certDraft.length === 0
+                          ? <p style={hintStyle}>{t('customConfigured')}</p>
+                          : <p style={hintStyle}>{t('certFileHint')}</p>}
+                      </div>
+                      <div style={fieldStyle}>
+                        <label style={labelStyle}>{t('keyFileLabel')}</label>
+                        <input type="file" accept=".key,.pem,text/plain" disabled={disabled || !proxyOn} style={inputStyle} onChange={(event) =>{  readFileInto(event, setKeyDraft) }} />
+                        <p style={hintStyle}>{t('keyFileHint')}</p>
+                      </div>
+                    </>
+                  )
+                  : null}
+              </div>
             </div>
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
               <button type="button" onClick={() => { void save() }} disabled={disabled || saving} style={buttonStyle}>{t('saveLabel')}</button>

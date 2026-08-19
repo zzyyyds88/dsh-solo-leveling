@@ -1,6 +1,10 @@
 /**
 * dsh-host-access-gate — 访问门禁：登录鉴权插件（本地定制，不随上游分发）
 *
+* 除登录门闸外还内置「进程内 HTTPS 反向代理」（TLS 终结 + HTTP 转发 +
+* WebSocket 隧道，见 proxy.ts）：取代旧版内置 caddy 二进制方案，无外部
+* 二进制、无子进程、无 openssl 命令；证书为纯 JS 自签或用户上传的自有证书。
+*
 * 为 DSH Web GUI 提供「口令登录」门闸 + 口令管理：
 *
 * 一、门闸（注册到 dsh-host-webserver 的请求门闸钩子上，该钩子由本地
@@ -40,8 +44,7 @@
 * @module dsh-host-access-gate
 */
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -50,6 +53,14 @@ import { installSettingsSection, settingsNamespace, type SettingsProvider } from
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type { WebRequestGate } from '@deepseek-ai/dsh-host-webserver'
+import {
+  checkPortOccupied,
+  ensureSelfSignedCert,
+  startReverseProxy,
+  validateTlsMaterial,
+  type ReverseProxyHandle,
+  type TlsMaterial,
+} from './proxy.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'access-gate'
@@ -556,25 +567,17 @@ function makeSetupHandler(state: AuthState, limiter: RateLimiter): (req: Incomin
     res.end()
   }
 }
-/** POST /access-gate/restart —— 设置卡「重启」按钮：先回响应，再停 caddy、退出 dsh。
+/** POST /access-gate/restart —— 设置卡「重启」按钮：先回响应，再退出 dsh。
  * 直接 kill 进程（不做脚本式重启），由机器各自的 supervisor（systemd/docker/PM2）
- * 按配置拉起 dsh；dsh 重启后插件自动重新确保反向代理运行。 */
+ * 按配置拉起 dsh；反代是进程内的 https server，随 dsh 进程退出，重启后自动恢复。 */
 const RESTART_PATH = '/access-gate/restart'
-/** POST /access-gate/check-port —— 设置卡保存前检测 HTTPS 端口是否被占用（排除 caddy 自身）。 */
+/** POST /access-gate/check-port —— 设置卡保存前检测 HTTPS 端口是否被占用（排除本实例反代自身）。 */
 const CHECK_PORT_PATH = '/access-gate/check-port'
 
-/** ss -tlnp 检测端口是否被非 caddy 进程监听。 */
-function checkPortInUse(port: number, excludeCaddy: boolean): boolean {
-  try {
-    const out = spawnSync('ss', ['-tlnp'], { encoding: 'utf8' }).stdout
-    const re = new RegExp(`[:.]${port}\\b`)
-    for (const line of out.split('\n')) {
-      if (!re.test(line)) continue
-      if (excludeCaddy && /caddy/.test(line)) continue // caddy 自己绑定的端口不算占用
-      return true
-    }
-  } catch { /* ss 不可用 → 不做检测（放行） */ }
-  return false
+/** 端口是否被占用：排除本实例反代自己绑定的端口（其余一律视为占用）。 */
+async function checkPortInUse(port: number, ownProxyPort: number | undefined): Promise<boolean> {
+  if (ownProxyPort !== undefined && port === ownProxyPort) return false
+  return checkPortOccupied(port)
 }
 
 function makeCheckPortHandler(state: AuthState): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
@@ -603,10 +606,11 @@ function makeCheckPortHandler(state: AuthState): (req: IncomingMessage, res: Ser
       send(400, { ok: false, error: { code: 'bad-request', message: 'port must be 1-65535' } })
       return
     }
-    // 与当前配置端口相同 → 可能是 caddy 自己绑定（不算占用）；改到新端口才严格检测
+    // 与当前配置端口相同 → 可能是本实例反代自己绑定（不算占用）；改到新端口才严格检测
     const current = state.readSettings === undefined ? undefined : state.readSettings().httpsPort
-    const excludeCaddy = String(port) === String(current ?? '')
-    send(200, { ok: true, port, inUse: checkPortInUse(port, excludeCaddy) })
+    const ownPort = Number.isInteger(Number(current)) && Number(current) > 0 ? Number(current) : undefined
+    const inUse = await checkPortInUse(port, ownPort)
+    send(200, { ok: true, port, inUse })
   }
 }
 
@@ -623,174 +627,111 @@ function makeRestartHandler(state: AuthState): (req: IncomingMessage, res: Serve
       return
     }
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-    res.end(JSON.stringify({ ok: true, message: "restart requested: this instance's dsh web + caddy exit; supervisor brings dsh back up" }))
+    res.end(JSON.stringify({ ok: true, message: "restart requested: this instance's dsh web exits; supervisor brings dsh back up" }))
     setTimeout(() => {
-      stopCaddy() // 只停本实例的 caddy，其它实例/系统 caddy 不受影响
+      // 反代是进程内的 https server，随 dsh 进程退出而消亡，无需单独停止
       setTimeout(() => process.exit(0), 250)
     }, 300)
   }
 }
 
-// ---- 反向代理自动运行（每实例独立 caddy，完全内置、互不影响）----
-// 每个 dsh 实例 spawn 自己的 caddy 子进程：配置/证书/pid 全部在 $DSH_HOME/caddy/
-// 下（各实例 DSH_HOME 不同 → 天然隔离）。caddy 二进制内置在插件包 bin/caddy
-// （打包时放入，见 README），不依赖系统安装。restart 按钮只杀自己的 caddy +
-// 退出本实例，其它实例与系统 caddy 完全不受影响。
+// ---- 反向代理自动运行（进程内 HTTPS 反代，无外部二进制 / 无子进程）----
+// 每个 dsh 实例在自己的进程里起一个 https server（TLS 终结 + HTTP 转发 +
+// WebSocket 隧道，见 proxy.ts），随 dsh 进程生灭：天然多实例隔离、无需 pid
+// 文件、无需 spawn/kill、无需 openssl。设置变化（开关/参数/证书）保存后
+// 自动热生效，无需重启。
 
-/** 本实例 caddy 目录（$DSH_HOME/caddy）。 */
-function caddyDir(): string {
+/** 本实例反代目录（$DSH_HOME/caddy，沿用旧名以复用既有证书文件）。 */
+function proxyDir(): string {
   return join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'caddy')
 }
-/** 包内内置 caddy 二进制（打包时放入 bin/caddy）。 */
-function caddyBin(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'caddy')
-}
-/** lanHost → 证书文件名（IP/域名安全化）。 */
-function certBaseName(lanHost: string): string {
-  return `dsh-${lanHost.replace(/[^A-Za-z0-9.-]/g, '_')}`
+
+/** 反代管理器：依据当前设置幂等确保/热重配/关闭进程内 https server。 */
+interface ProxyManager {
+  /** 依据当前设置确保反代在跑（或关掉）；重复调用无副作用。 */
+  ensure(): void
+  /** 关闭当前反代（插件卸载 / 设置关闭时）。 */
+  stop(): Promise<void>
 }
 
-/** 启动时调用：proxyEnabled 开关开启且反代参数非空 → 确保本实例 caddy 运行；否则停掉。 */
-function ensureReverseProxy(ctx: Context, state: AuthState): void {
-  try {
-    const s = state.readSettings?.() ?? { password: '', proxyEnabled: false, lanHost: '', httpsPort: '' }
-    const lanHost = typeof s.lanHost === 'string' ? s.lanHost.trim() : ''
-    const httpsPort = Number(s.httpsPort)
-    const targetPort = Number(process.env.DSH_WEB_PORT ?? '') || ctx.webServer.port || 3080
-    const enabled = s.proxyEnabled === true
-    const configured = enabled && lanHost.length > 0 && Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort < 65536
-    if (!configured) {
-      const pid = readCaddyPid()
-      if (pid !== undefined && pid > 0 && isAlive(pid)) {
-        stopCaddy()
-        console.log(`[dsh-host-access-gate] 反向代理已关闭（proxyEnabled=${enabled}，未配置反代参数）`)
+function createReverseProxyManager(ctx: Context, state: AuthState): ProxyManager {
+  let handle: ReverseProxyHandle | undefined
+  let current: { lanHost: string; httpsPort: number; targetPort: number } | undefined
+  // 串行化重建动作：证书生成是异步的，避免并发起多个 server。
+  let chain: Promise<void> = Promise.resolve()
+
+  const stop = (): Promise<void> => {
+    chain = chain.then(async () => {
+      if (handle !== undefined) {
+        const closing = handle
+        handle = undefined
+        current = undefined
+        await closing.close()
       }
-      return // 开关未开 / 未配置反代（默认不开启）
-    }
-    if (!existsSync(caddyBin())) {
-      console.error('[dsh-host-access-gate] 未找到内置 caddy 二进制（bin/caddy）。请重新打包安装（打包前放入 caddy 二进制），反代未启动。')
-      return
-    }
-    const changed = writeCaddyConfig(lanHost, httpsPort, targetPort)
-    ensureCaddyRunning(changed)
-    console.log(`[dsh-host-access-gate] 反向代理已就绪：https://${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}`)
-  } catch (error) {
-    console.error('[dsh-host-access-gate] 反向代理自动启动失败（不影响 DSH 本体）:', error instanceof Error ? error.message : String(error))
+    })
+    return chain
   }
-}
 
-/** 写本实例 Caddyfile + 证书（幂等：内容一致返回 false，无需重启 caddy）。 */
-function writeCaddyConfig(lanHost: string, httpsPort: number, targetPort: number): boolean {
-  const dir = caddyDir()
-  mkdirSync(join(dir, 'certs'), { recursive: true })
-  const base = certBaseName(lanHost)
-  const certFile = join(dir, 'certs', `${base}.crt`)
-  const keyFile = join(dir, 'certs', `${base}.key`)
-  ensureCert(lanHost, certFile, keyFile)
-  const content = `# dsh instance on 127.0.0.1:${targetPort} — managed by dsh-host-access-gate (embedded caddy)
-{
-  admin off
-  auto_https disable_redirects
-}
-
-https://${lanHost}:${httpsPort} {
-  tls ${certFile} ${keyFile}
-  reverse_proxy 127.0.0.1:${targetPort}
-}
-`
-  const caddyfile = join(dir, 'Caddyfile')
-  const prev = existsSync(caddyfile) ? readFileSync(caddyfile, 'utf8') : ''
-  if (prev === content) return false
-  writeFileSync(caddyfile, content)
-  console.log(`[dsh-host-access-gate] Caddyfile 已更新（${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}）`)
-  return true
-}
-
-/** 自签证书（本实例 caddy/certs/）：SAN 匹配且有效期充足则复用，否则重新生成。 */
-function ensureCert(lanHost: string, certFile: string, keyFile: string): void {
-  mkdirSync(dirname(certFile), { recursive: true })
-  const isIp = /^[0-9.]+$/.test(lanHost)
-  const sanSpec = isIp
-    ? `subjectAltName=IP:${lanHost},DNS:localhost,IP:127.0.0.1`
-    : `subjectAltName=DNS:${lanHost},DNS:localhost,IP:127.0.0.1`
-  let need = !existsSync(certFile) || !existsSync(keyFile)
-  if (!need) {
-    need = spawnSync('openssl', ['x509', '-in', certFile, '-noout', '-checkend', '2592000']).status !== 0
-    if (!need) {
-      const san = spawnSync('openssl', ['x509', '-in', certFile, '-noout', '-ext', 'subjectAltName'], { encoding: 'utf8' }).stdout
-      const pat = isIp ? new RegExp(`IP( Address)?:${lanHost}`) : new RegExp(`DNS:${lanHost}`)
-      if (!pat.test(san)) need = true
-    }
+  return {
+    ensure() {
+      try {
+        const s = state.readSettings?.() ?? {}
+        const lanHost = typeof s.lanHost === 'string' ? s.lanHost.trim() : ''
+        const httpsPort = Number(s.httpsPort)
+        const targetPort = Number(process.env.DSH_WEB_PORT ?? '') || ctx.webServer.port || 3080
+        const enabled = s.proxyEnabled === true
+        const configured = enabled && lanHost.length > 0 && Number.isInteger(httpsPort) && httpsPort > 0 && httpsPort < 65536
+        if (!configured) {
+          if (handle !== undefined) {
+            console.log(`[dsh-host-access-gate] 反向代理已关闭（proxyEnabled=${enabled}，未配置反代参数）`)
+            void stop()
+          }
+          return // 开关未开 / 未配置反代（默认不开启）
+        }
+        if (!/^[A-Za-z0-9._*-]+$/.test(lanHost)) {
+          console.error(`[dsh-host-access-gate] lanHost 不合法（${lanHost}），反向代理未启动`)
+          if (handle !== undefined) void stop()
+          return
+        }
+        // 参数未变化 → 不动；变化（含证书/端口）→ 重建 https server（热生效）
+        const same = current !== undefined
+          && current.lanHost === lanHost && current.httpsPort === httpsPort && current.targetPort === targetPort
+        if (same && handle !== undefined) return
+        chain = chain.then(async () => {
+          let tls: TlsMaterial
+          if (s.certMode === 'custom' && typeof s.customCert === 'string' && s.customCert.length > 0
+            && typeof s.customKey === 'string' && s.customKey.length > 0) {
+            const check = validateTlsMaterial(s.customCert, s.customKey, lanHost)
+            if (!check.ok) {
+              console.error(`[dsh-host-access-gate] 自定义证书无效，反向代理未启动：${check.error}`)
+              if (handle !== undefined) {
+                const closing = handle
+                handle = undefined
+                current = undefined
+                await closing.close()
+              }
+              return
+            }
+            tls = { cert: s.customCert, key: s.customKey }
+          } else {
+            tls = ensureSelfSignedCert(join(proxyDir(), 'certs'), lanHost)
+          }
+          if (handle !== undefined) {
+            const closing = handle
+            handle = undefined
+            current = undefined
+            await closing.close()
+          }
+          handle = startReverseProxy({ lanHost, httpsPort, targetPort, tls })
+          current = { lanHost, httpsPort, targetPort }
+          console.log(`[dsh-host-access-gate] 反向代理已就绪：https://${lanHost}:${httpsPort} → 127.0.0.1:${targetPort}${s.certMode === 'custom' ? '（自定义证书）' : ''}`)
+        })
+      } catch (error) {
+        console.error('[dsh-host-access-gate] 反向代理自动启动失败（不影响 DSH 本体）:', error instanceof Error ? error.message : String(error))
+      }
+    },
+    stop,
   }
-  if (need) {
-    spawnSync(
-      'openssl',
-      ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '3650', '-keyout', keyFile, '-out', certFile, '-subj', `/CN=${lanHost}`, '-addext', sanSpec],
-      { stdio: 'ignore' },
-    )
-    console.log(`[dsh-host-access-gate] 已生成自签证书（SAN: ${lanHost}）`)
-  }
-  try {
-    chmodSync(keyFile, 0o600)
-  } catch { /* 非 root / 只读，忽略 */ }
-}
-
-/** pid 文件：$DSH_HOME/caddy/caddy.pid。 */
-function readCaddyPid(): number | undefined {
-  try {
-    return Number(readFileSync(join(caddyDir(), 'caddy.pid'), 'utf8').trim())
-  } catch { return 0 }
-}
-function isAlive(pid: number): boolean {
-  if (!pid || pid <= 0) return false
-  try { process.kill(pid, 0); return true } catch { return false }
-}
-
-/** 确保本实例 caddy 在跑：pid 存活且配置未变 → 不动；配置变了 → 重启；没跑 → spawn。 */
-function ensureCaddyRunning(changed: boolean): void {
-  const pid = readCaddyPid()
-  if (pid !== undefined && isAlive(pid)) {
-    if (changed) {
-      stopCaddy()
-      spawnCaddy()
-      console.log('[dsh-host-access-gate] caddy 已重启（配置变更）')
-    } else {
-      console.log(`[dsh-host-access-gate] caddy 运行中（PID ${pid}）`)
-    }
-    return
-  }
-  spawnCaddy()
-}
-
-/** spawn 内置 caddy 子进程（本实例独立，admin off 避免多实例 admin 端口冲突）。 */
-function spawnCaddy(): void {
-  const dir = caddyDir()
-  mkdirSync(dir, { recursive: true })
-  const child = spawn(caddyBin(), ['run', '--config', join(dir, 'Caddyfile'), '--adapter', 'caddyfile'], {
-    cwd: dir,
-    stdio: ['ignore', 'ignore', 'pipe'],
-  })
-  child.stderr.on('data', (d) => {
-    const line = String(d).trim().split('\n').filter(Boolean).at(-1)
-    if (line) console.error(`[dsh-host-access-gate] caddy: ${line}`)
-  })
-  child.on('error', (err) => { console.error('[dsh-host-access-gate] caddy 子进程启动失败:', err.message) })
-  child.on('exit', (code, signal) => {
-    console.log(`[dsh-host-access-gate] caddy 子进程退出（code=${code} signal=${signal}）`)
-  })
-  writeFileSync(join(dir, 'caddy.pid'), String(child.pid))
-  console.log(`[dsh-host-access-gate] caddy 已启动（内置二进制，PID ${child.pid}）`)
-}
-
-/** 停掉本实例 caddy（restart 按钮 / 关闭反代）。只影响本实例，不碰系统 caddy。 */
-function stopCaddy(): void {
-  const pid = readCaddyPid()
-  if (pid !== undefined && pid > 0 && isAlive(pid)) {
-    try { process.kill(pid, 'SIGTERM') } catch { /* ignore */ }
-    try { process.kill(pid, 'SIGKILL') } catch { /* ignore */ }
-    console.log(`[dsh-host-access-gate] caddy 已停止（PID ${pid}）`)
-  }
-  try { rmSync(join(caddyDir(), 'caddy.pid'), { force: true }) } catch { /* ignore */ }
 }
 /**
 * Mount the auth gate, routes, settings namespace, and webAuth service.
@@ -811,6 +752,9 @@ interface AccessGateSettings {
   proxyEnabled?: boolean | null
   lanHost?: string | null
   httpsPort?: string | number | null
+  certMode?: 'auto' | 'custom' | null
+  customCert?: string | null
+  customKey?: string | null
 }
 
 /** Resolve the effective gate mode: an explicit env override wins over the composed config. */
@@ -846,20 +790,38 @@ export function apply(ctx: Context, config: AccessGateConfig): void {
   // settings 命名空间：GUI 设置面板（access-gate 卡片）与 /setup 页写口令的落点。
   // onChange 在每个写之后重算口令并轮换 key；清除口令且无任何后备口令时，
   // 回到「首次设置」模式（/setup 页），绝不出现无鉴权裸奔。
-  // 反向代理参数（lanHost/httpsPort）默认空 = 未启用；填写后插件启动时自动
-  // 确保 caddy 反代运行（无需手动跑 switch-to-https.sh）。
+  // 反向代理参数（lanHost/httpsPort）默认空 = 未启用；填写后自动确保进程内
+  // HTTPS 反代运行，保存即生效（无需重启、无需手动跑脚本）。
+  const proxyManager = createReverseProxyManager(ctx, state)
+  // 保存反代参数/证书时，去抖 300ms 后热重配（避免一次保存多次 set 触发多轮重建）。
+  let proxyEnsureTimer: ReturnType<typeof setTimeout> | undefined
+  const scheduleProxyEnsure = (): void => {
+    if (proxyEnsureTimer !== undefined) clearTimeout(proxyEnsureTimer)
+    proxyEnsureTimer = setTimeout(() => { proxyManager.ensure() }, 300)
+  }
+  ctx.effect(() => () => {
+    if (proxyEnsureTimer !== undefined) clearTimeout(proxyEnsureTimer)
+    void proxyManager.stop()
+  }, 'access-gate: reverse proxy')
   installSettingsSection(ctx, SETTINGS_NS, z.object({
     password: z.string().role('secret'),
     // 反代独立开关：proxyEnabled=false（默认）不启用反代；true 且 lanHost/httpsPort
-    // 非空才启动内置 caddy。避免旧版「预填默认参数即视为启用」的误开。
+    // 非空才启动进程内反代。避免旧版「预填默认参数即视为启用」的误开。
     proxyEnabled: z.boolean().default(false),
     lanHost: z.string().default(''),
     httpsPort: z.union([z.const(''), z.natural().min(1).max(65535)]).default(''),
+    // 证书方式：auto = 纯 JS 自签；custom = 使用用户上传的自有证书（PEM）。
+    certMode: z.union([z.const('auto'), z.const('custom')]).default('auto'),
+    customCert: z.string().role('secret').default(''),
+    customKey: z.string().role('secret').default(''),
   }), {
     password: fallbackPassword ?? '',
     proxyEnabled: false,
     lanHost: '',
     httpsPort: '',
+    certMode: 'auto',
+    customCert: '',
+    customKey: '',
   }, {
     setSource: (get: () => AccessGateSettings) => {
       state.readSettings = get
@@ -871,6 +833,7 @@ export function apply(ctx: Context, config: AccessGateConfig): void {
       state.key = password === void 0 ? void 0 : deriveKey(password)
       if (password === void 0) announceSetup()
       else state.announcedSetup = false
+      scheduleProxyEnsure() // 反代开关/参数/证书变更 → 热生效
     },
   })
 
@@ -954,14 +917,14 @@ export function apply(ctx: Context, config: AccessGateConfig): void {
 
   // settings 提供方就绪后挂上引用（供 /setup 写入）；同时延迟启动反向代理
   // ensure（等 webServer.port 与 settings 命名空间就绪），配置过反代参数即
-  // 自动确保 caddy 运行——启动命令保持不变（npx @deepseek-ai/dsh web）。
+  // 自动确保进程内反代运行——启动命令保持不变（npx @deepseek-ai/dsh web）。
   ctx.inject(['settings'], (sctx) => {
     state.settings = sctx.settings
     sctx.effect(() => () => {
       state.settings = void 0
     })
     setTimeout(() => {
-      ensureReverseProxy(ctx, state)
+      proxyManager.ensure()
     }, 1200)
   })
 }

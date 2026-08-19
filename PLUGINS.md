@@ -39,7 +39,7 @@
 |---|---|---|
 | ~~修改默认工作目录~~ | Web GUI 目录选择器默认打开 `/home/user/Projects` | 已被 **dsh-defaults 统一插件**替代，原文件夹已删除 |
 | ~~思考强度与重试默认值~~ | 思考强度档位 + 默认重试 2→5 | 已被 **dsh-defaults 统一插件**替代 |
-| ~~全网监听与登录鉴权~~ | caddy HTTPS 反代 + 口令门闸 | 已插件化为「访问门禁」（`dsh-host-access-gate` / `dsh-client-ui-access-gate`） |
+| ~~全网监听与登录鉴权~~ | HTTPS 反代 + 口令门闸 | 已插件化为「访问门禁」（`dsh-host-access-gate` / `dsh-client-ui-access-gate`，反代为进程内实现，已移除 caddy 二进制） |
 
 ### 1.3 环境
 
