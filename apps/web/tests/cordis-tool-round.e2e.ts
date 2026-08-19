@@ -33,14 +33,15 @@ const PACKAGE_CODE = 'return { name: "snapshot-noop", apply(ctx) {} }'
 const CLIENT_CODE = 'return { inject: ["slots"], apply(ctx) { ctx.slots.register('
   + '{ name: "shell.overlay", id: "snapshot-probe" }, '
   + '() => React.createElement("div", { "data-snapshot-probe": "loaded" })) } }'
-const PROMPT = 'Use only Cordis tools. First call cordis_inspect_self with no arguments. '
-  + 'Then call cordis_define with plugin kind "new", idPrefix "snap", name "snapshot noop", '
+const PROMPT = 'Use only Cordis tools, and follow these steps exactly, in order: '
+  + '1. Call cordis_inspect_self with no arguments. '
+  + '2. Call cordis_define with plugin kind "new", idPrefix "snap", name "snapshot noop", '
   + 'purpose "does nothing, for the snapshot", '
   + `code.host exactly ${JSON.stringify(PACKAGE_CODE)} and code.client exactly ${JSON.stringify(CLIENT_CODE)}. `
-  + 'Read its returned pluginId and packageId, then call cordis_run with those exact IDs and mode "run". '
-  + 'After the run request returns, reply exactly CORDIS_UI_READY and stop.'
-const STOP_PROMPT = 'Use only Cordis tools. Call cordis_stop with pluginId "snap-1". '
-  + 'After it succeeds, reply exactly CORDIS_UI_DONE and stop.'
+  + '3. Read its returned pluginId and packageId, then call cordis_run with those exact IDs and mode "run". '
+  + '4. After cordis_run returns, do NOT call any more tools in this turn. Reply exactly CORDIS_UI_READY and stop.'
+const STOP_PROMPT = 'Use only Cordis tools. You MUST call cordis_stop with pluginId "snap-1" first (do not skip it). '
+  + 'Only after it succeeds, reply exactly CORDIS_UI_DONE and stop.'
 
 function assertCompleteCordisLifecycle(events: readonly SessionEvent[]): void {
   const turnEnd = events.findLast(
@@ -108,10 +109,16 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     // NOT the plugin running. Until a person answers, the browser half has not
     // been fetched, evaluated, or mounted anywhere on this page.
     expect(await page.locator('[data-snapshot-probe]').count()).toBe(0)
+
+    // Let the run turn close (CORDIS_UI_READY) before answering, so the run's
+    // post-approval settlement steering opens its own deterministic turn below
+    // instead of racing the STOP prompt.
+    const sessionId = await runTurnSettled
+    const steeringSettled = scaffold.whenTurnSettled()
     await approve.click()
     await expect.poll(() => page.locator('[data-snapshot-probe]').count(), { timeout: 30_000 }).toBe(1)
+    await steeringSettled
 
-    const sessionId = await runTurnSettled
     const stopTurnSettled = scaffold.whenTurnSettled()
     await input.fill(STOP_PROMPT)
     await input.press('Enter')
