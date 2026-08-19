@@ -59,6 +59,51 @@ pnpm dsh web          # 默认 HTTPS：https://0.0.0.0:3080（局域网 https://
 
 > 前置：Node.js `^22.19.0 || >=24.0.0`、pnpm `11.7.0`（见根 `package.json`）。
 
+## 平台支持（Linux / Windows / Termux）
+
+基线 = 官方 deepseek-harness `0.1.0-rc.8` + 本仓库定制（默认 HTTPS、访问门禁、
+皮肤、桌宠等），三平台均支持：
+
+### Linux（x64 / arm64）
+
+```bash
+pnpm install && pnpm run build
+bash scripts/package-npm.sh            # 或 node scripts/package-npm.mjs
+npm i -g ./dist/npm/*.tgz
+dsh web                                # https://0.0.0.0:3080
+```
+
+### Windows（PowerShell）
+
+```powershell
+pnpm install; pnpm run build
+node scripts/package-npm.mjs           # 跨平台打包（等同 .sh 版）
+npm i -g ./dist/npm/*.tgz
+dsh web
+```
+
+- 官方 rc.8 已内置 Windows 支持（PowerShell 后端 `pwsh-local`、Windows ACL 沙箱
+  `sandbox-windows-acl`、win32 环境变量处理）。
+- 首次监听 0.0.0.0 时 Windows 防火墙会弹放行提示，允许 Node 即可供局域网访问。
+
+### Termux（Android）
+
+```bash
+pkg install nodejs-lts git python binutils make clang
+npm i -g pnpm@11.7.0
+git clone <本仓库> && cd <仓库>
+pnpm install && pnpm run build
+node scripts/package-npm.mjs
+npm i -g ./dist/npm/*.tgz
+dsh web                                # Termux 内 HTTPS 端口，手机浏览器访问
+```
+
+- Termux 是 Linux 环境：本仓库与官方代码均为纯 Node/POSIX，直接可用。
+- native 依赖（`koffi`、`node-pty`，用于文件系统/终端能力）在 Termux 需从源码
+  编译：上面的 `binutils make clang` 即为此准备；若安装失败可 `npm i -g
+  --omit=optional ./dist/npm/*.tgz` 降级（失去部分原生能力，核心 Web GUI 仍可用）。
+- 无 root 的 Termux 监听低端口受限，使用默认 3080 即可。
+
 ## 远期计划（迁回官方基线）
 
 等 DeepSeek 官方基线稳定到正式版后，把「需要改官方包」的功能逐个完善、**迁回官方基线**——

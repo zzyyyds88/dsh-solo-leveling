@@ -1,6 +1,6 @@
 # AGENTS.md —— 大宝贝定制版 AI 代理规则（强制）
 
-> 本仓库 = **大宝贝定制版**：deepseek-harness 的 fork 整合包（基线 `dsh-v0.1.0-rc.7`，
+> 本仓库 = **大宝贝定制版**：deepseek-harness 的 fork 整合包（基线 `dsh-v0.1.0-rc.8`，
 > 源码平铺仓库根）。自研/收录插件与「改官方包」的定制改动**直接整合进 harness 源码**，
 > 不跟随官方更新。你是本仓库的执行者，以下规则**每轮会话强制生效**；
 > 与 CONTRIBUTING.md 冲突时以本文件为准。完整背景见
@@ -47,7 +47,7 @@
 
 ```bash
 pnpm install && pnpm run build                 # 构建：tsc -b（host/client）+ tsdown + web bundle
-bash scripts/package-npm.sh [--scope <个人>]   # 打包：dsh CLI + 23 个 workspace 依赖包 → dist/npm/*.tgz
+bash scripts/package-npm.sh [--scope <个人>]   # 打包：dsh CLI + 全部 workspace 依赖包 → dist/npm/*.tgz（Windows/Termux 用 node scripts/package-npm.mjs）
 npm i -g ./dist/npm/*.tgz                      # 本地安装（体验同 npx @deepseek-ai/dsh web）
 dsh web --port 3090                            # 起独立实例验证（端口避开正式 3080）
 ```
@@ -86,12 +86,15 @@ dsh web --port 3090                            # 起独立实例验证（端口�
 
 ## 关键事实（需核对）
 
-- 本仓库基线 = deepseek-harness `dsh-v0.1.0-rc.7`（commit `99f6f02`，已平铺仓库根）；
-  **不跟随官方更新**，自维护基线。
-- 运行中的正式 DSH：`/usr/lib/node_modules/@deepseek-ai/dsh`（当前 `0.1.0-rc.7`）、
+- 本仓库基线 = deepseek-harness `dsh-v0.1.0-rc.8`（官方 commit `f1f7dc36fa`，已平铺仓库根）；
+  **不跟随官方更新**，自维护基线；所有 workspace 包版本号带 `-local.1` 本地后缀
+  （如 `0.1.0-rc.8-local.1`）防 npm 安装被官方包覆盖。
+- 运行中的正式 DSH：`/usr/lib/node_modules/@deepseek-ai/dsh`（当前 `0.1.0-rc.8`）、
   DSH_HOME `/root/.dsh`、端口 3080 —— **永远别碰**。
-- 整合迁移铁律：**官方 rc.7 已实现同功能 → 优先用官方、弃用对应 fork/适配层**；
-  保留的 fork 必须重 base 到 rc.7 源码（见 docs/整合迁移路线图.md、docs/升级适配指南.md）。
+- 整合迁移铁律：**官方 rc.8 已实现同功能 → 优先用官方、弃用对应 fork/适配层**；
+  保留的 fork 必须重 base 到 rc.8 源码（见 docs/整合迁移路线图.md、docs/升级适配指南.md）。
+- 平台支持：Linux / Windows / Termux（Android）三平台均可构建打包运行；打包脚本
+  有 bash（`scripts/package-npm.sh`）与跨平台 node（`scripts/package-npm.mjs`）两个版本。
 - 构建入口：`pnpm install && pnpm run build`；打包 `bash scripts/package-npm.sh`；
   验证走本地全局安装（`npm i -g ./dist/npm/*.tgz` → `dsh web`）；正式安装由用户在
   SSH 终端执行（会停/起正式 dsh web）。
