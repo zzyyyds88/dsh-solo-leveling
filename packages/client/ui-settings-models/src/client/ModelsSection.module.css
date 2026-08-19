@@ -95,9 +95,9 @@
   padding: 1px 6px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 16px;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-primary-bluish);
 }
 
 .credentialDot {
@@ -177,7 +177,7 @@
   justify-content: center;
   height: 36px;
   padding: 0 14px;
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-state-error-primary) 42%, transparent);
   border-radius: 18px;
   background: transparent;
   color: var(--dsw-alias-state-error-primary);
@@ -634,7 +634,7 @@ select.input {
 }
 
 .fetchDialog {
-  max-width: 520px;
+  max-width: 400px;
 
   /* The candidate list scrolls inside this dialog, an elevated surface, so the
      scrollbar indirection is rebound here rather than on the scrolling child:
@@ -659,17 +659,35 @@ select.input {
   border-radius: 6px;
 }
 
+.candidate:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .candidateLabel {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 3px 8px;
   cursor: pointer;
+}
+
+/* The fetch list is a compact picker: keep the native checkbox small and the
+   id on one line instead of wrapping a long provider model id over two. */
+.candidateLabel input[type='checkbox'] {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--dsw-alias-state-business-primary);
 }
 
 .candidateId {
   flex: 1 1 auto;
+  min-width: 0;
   font-family: var(--ds-font-family-code);
-  font-size: 13px;
-  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
