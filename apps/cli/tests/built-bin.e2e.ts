@@ -339,16 +339,14 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       expect(web.stdout).toContain('--port <port>')
       expect(web.stdout).not.toContain('dsh web: http://')
 
-      // `--host 0.0.0.0` is the default HTTPS bind now (not a usage error);
-      // a non-numeric port still is one and must not activate startup rows.
-      const badPort = await runBuiltBin(['web', '--port', 'abc'], {
+      const wildcardHost = await runBuiltBin(['web', '--host', '0.0.0.0'], {
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
       })
-      expect(badPort.code).toBe(1)
-      expect(badPort.stdout).toBe('')
-      expect(badPort.stderr).toContain('--port must be a number, got "abc"')
-      expect(badPort.stderr).not.toContain('dsh web: https://')
+      expect(wildcardHost.code).toBe(1)
+      expect(wildcardHost.stdout).toBe('')
+      expect(wildcardHost.stderr).toContain('--host 0.0.0.0 is intentionally not supported yet for safety: it would expose remote code execution to the network; use 127.0.0.1 instead')
+      expect(wildcardHost.stderr).not.toContain('dsh web: http://')
 
       const headlessHelp = await runBuiltBin(['--profile', 'headless', '--help'], {
         DSH_HOME: home,
@@ -652,6 +650,21 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       }
       expect(Object.keys(manifest.dependencies)).toEqual(['anchored-bundle'])
       expect(manifest.dsh.profile.bundles).toContain('anchored-bundle')
+
+      const removed = await runBuiltBin(
+        ['plugin', '--profile', 'anchor', 'remove', 'anchored-bundle'],
+        { DSH_HOME: home },
+        checkout,
+      )
+      expect(removed.code).toBe(0)
+      const afterRemove = JSON.parse(
+        readFileSync(join(home, 'profiles', 'anchor', 'package.json'), 'utf8'),
+      ) as {
+        dependencies?: Record<string, string>
+        dsh: { profile: { bundles: string[] } }
+      }
+      expect(Object.keys(afterRemove.dependencies ?? {})).toEqual([])
+      expect(afterRemove.dsh.profile.bundles).not.toContain('anchored-bundle')
     } finally {
       rmSync(home, { recursive: true, force: true })
       rmSync(checkout, { recursive: true, force: true })

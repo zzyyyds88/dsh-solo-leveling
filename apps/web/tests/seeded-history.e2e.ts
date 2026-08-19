@@ -14,7 +14,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, Message } from '@deepseek-ai/dsh-llm'
 import { deriveEventMessage, SessionId } from '@deepseek-ai/dsh-session'
@@ -33,6 +33,7 @@ const UI_EXPECTED = fileURLToPath(new URL('./snapshots/seeded-history/ui.expecte
 // Command-row goldens over the same conversation after direct host commands.
 const COMMAND_ROW_EXPECTED = fileURLToPath(new URL('./snapshots/seeded-history/command-row.expected.md', import.meta.url))
 const FEEDBACK_ROW_EXPECTED = fileURLToPath(new URL('./snapshots/seeded-history/feedback-row.expected.md', import.meta.url))
+const FILE_OPEN_FAILURE_EXPECTED = fileURLToPath(new URL('./snapshots/seeded-history/file-open-failure.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 const SEED_ID = 'seeded-history-web-e2e'
 
@@ -376,10 +377,7 @@ describe('web e2e: seeded history renders through cold resume', () => {
     expect(style).toEqual({
       backgroundColor: 'rgb(249, 250, 251)',
       borderRadius: '8px',
-      // Fork divergence: the maid-atelier skin redefines --dsw-alias-label-tertiary
-      // to #405273, so the context text inherits a blue-tinted ink instead of the
-      // upstream neutral gray.
-      color: 'rgb(64, 82, 115)',
+      color: 'rgb(129, 133, 140)',
       fontSize: '11px',
       lineHeight: '16px',
       padding: ['10px', '16px', '12px', '12px'],
@@ -399,10 +397,55 @@ describe('web e2e: seeded history renders through cold resume', () => {
     await fileLink.waitFor({ timeout: 10_000 })
     const frame = page.locator('[style*="grid-template-columns"]').first()
     expect(await frame.getAttribute('data-details-collapsed')).toBe('true')
-    await fileLink.click()
-    await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+    const openPath = vi.spyOn(scaffold.ctx.apiProxy.host, 'openPath')
+      .mockImplementation(async (request, _signal) => ({
+        rpcId: request.rpcId,
+        result: { ok: true, value: { opened: true as const } },
+      }))
+    try {
+      await fileLink.click()
+      await expect.poll(() => frame.getAttribute('data-details-collapsed'), { timeout: 5_000 }).toBe('true')
+    } finally {
+      openPath.mockRestore()
+    }
     // Path label survives from the recorded args (a.txt).
     await expect.poll(() => page.getByText('a.txt', { exact: false }).count(), { timeout: 5_000 }).toBeGreaterThan(0)
+  })
+
+  it.skipIf(MODE === 'record')('a Host open refusal keeps the reason and retries the same path', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-seeded-file-open-failure'))
+    const fileLink = page.locator('[data-variant="read"] button').first()
+    await fileLink.waitFor({ timeout: 10_000 })
+    const openPath = vi.spyOn(scaffold.ctx.apiProxy.host, 'openPath')
+      .mockImplementation(async (request, _signal) => ({
+        rpcId: request.rpcId,
+        result: {
+          ok: false as const,
+          error: { code: 'internal', message: 'xdg-open is not available', details: {} },
+        },
+      }))
+    try {
+      await fileLink.click()
+      const dialog = page.getByRole('dialog', { name: 'Couldn’t open file' })
+      await dialog.waitFor({ timeout: 5_000 })
+      const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
+      await compareOrRefreshGolden(FILE_OPEN_FAILURE_EXPECTED, snapshot, MODE)
+      await expect.poll(() => dialog.innerText(), { timeout: 5_000 })
+        .toContain('path open failed: xdg-open is not available')
+      await page.getByRole('button', { name: 'Retry' }).click()
+      await expect.poll(() => openPath.mock.calls.length, { timeout: 5_000 }).toBe(2)
+      expect(openPath.mock.calls[0]![0].payload).toEqual(openPath.mock.calls[1]![0].payload)
+      await page.getByRole('button', { name: 'Cancel' }).click()
+      await expect.poll(() => page.getByRole('dialog', { name: 'Couldn’t open file' }).count(), {
+        timeout: 5_000,
+      }).toBe(0)
+    } finally {
+      // Shared page: a leftover mask blocks later cases even when this one fails.
+      if (await page.getByRole('dialog', { name: 'Couldn’t open file' }).count() > 0) {
+        await page.keyboard.press('Escape')
+      }
+      openPath.mockRestore()
+    }
   })
 
   it.skipIf(MODE === 'record')('expands the cold-resumed compact summary', async () => {
@@ -508,6 +551,6 @@ describe('web e2e: seeded history renders through cold resume', () => {
     // stream would have failed the turn loudly. Cleanliness pins the wire.
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['command-row.expected.md', 'feedback-row.expected.md', 'seed.jsonl', 'ui.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['command-row.expected.md', 'feedback-row.expected.md', 'file-open-failure.expected.md', 'seed.jsonl', 'ui.expected.md'])
   })
 })

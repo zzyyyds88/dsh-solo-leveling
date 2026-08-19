@@ -48,9 +48,9 @@
 - textbox "Message the agent"
 - button "Commands":
   - img
-- 'button "Access mode, current: Read Only"'
+- 'button "Access mode, current: Read Only"': Read Only
 - button "Select model, current DeepSeek-V4-Flash":
   - text: DeepSeek-V4-Flash
   - img
 - button "Send message" [disabled]
-- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 98% Input 15.8K tok · Output 135 tok ·TPS {{throughput}} tok/s
+- text: 1 turns · 2 steps LLM {{duration}} · Tool call {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 98% Input 15.8K tok · Output 135 tok

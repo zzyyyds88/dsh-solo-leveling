@@ -16,10 +16,10 @@
   - img
   - img
   - text: Context injection @deepseek-ai/dsh-system-prompt
-- button "Think The user wants me to use the ask_user_question tool with specific parameters. Let me do that exactly as instructed.":
+- button "Think The user wants me to use the ask_user_question tool to ask them a specific question with the given parameters. Let me do exactly that.":
   - img
   - img
-  - text: Think The user wants me to use the ask_user_question tool with specific parameters. Let me do that exactly as instructed.
+  - text: Think The user wants me to use the ask_user_question tool to ask them a specific question with the given parameters. Let me do exactly that.
 - text: Running
 - button "Ask question waiting":
   - img

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-host-git-graph",
   "description": "Host half of the DSH web GUI git graph: a workspace-gated git service and its /git/* JSON + SSE routes",
-  "version": "0.1.0-rc.7-local.1",
+  "version": "0.1.0-rc.8-local.1",
   "publishConfig": {
     "access": "public"
   },

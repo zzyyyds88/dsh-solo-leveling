@@ -261,15 +261,7 @@ describe('web e2e: agent-preset selection', () => {
     await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 15_000 }).toBe('standard')
 
     await composer.fill('/')
-    // The forwarded `agent-preset/selected` invalidation races the composer
-    // re-open under a parallel run: the menu can open on the stale `minimal`
-    // snapshot before the invalidations land. Re-open on each attempt so the
-    // catalog fetch runs after the invalidation instead of serving it.
-    await expect.poll(async () => {
-      await composer.fill('')
-      await composer.fill('/')
-      return menuOptions(page)
-    }, { timeout: 45_000, interval: 250 })
+    await expect.poll(() => menuOptions(page), { timeout: 15_000 })
       .toEqual(expect.arrayContaining([expect.stringContaining(SKILL_NAME)]))
     const onStandard = await menuOptions(page)
     expect(onStandard.some(option => option.startsWith('compact'))).toBe(true)

@@ -21,14 +21,11 @@ const SEED_FIXTURE = fileURLToPath(new URL('./snapshots/seeded-history/seed.json
 const PROMPT = 'Reply with the single word LIGHTHOUSE and stop.'
 const MODE = webSnapshotMode()
 
-/** Details column in CSS pixels. */
+/** Last AppFrame grid track in CSS pixels. */
 async function detailsTrack(page: Page): Promise<number> {
   return await appFrame(page).evaluate((element) => {
     const tracks = getComputedStyle(element).gridTemplateColumns.split(' ')
-    // Fork divergence: the aionui panel appends two more tracks (preview, explorer)
-    // after the shell's own sidebar/center/details triple, so `tracks.at(-1)` now
-    // reads the Explorer width. The shell details column stays at index 2.
-    return Number.parseFloat(tracks[2] ?? 'NaN')
+    return Number.parseFloat(tracks.at(-1) ?? 'NaN')
   })
 }
 

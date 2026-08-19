@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-host-aionui-panel",
   "description": "Host half of the DSH right-panel system: workspace-gated filesystem + git services and the /aionui-panel/* JSON + SSE routes",
-  "version": "0.1.0-rc.7-local.1",
+  "version": "0.1.0-rc.8-local.1",
   "publishConfig": {
     "access": "public"
   },

@@ -177,10 +177,9 @@ export function apply(ctx: Context, config: Config): void {
     const raw = current()
     const defaults = settings?.get(settingsNamespace('dsh-defaults'))
     if (raw === lastRaw && defaults === lastDefaults && memoized !== undefined) return memoized
-    lastRaw = raw
-    lastDefaults = defaults
     const next = resolveProfiles(raw.providers, defaults === undefined ? undefined : defaults as PiAiDefaults)
     lastRaw = raw
+    lastDefaults = defaults
     memoized = next
     return next
   }
@@ -329,22 +328,4 @@ export function apply(ctx: Context, config: Config): void {
       }
     },
   })
-
-  // Local fork: a change to the `dsh-defaults` namespace (the retry-count
-  // default) must re-resolve the profiles and re-register the routes — the
-  // registry captures each route's retry policy at registration time. Listens
-  // to `settings/updated` (the commit event, fired after the resolved value is
-  // swapped).
-  ctx.effect(() => {
-    const onDefaultsUpdated = (ns: unknown): void => {
-      if (ns !== 'dsh-defaults') return
-      try {
-        ensureRegistrationFacts()
-      } catch (error) {
-        ctx.logger.error('llm-pi-ai: keeping the previously registered routes after a dsh-defaults update')
-        ctx.logger.error(error)
-      }
-    }
-    return ctx.on('settings/updated', onDefaultsUpdated)
-  }, 'llm-pi-ai: dsh-defaults change re-registration')
 }

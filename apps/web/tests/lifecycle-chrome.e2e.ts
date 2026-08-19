@@ -247,11 +247,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       await page.evaluate(() => {
         const sidebar = document.querySelector('[class*="sidebar"], [class*="rail"]') ?? document.body
         return {
-          // The shipped maid-atelier skin intentionally pins `--dsw-alias-bg-base`
-          // to transparent so its painted backdrop shows through; the layer-1
-          // alias still carries the light/dark palette and is the cascade fact
-          // this scenario pins.
-          token: getComputedStyle(document.body).getPropertyValue('--dsw-alias-bg-layer-1').trim(),
+          token: getComputedStyle(document.body).getPropertyValue('--dsw-alias-bg-base').trim(),
           sidebarBg: getComputedStyle(sidebar).backgroundColor,
           bodyBg: getComputedStyle(document.body).backgroundColor,
         }

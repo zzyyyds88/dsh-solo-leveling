@@ -112,37 +112,21 @@ describe('web e2e: queue row actions', () => {
     ).toBe(2)
 
     await page.setViewportSize({ width: 640, height: 1000 })
+    const queueBox = await page.locator('[data-queue-dock]').boundingBox()
+    const composerBox = await page.locator('[data-composer-card]').boundingBox()
+    expect(queueBox).not.toBeNull()
+    expect(composerBox).not.toBeNull()
+    expect(queueBox!.x).toBeGreaterThanOrEqual(composerBox!.x)
+    expect(queueBox!.x + queueBox!.width)
+      .toBeLessThanOrEqual(composerBox!.x + composerBox!.width)
+    const queueLeftInset = queueBox!.x - composerBox!.x
+    const queueRightInset = composerBox!.x + composerBox!.width - queueBox!.x - queueBox!.width
     const composerMetrics = await page.locator('[data-composer-card]').evaluate((element) => {
       const style = getComputedStyle(element)
       return {
         dockInset: Number.parseFloat(style.getPropertyValue('--dsh-composer-dock-inset')),
       }
     })
-    // The narrow resize re-flows the center column over several frames; the
-    // card re-docks before the dock re-stretches, so a read mid-transition
-    // reports a card that already moved and a dock that has not. Wait until
-    // the inset is right AND the geometry is stable across two reads.
-    let previousInsetKey = ''
-    await expect.poll(async () => {
-      const queueBox = await page.locator('[data-queue-dock]').boundingBox()
-      const composerBox = await page.locator('[data-composer-card]').boundingBox()
-      if (queueBox === null || composerBox === null) return false
-      const queueLeftInset = queueBox.x - composerBox.x
-      const queueRightInset = composerBox.x + composerBox.width - queueBox.x - queueBox.width
-      if (Math.abs(queueLeftInset - composerMetrics.dockInset) >= 0.5
-        || Math.abs(queueRightInset - composerMetrics.dockInset) >= 0.5) return false
-      const key = `${queueBox.x},${queueBox.width},${composerBox.x},${composerBox.width}`
-      const stable = key === previousInsetKey
-      previousInsetKey = key
-      return stable
-    }, { timeout: 15_000 }).toBe(true)
-    const queueBox = (await page.locator('[data-queue-dock]').boundingBox())!
-    const composerBox = (await page.locator('[data-composer-card]').boundingBox())!
-    expect(queueBox.x).toBeGreaterThanOrEqual(composerBox.x)
-    expect(queueBox.x + queueBox.width)
-      .toBeLessThanOrEqual(composerBox.x + composerBox.width)
-    const queueLeftInset = queueBox.x - composerBox.x
-    const queueRightInset = composerBox.x + composerBox.width - queueBox.x - queueBox.width
     expect(queueLeftInset).toBeCloseTo(composerMetrics.dockInset, 1)
     expect(queueRightInset).toBeCloseTo(composerMetrics.dockInset, 1)
     await page.setViewportSize({ width: 1680, height: 1000 })
@@ -260,24 +244,6 @@ describe('web e2e: queue row actions', () => {
     }
     await expectAlignedContextPanels()
     await page.setViewportSize({ width: 640, height: 1000 })
-    // The narrow resize re-stacks the panels into one column over several
-    // frames; wait until the x/width alignment lands and stays put across
-    // two reads before the full assertion.
-    let previousAlignKey = ''
-    await expect.poll(async () => {
-      const queuePanelBox = await page.locator('[data-queue-dock] > div').boundingBox()
-      const todoBox = await page.locator('[data-testid="todo-panel"]').boundingBox()
-      const goalBox = await page.locator('[data-goal-bar] > div').boundingBox()
-      if (queuePanelBox === null || todoBox === null || goalBox === null) return false
-      if (Math.abs(todoBox.x - goalBox.x) >= 0.05
-        || Math.abs(todoBox.x - queuePanelBox.x) >= 0.05
-        || Math.abs(todoBox.width - goalBox.width) >= 0.05
-        || Math.abs(todoBox.width - queuePanelBox.width) >= 0.05) return false
-      const key = `${todoBox.x},${todoBox.width},${goalBox.x},${goalBox.width},${queuePanelBox.x},${queuePanelBox.width}`
-      const stable = key === previousAlignKey
-      previousAlignKey = key
-      return stable
-    }, { timeout: 15_000 }).toBe(true)
     await expectAlignedContextPanels()
     await page.setViewportSize({ width: 1680, height: 1000 })
 

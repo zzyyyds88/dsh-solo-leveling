@@ -397,9 +397,8 @@ describe('web e2e: persisted subagent conversation and human continuation', () =
     expect([
       Math.round(clickAreaBox!.x - treeBox!.x),
       Math.round(treeBox!.x + treeBox!.width - clickAreaBox!.x - clickAreaBox!.width),
-    // Fork divergence: the maid-atelier skin widens the menu/tree row padding by 1px,
-    // so the row insets 5px from each edge instead of the upstream 4px.
-    ]).toEqual([5, 5])
+    // Menu padding alone insets the rows now that the border is gone.
+    ]).toEqual([4, 4])
     await compareOrRefreshGolden(
       BRANCHLESS_EXPECTED,
       await captureStableAria(page, '[role="tree"][aria-label="Subagent sessions"]', scaffold.workspaceCwd),

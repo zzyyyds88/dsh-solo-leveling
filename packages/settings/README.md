@@ -8,6 +8,5 @@ This family resolves user-editable configuration through registered namespaces a
 |---|---|---|
 | [`settings/`](settings/README.md) | Defines namespace registration, layered resolution, and commits | `ctx.settings` |
 | [`settings-file/`](settings-file/README.md) | Stores settings in a local file and observes external edits | registers on `ctx.settings` |
-| [`defaults/`](defaults/README.md) | Registers the `dsh-defaults` namespace (default working directory, retry count) | registers on `ctx.settings` |
 
 The subsystem reference — namespaces, owner scopes, resolution order, hot commits — is [docs/subsystems/settings.md](../../docs/subsystems/settings.md).

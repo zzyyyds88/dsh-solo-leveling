@@ -21,13 +21,13 @@
       "path": "../../attachment/attachment"
     },
     {
-      "path": "../../settings/settings"
-    },
-    {
       "path": "../../runtime-diagnostics/invariants"
     },
     {
       "path": "../../util/timeout"
+    },
+    {
+      "path": "../../settings/settings"
     }
   ]
 }

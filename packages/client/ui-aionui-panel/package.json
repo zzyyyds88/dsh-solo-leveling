@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-aionui-panel",
   "description": "DSH web GUI right-panel system: explorer file tree, multi-tab preview, and real git SCM panel over the /aionui-panel/* routes",
-  "version": "0.1.0-rc.7-local.1",
+  "version": "0.1.0-rc.8-local.1",
   "publishConfig": {
     "access": "public"
   },

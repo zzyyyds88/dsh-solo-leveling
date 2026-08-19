@@ -99,6 +99,38 @@ div[data-slot="conversation.composer.dock"] > [role="tooltip"] {
   width: max-content;
   max-width: calc(100vw - 32px);
 }
+
+/* ── 窄屏（手机）：整段流式换行，通常两行，全部内容可见、不省略 ──
+   桌面/宽屏保持「一行并排 + 省略号」；窄屏把官方统计组与 TPS 一起
+   当作一段内联文本，按可用宽度换行，末尾省略号关闭。 */
+@media (max-width: 768px) {
+  div[data-slot="conversation.composer.dock"]:has(> [data-dsh-live-tps]) {
+    display: block !important;
+    text-align: center;
+  }
+  div[data-slot="conversation.composer.dock"] > *:not([role="tooltip"]):not([data-dsh-live-tps]) {
+    display: inline !important;
+    max-width: none !important;
+    width: auto !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    /* 11px：让官方统计 + TPS 整段在两行内放下 */
+    font-size: 11px !important;
+    line-height: 18px !important;
+  }
+  div[data-slot="conversation.composer.dock"] > * + [data-dsh-live-tps] {
+    display: inline !important;
+    white-space: nowrap !important;
+  }
+  div[data-slot="conversation.composer.dock"] > * + [data-dsh-live-tps]::before {
+    content: ' \\B7 ';
+    margin: 0;
+  }
+  div[data-slot="conversation.composer.dock"] > * + [data-dsh-live-tps]:empty::before {
+    content: none;
+  }
+}
 `.trim()
 
 /** Injected-once guard for the merge stylesheet (one tag per page load). */

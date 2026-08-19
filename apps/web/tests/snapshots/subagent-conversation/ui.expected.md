@@ -57,4 +57,4 @@
 - 'button "Access mode, current: Custom"': Custom
 - button "6% of context used"
 - button "Send message" [disabled]
-- text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok ·TPS {{throughput}} tok/s
+- text: 2 turns · 2 steps LLM {{duration}} TTFT avg {{duration}} · {{throughput}} tok/s Cache hit 99% Input 15.6K tok · Output 158 tok

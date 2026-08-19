@@ -5,12 +5,13 @@
 
 import { randomUUID } from 'node:crypto'
 import { mkdir, stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-presets/types'
-import { AttachmentError } from '@deepseek-ai/dsh-attachment'
+import { AttachmentError, admitEncodedImages } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { contentHasImage, createUserMessage, freezeMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import { errorChain } from '@deepseek-ai/dsh-llm'
@@ -123,42 +124,17 @@ export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
 
-/** Decode the browser payload while rejecting non-canonical base64 forms. */
-function decodeBase64(data: string): Uint8Array {
-  const decoded = Buffer.from(data, 'base64')
-  if (data.length === 0 || decoded.toString('base64') !== data) {
-    throw new AttachmentError('Image upload is not canonical base64.', 'INVALID_IMAGE_BASE64')
-  }
-  return new Uint8Array(decoded)
-}
-
 /** Validate one prompt as a batch before publishing any durable image object. */
 async function durablePromptContent(ctx: Context, content: readonly PromptContentPart[]): Promise<ContentBlock[]> {
   if (content.every(part => part.type === 'text')) {
     return content.map(part => ({ type: 'text', text: part.text }))
   }
-  const prepared = content.map(part => part.type === 'text'
-    ? part
-    : { part, data: decodeBase64(part.data) })
-  const images = prepared.filter((part): part is Extract<typeof part, { data: Uint8Array }> => 'data' in part)
-  const refs = await ctx.attachments.saveImages(images.map(image => ({
-    data: image.data,
-    mediaType: image.part.mediaType,
-    ...image.part.name === undefined ? {} : { name: image.part.name },
-  })))
-  const blocks: ContentBlock[] = []
-  let imageIndex = 0
-  for (const item of prepared) {
-    if (!('data' in item)) {
-      blocks.push({ type: 'text', text: item.text })
-      continue
-    }
-    const attachment = refs[imageIndex++]
-    /* v8 ignore next -- each prepared image supplied exactly one saveImages input and therefore one ordered ref. */
-    if (attachment === undefined) throw new Error('attachment batch result did not preserve input cardinality')
-    blocks.push({ type: 'image', attachment })
-  }
-  return blocks
+  const refs = await admitEncodedImages(ctx.attachments, content.filter(part => part.type === 'image'))
+  let next = 0
+  return content.map(part => part.type === 'text'
+    ? { type: 'text', text: part.text }
+    // admitEncodedImages returns one reference per image part in order.
+    : { type: 'image', attachment: refs[next++] as ImageAttachmentRef })
 }
 
 /** Search durable content for an image reference, including nested tool results. */
@@ -2881,6 +2857,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           provider: selection.provider,
           model: selection.model,
           attachedSessions: ctx.agents.list().length,
+          home: homedir(),
           canOpenPath: canOpenPaths(),
         }))
       },
@@ -3506,12 +3483,15 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             queue.push(frame({ type: 'host/session-status', sessionId: agent.id, running: status === 'running' }))
           }),
           ctx.on('agent/error', ({ agent, error }: { agent: Agent; error: unknown }) => {
-            // Redact AUTH before it leaves the host: provider messages may echo
-            // the credential, and this relay is the pet/live surface's source.
-            const message = (error as { code?: unknown } | null)?.code === 'AUTH'
-              ? 'API key is invalid'
-              : errorChain(error)
-            queue.push(frame({ type: 'host/agent-error', sessionId: agent.id, message }))
+            queue.push(frame({
+              type: 'host/agent-error',
+              sessionId: agent.id,
+              // Redact AUTH before it leaves the host: provider messages may echo
+              // the credential, and this relay is the pet/live surface's source.
+              message: (error as { code?: unknown } | null)?.code === 'AUTH'
+                ? 'API key is invalid'
+                : errorChain(error),
+            }))
           }),
           ctx.on('domain/changed', (change) => {
             if (change.domain !== 'workspace') return

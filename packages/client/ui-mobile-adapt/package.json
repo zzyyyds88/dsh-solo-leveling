@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-mobile-adapt",
   "description": "Mobile adaptation for the Web GUI: narrow-screen full-width chat, drawer side panels, touch-composer and dialog polish",
-  "version": "0.1.0-rc.7",
+  "version": "0.1.0-rc.8-local.1",
   "publishConfig": {
     "access": "public"
   },
@@ -31,7 +31,9 @@
   },
   "dsh": {
     "client": {
-      "inject": [],
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ],
       "platform": "web"
     }
   },
@@ -42,11 +44,13 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-layout": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^"
   },

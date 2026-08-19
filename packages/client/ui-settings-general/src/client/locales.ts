@@ -7,7 +7,6 @@ export const zh = {
   'close': '关闭',
   'openDocument': '打开配置文件',
   'openDocument.error': '无法打开配置文件',
-  'openDocument.path': '此部署无桌面环境，配置文件位于：{path}',
   'general.nav': '通用设置',
 } satisfies Record<string, string>
 
@@ -21,6 +20,5 @@ export const en = {
   'close': 'Close',
   'openDocument': 'Open configuration file',
   'openDocument.error': 'Could not open configuration file',
-  'openDocument.path': 'No desktop opener on this host; the file is at: {path}',
   'general.nav': 'General',
 } satisfies Record<SettingsKey, string>

@@ -179,9 +179,7 @@ describe('web e2e: live-turn interactions (cancel / error / retry)', () => {
     const requestMarker = page.locator('tr[data-request-only="true"]').last()
       .getByRole('button', { name: /Request #/ })
     await requestMarker.click()
-    // The pet bubble also shows the redacted AUTH copy now; scope to the
-    // trajectory summary so the redacted message is the request detail.
-    await page.getByLabel('Summary').getByText('API key is invalid', { exact: true }).waitFor({ timeout: 10_000 })
+    await page.getByText('API key is invalid', { exact: true }).waitFor({ timeout: 10_000 })
     expect(await page.locator('body').textContent()).not.toContain('sk-preview-secret')
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])

@@ -160,13 +160,12 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
       {
         cwd: sessionsDir,
         env: {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-no-call',
-          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(sessionsDir, '.dsh'),
           DSH_AGENTS_HOME: join(sessionsDir, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -227,14 +226,13 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
       {
         cwd: workspace,
         env: {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-workspace',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
-          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -341,14 +339,13 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
       {
         cwd: workspace,
         env: {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-retry',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
-          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
         },
@@ -375,9 +372,7 @@ describe('dsh web keyless CLI smoke', () => {
         turn: 1,
         step: 1,
         retry: 1,
-        // Local fork: dsh-defaults.defaultRetryCount defaults to 10 and is the
-        // fallback for providers without their own retry policy (DeepSeek here).
-        maxRetries: 10,
+        maxRetries: 5,
         failure: { code: 'TRANSPORT' },
       })
       expect(JSON.stringify(page.events)).toContain('WEB_RETRY_DISCARDED')
@@ -426,7 +421,7 @@ describe('dsh web keyless CLI smoke', () => {
     const tsxLoader = pathToFileURL(createRequire(join(REPO_ROOT, 'package.json')).resolve('tsx')).href
     const child = spawn(
       process.execPath,
-      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--port', '0'],
+      ['--import', tsxLoader, join(REPO_ROOT, 'apps/cli/src/bin.ts'), 'web', '--no-open', '--port', '0'],
       {
         cwd: workspace,
         env: {
@@ -434,7 +429,6 @@ describe('dsh web keyless CLI smoke', () => {
           DEEPSEEK_API_KEY: 'keyless-web-code-mode',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
           DSH_TOOLS_MODE: 'code',
-          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -497,13 +491,13 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
         // Pin the in-browser picker: the shipped `-auto` row would resolve to
         // the native OS chooser on this bind, and no page can drive that.
         '--patch', fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
+        '--no-open',
         '--port', String(port),
       ],
       {
         cwd: sessionsDir,
         env: {
           ...process.env,
-          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(sessionsDir, '.dsh'),
           DSH_AGENTS_HOME: join(sessionsDir, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -547,6 +541,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     await connectFreshWorkspace(page, sessionsDir)
     const input = page.locator('textarea').first()
     await input.waitFor({ timeout: 10_000 })
+    const productTitle = await page.title()
     await screen(page, '02-empty-state')
     const prompt = `Please answer this request carefully: explain event sourcing in two sentences, ending with exactly ${ROUND_DONE_MARKER}.`
     await input.fill(prompt)
@@ -556,8 +551,8 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     await page.waitForFunction(() => document.body.innerText.length > 50, undefined, { timeout: 15_000 })
     expect(pageErrors).toEqual([])
     await page.waitForFunction(
-      () => document.title !== 'DeepSeek Harness' && document.title.endsWith(' — DeepSeek Harness'),
-      undefined,
+      expected => document.title !== expected && document.title.endsWith(` — ${expected}`),
+      productTitle,
       { timeout: 15_000 },
     )
     await expect.poll(async () => (await rpc<{ items: { sessionId: string }[] }>(baseUrl, 'session.list', {})).items.length, {
@@ -568,8 +563,8 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
     if (sessionId === undefined) throw new Error('created Web session was not listed')
     const durableTitle = await waitForProviderTitle(baseUrl, sessionId)
     await page.waitForFunction(
-      expected => document.title === `${expected} — DeepSeek Harness`,
-      durableTitle,
+      ({ expected, product }) => document.title === `${expected} — ${product}`,
+      { expected: durableTitle, product: productTitle },
       { timeout: 15_000 },
     )
     const sessionTree = page.getByRole('tree', { name: 'Sessions' })
