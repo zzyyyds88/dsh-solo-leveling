@@ -12,31 +12,10 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../../vendor/schemastery"
-    },
-    {
       "path": "../../host/webserver"
     },
     {
-      "path": "../runtime"
-    },
-    {
-      "path": "../ui-slots"
-    },
-    {
-      "path": "../locale"
-    },
-    {
       "path": "../ui-layout"
-    },
-    {
-      "path": "../ui-settings"
-    },
-    {
-      "path": "../ui-settings-plugins"
-    },
-    {
-      "path": "../../settings/settings"
     },
     {
       "path": "../../runtime-diagnostics/invariants"
