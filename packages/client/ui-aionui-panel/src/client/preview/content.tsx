@@ -283,7 +283,10 @@ function CsvViewer({ content }: { content: string }): JSX.Element {
   )
 }
 
-/** Parse CSV lines (quoted cells with escaped quotes). */
+/** Parse CSV lines (quoted cells with escaped quotes).
+ * @param text - the text value.
+ * @returns - the resulting string.
+ */
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = []
   let row: string[] = []
@@ -389,7 +392,10 @@ function PdfViewer({ dataUrl, title }: { dataUrl: string; title: string }): JSX.
     : <iframe className={previewCss.pdfViewer} src={url} title={title} />
 }
 
-/** Convert a data URL to a Blob (null on failure). */
+/** Convert a data URL to a Blob (null on failure).
+ * @param dataUrl - the dataUrl.
+ * @returns - the result.
+ */
 export function dataUrlToBlob(dataUrl: string): Blob | null {
   const comma = dataUrl.indexOf(',')
   if (comma === -1) return null
@@ -474,7 +480,10 @@ function UrlViewer({ tab }: { tab: PreviewTabState }): JSX.Element {
   )
 }
 
-/** Bare domains get https://; whitespace queries go to a search engine. */
+/** Bare domains get https://; whitespace queries go to a search engine.
+ * @param input - the input.
+ * @returns - the resulting string.
+ */
 export function normalizeUrl(input: string): string {
   const trimmed = input.trim()
   if (trimmed === '') return 'about:blank'

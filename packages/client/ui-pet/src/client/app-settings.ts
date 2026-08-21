@@ -29,24 +29,34 @@ function persist(): void {
   } catch {}
 }
 
-/** 桌宠是否开启（false 时组件不渲染、不发声）。 */
+/** 桌宠是否开启（false 时组件不渲染、不发声）。
+ * @returns true when the pet is shown and audible, false when hidden entirely.
+ */
 export function isPetEnabled(): boolean {
   return app.enabled
 }
 
-/** 设置桌宠开关，返回新状态。 */
+/** 设置桌宠开关，返回新状态。
+ * @param enabled - the new pet-enabled state.
+ * @returns the resulting enabled state.
+ */
 export function setPetEnabled(enabled: boolean): boolean {
   app.enabled =  enabled
   persist()
   return app.enabled
 }
 
-/** 读取全量应用设置快照（设置卡片用）。 */
+/** 读取全量应用设置快照（设置卡片用）。
+ * @returns a copy of the current app settings (currently just the pet-enabled flag).
+ */
 export function appSettingsSnapshot(): { enabled: boolean } {
   return { enabled: app.enabled }
 }
 
-/** 设置卡片批量保存：一次写入多个字段，返回新快照。 */
+/** 设置卡片批量保存：一次写入多个字段，返回新快照。
+ * @param patch - partial settings to apply; only defined fields are written.
+ * @returns the new settings snapshot after the patch is applied.
+ */
 export function applyAppSettings(patch: { enabled?: boolean }): { enabled: boolean } {
   if (typeof patch.enabled === 'boolean') {
     app.enabled = patch.enabled
@@ -55,7 +65,10 @@ export function applyAppSettings(patch: { enabled?: boolean }): { enabled: boole
   return appSettingsSnapshot()
 }
 
-/** 订阅应用设置变化（桌宠本体 / 设置卡片共用）。 */
+/** 订阅应用设置变化（桌宠本体 / 设置卡片共用）。
+ * @param listener - invoked on every app-settings change, locally and across tabs.
+ * @returns an unsubscribe function that removes both listeners.
+ */
 export function subscribeAppSettings(listener: () => void): () => void {
   window.addEventListener('deepseek-pet:app-changed', listener)
   window.addEventListener('storage', listener)

@@ -11,7 +11,10 @@ import type { JSX } from 'react'
 import { t } from '../locales.ts'
 
 /** One transient toast message. */
-let toastTimer: ReturnType<typeof setTimeout> | undefined
+let toastTimer: ReturnType<typeof setTimeout> | undefined/**
+ * @param message - the message.
+ */
+
 export function toast(message: string): void {
   const el = document.createElement('div')
   el.className = 'aionui-toast'

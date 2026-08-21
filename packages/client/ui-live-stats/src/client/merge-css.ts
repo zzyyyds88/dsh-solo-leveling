@@ -115,13 +115,28 @@ div[data-slot="conversation.composer.dock"] > [role="tooltip"] {
     white-space: normal !important;
     overflow: visible !important;
     text-overflow: clip !important;
-    /* 11px：让官方统计 + TPS 整段在两行内放下 */
-    font-size: 11px !important;
+    /* 10px：让官方统计 + TPS 整段在两行内放下（10px 下 >=360px 视口稳定两行） */
+    font-size: 10px !important;
     line-height: 18px !important;
+  }
+  /* 统计行内每个分组段（如「缓存命中 45%」整段、「首 token 平均 2.5s」）保持
+     不折行：整段流式换行只在段之间发生，标签与数值绝不从中截断。段 span 用
+     data-group 精确命中；「·」/「|」分隔符用 data-dot/data-sep 命中。 */
+  div[data-slot="conversation.composer.dock"] > *:not([role="tooltip"]):not([data-dsh-live-tps]) > span[data-group] {
+    white-space: nowrap !important;
+  }
+  /* 移动端收紧分隔符边距：10px 字号下 10px 边距吃宽度，收紧后 360px 仍能两行 */
+  div[data-slot="conversation.composer.dock"] > *:not([role="tooltip"]):not([data-dsh-live-tps]) > span[data-sep],
+  div[data-slot="conversation.composer.dock"] > *:not([role="tooltip"]):not([data-dsh-live-tps]) > span[data-dot] {
+    margin: 0 2px !important;
   }
   div[data-slot="conversation.composer.dock"] > * + [data-dsh-live-tps] {
     display: inline !important;
     white-space: nowrap !important;
+    font-size: 10px !important;
+    line-height: 18px !important;
+    padding: 0 !important;
+    vertical-align: baseline !important;
   }
   div[data-slot="conversation.composer.dock"] > * + [data-dsh-live-tps]::before {
     content: ' \\B7 ';

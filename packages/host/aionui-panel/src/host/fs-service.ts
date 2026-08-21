@@ -106,7 +106,11 @@ function compareEntries(a: FsEntry, b: FsEntry): number {
   return an < bn ? -1 : an > bn ? 1 : 0
 }
 
-/** The image probe: parse PNG/JPEG/GIF/WebP header dimensions (undefined on failure). */
+/**
+ * The image probe: parse PNG/JPEG/GIF/WebP header dimensions (undefined on failure).
+ * @param data - the raw file bytes whose header to inspect.
+ * @returns the pixel dimensions when the header is recognized, else undefined.
+ */
 export function probeImageSize(data: Buffer): { width: number; height: number } | undefined {
   try {
     if (data.length >= 24 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) {
@@ -205,12 +209,21 @@ export class FsService {
     private readonly spawnWatcher: SpawnWatcher = defaultSpawnWatcher,
   ) {}
 
-  /** Verify a project root against the workspace gate (used by the SSE layer). */
+  /**
+   * Verify a project root against the workspace gate (used by the SSE layer).
+   * @param root - project root to verify.
+   * @returns the gate verdict (canonical root or rejection error).
+   */
   verify(root: string): Promise<GateVerdict> {
     return this.gate(root)
   }
 
-  /** List one directory (relative path; '' = root). Sorted dirs-first alpha. */
+  /**
+   * List one directory (relative path; '' = root). Sorted dirs-first alpha.
+   * @param root - project root the listing is gated against.
+   * @param rel - directory path relative to the root ('' for the root itself).
+   * @returns the directory listing, or a PanelError when gating or path resolution fails.
+   */
   async list(root: string, rel: string): Promise<DirListing | PanelError> {
     const gated = await this.gate(root)
     if (!gated.ok) return gated.error
@@ -246,7 +259,13 @@ export class FsService {
     return { root: gated.canonical, entries: out }
   }
 
-  /** Read one file for preview: text decoded utf-8 (capped), images as data URLs. */
+  /**
+   * Read one file for preview: text decoded utf-8 (capped), images as data URLs.
+   * @param root - project root the read is gated against.
+   * @param rel - file path relative to the root.
+   * @param asImage - when true, return an image data URL instead of utf-8 text.
+   * @returns the file read (content, size, mtime, optional image probe), or a PanelError.
+   */
   async read(root: string, rel: string, asImage: boolean): Promise<FileRead | PanelError> {
     const gated = await this.gate(root)
     if (!gated.ok) return gated.error
@@ -290,6 +309,9 @@ export class FsService {
    * path with the derived mime and size — the HTTP layer streams the bytes
    * itself (createReadStream + Range), so even large files never sit in host
    * memory. Mime magic detection reads only the first few bytes.
+   * @param root - project root the read is gated against.
+   * @param rel - file path relative to the root.
+   * @returns the absolute path with the derived mime and size, or a PanelError.
    */
   async readRaw(root: string, rel: string): Promise<{ abs: string; mime: string; size: number } | PanelError> {
     const gated = await this.gate(root)
@@ -307,7 +329,14 @@ export class FsService {
     return { abs: resolved.abs, mime: imageMime(rel, await readMagicBytes(resolved.abs)), size: info.size }
   }
 
-  /** Write text content back, refusing when the file moved on disk (mtime conflict). */
+  /**
+   * Write text content back, refusing when the file moved on disk (mtime conflict).
+   * @param root - project root the write is gated against.
+   * @param rel - file path relative to the root.
+   * @param content - utf-8 text to write.
+   * @param baseMtime - expected on-disk mtime (ms); the write is refused when the file differs.
+   * @returns the new mtime after writing, or a PanelError.
+   */
   async write(
     root: string,
     rel: string,
@@ -338,7 +367,12 @@ export class FsService {
     }
   }
 
-  /** Recursive filename search (case-insensitive substring), pruned at noise dirs. */
+  /**
+   * Recursive filename search (case-insensitive substring), pruned at noise dirs.
+   * @param root - project root the search is gated against.
+   * @param query - substring to match against file names.
+   * @returns the ranked hits (with a truncated flag), or a PanelError.
+   */
   async search(root: string, query: string): Promise<SearchView | PanelError> {
     const gated = await this.gate(root)
     if (!gated.ok) return gated.error
@@ -394,7 +428,12 @@ export class FsService {
     return { query, hits, truncated }
   }
 
-  /** Delete a path (discard of untracked files). Recursive for directories. */
+  /**
+   * Delete a path (discard of untracked files). Recursive for directories.
+   * @param root - project root the delete is gated against.
+   * @param rel - path relative to the root to delete ('' is refused).
+   * @returns ok on success, or a PanelError.
+   */
   async delete(root: string, rel: string): Promise<{ ok: true } | PanelError> {
     const gated = await this.gate(root)
     if (!gated.ok) return gated.error

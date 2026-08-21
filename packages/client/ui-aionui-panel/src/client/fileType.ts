@@ -54,7 +54,10 @@ const DOTFILE_TEXT_NAMES = new Set([
   '.eslintignore', '.prettierignore', '.gitignore.local', '.hgignore',
 ])
 
-/** Detect the preview content type of a file by name (lowercased). */
+/** Detect the preview content type of a file by name (lowercased).
+ * @param name - the name.
+ * @returns - the result.
+ */
 export function detectContentType(name: string): PreviewContentType {
   const base = name.split('/').pop() ?? name
   const lower = base.toLowerCase()
@@ -81,36 +84,56 @@ export function detectContentType(name: string): PreviewContentType {
   return 'unsupported'
 }
 
-/** Whether the type can be edited and saved back. */
+/** Whether the type can be edited and saved back.
+ * @param type - the type.
+ * @returns - whether the operation succeeded.
+ */
 export function isEditableType(type: PreviewContentType): boolean {
   return type === 'markdown' || type === 'html' || type === 'code' || type === 'csv' || type === 'text'
 }
 
-/** Whether the type reads its content as text (vs image data URL). */
+/** Whether the type reads its content as text (vs image data URL).
+ * @param type - the type.
+ * @returns - whether the operation succeeded.
+ */
 export function isTextType(type: PreviewContentType): boolean {
   return type !== 'image' && type !== 'pdf' && type !== 'word' && type !== 'excel'
     && type !== 'ppt' && type !== 'unsupported' && type !== 'url'
 }
 
-/** A stable tab id from the file identity (root + path + type). */
+/** A stable tab id from the file identity (root + path + type).
+ * @param root - the root.
+ * @param path - the path.
+ * @param type - the type.
+ * @returns - the resulting string.
+ */
 export function tabIdOf(root: string, path: string, type: PreviewContentType): string {
   return `${root}\u0000${path}\u0000${type}`
 }
 
-/** The language hint for code tabs (extension without the dot). */
+/** The language hint for code tabs (extension without the dot).
+ * @param name - the name.
+ * @returns - the resulting string.
+ */
 export function languageOf(name: string): string {
   const base = name.split('/').pop() ?? name
   const dot = base.lastIndexOf('.')
   return dot > 0 ? base.slice(dot + 1) : ''
 }
 
-/** The title for a tab: the basename. */
+/** The title for a tab: the basename.
+ * @param path - the path.
+ * @returns - the resulting string.
+ */
 export function basenameOf(path: string): string {
   const parts = path.split('/')
   return parts[parts.length - 1] ?? path
 }
 
-/** The parent relative path of a path ('' for a root-level item). */
+/** The parent relative path of a path ('' for a root-level item).
+ * @param path - the path.
+ * @returns - the resulting string.
+ */
 export function parentRel(path: string): string {
   const idx = path.lastIndexOf('/')
   return idx > 0 ? path.slice(0, idx) : ''
@@ -123,6 +146,11 @@ export function parentRel(path: string): string {
  * when the tab is refreshed after the file changed on disk.
  *
  * Contributed by EricWang1358 (#239).
+
+ * @param root - the root.
+ * @param path - the path.
+ * @param nonce - the nonce.
+ * @returns - the resulting string.
  */
 export function pdfPreviewUrl(root: string, path: string, nonce: number): string {
   return `/aionui-panel/raw?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}&v=${nonce}`

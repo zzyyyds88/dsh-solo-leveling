@@ -125,7 +125,9 @@ export class DefaultsCardController {
     }
   }
 
-  /** Build the face the card's slot registration injects. */
+  /** Build the face the card's slot registration injects.
+   * @returns the card's slot-inject face.
+   */
   inject(): DefaultsCardFace {
     return { hooks: { defaultsCard: this.store }, ...this.form.actions() }
   }

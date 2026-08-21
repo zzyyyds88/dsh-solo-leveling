@@ -87,7 +87,11 @@ export const TASK_PERMISSIONS = ['read-only', 'workspace-write', 'danger-full-ac
 /** One permission preset id. */
 export type TaskPermission = typeof TASK_PERMISSIONS[number]
 
-/** Whether an unknown value is a known permission preset id. */
+/**
+ * Whether an unknown value is a known permission preset id.
+ * @param value - the unknown value to test.
+ * @returns true when the value is a known permission preset id.
+ */
 export function isTaskPermission(value: unknown): value is TaskPermission {
   return typeof value === 'string' && (TASK_PERMISSIONS as readonly string[]).includes(value)
 }
@@ -125,12 +129,21 @@ export const ALL_STATUSES: readonly TaskStatus[] = [
   'backlog', 'todo', 'running', 'done', 'failed',
 ]
 
-/** Brand an unknown string as a status; undefined when it is not one. */
+/**
+ * Whether an unknown value is a valid task status.
+ * @param value - the unknown value to test.
+ * @returns true when the value is a valid task status.
+ */
 export function isTaskStatus(value: unknown): value is TaskStatus {
   return typeof value === 'string' && (ALL_STATUSES as readonly string[]).includes(value)
 }
 
-/** Whether a manual move target is allowed from the given status. */
+/**
+ * Whether a manual move target is allowed from the given status.
+ * @param _from - the task's current status (unused: only the target matters).
+ * @param to - the target status.
+ * @returns true when the target is one of the manually movable statuses.
+ */
 export function canMoveManually(_from: TaskStatus, to: TaskStatus): boolean {
   return (MANUAL_STATUSES).includes(to)
 }
@@ -141,7 +154,13 @@ function normalizeTargetId(value: string | undefined): string | undefined {
   return trimmed === undefined || trimmed === '' ? undefined : trimmed
 }
 
-/** Create a task from user input. */
+/**
+ * Create a task from user input.
+ * @param input - raw user input (title/description/prompt and optional execution targets).
+ * @param now - the creation instant (ms epoch).
+ * @param id - the minted task id.
+ * @returns the new task record.
+ */
 export function createTask(input: NewTaskInput, now: number, id: string): TaskRecord {
   return {
     id,
@@ -158,7 +177,13 @@ export function createTask(input: NewTaskInput, now: number, id: string): TaskRe
   }
 }
 
-/** Clone a task with an updated status and a fresh updatedAt. */
+/**
+ * Clone a task with an updated status and a fresh updatedAt.
+ * @param task - the task to copy.
+ * @param status - the new status.
+ * @param now - the mutation instant (ms epoch).
+ * @returns the updated task.
+ */
 export function withStatus(task: TaskRecord, status: TaskStatus, now: number): TaskRecord {
   return { ...task, status, updatedAt: now }
 }
@@ -168,6 +193,10 @@ export function withStatus(task: TaskRecord, status: TaskStatus, now: number): T
  * absent), with a fresh updatedAt. Keys present in the patch overwrite the
  * current value — including explicit `undefined`, which clears a field (used
  * to disarm `nextRunAt`); absent keys keep their current value.
+ * @param task - the task to copy.
+ * @param patch - rule fields to merge (absent keys keep their current value).
+ * @param now - the mutation instant (ms epoch).
+ * @returns the updated task.
  */
 export function withSchedule(
   task: TaskRecord,
@@ -191,6 +220,10 @@ export function withSchedule(
 /**
  * Open a fresh execution on a task: move it to 'running' and append a
  * running execution record. Returns the new task and the new execution.
+ * @param task - the task to execute.
+ * @param now - the run start instant (ms epoch).
+ * @param executionId - the minted execution id.
+ * @returns the updated task and the new execution record.
  */
 export function startExecution(
   task: TaskRecord,
@@ -215,6 +248,12 @@ export function startExecution(
  * Settle a running execution: record the outcome and move the task into the
  * matching column. No-op (returns the input task) when the execution is not
  * the task's latest or is already settled.
+ * @param task - the task holding the execution.
+ * @param executionId - the execution to settle.
+ * @param outcome - the settled outcome.
+ * @param now - the settlement instant (ms epoch).
+ * @param error - human failure text when the run failed (undefined on success/cancel).
+ * @returns the updated task, or the input task when nothing was settled.
  */
 export function settleExecution(
   task: TaskRecord,
@@ -237,7 +276,11 @@ export function settleExecution(
   return { ...task, status, updatedAt: now, executions }
 }
 
-/** A settled-execution summary string for the detail view. */
+/**
+ * A settled-execution summary string for the detail view.
+ * @param execution - the execution record to label.
+ * @returns 'succeeded', 'failed', 'cancelled', or 'running' for a live execution.
+ */
 export function executionLabel(execution: ExecutionRecord): string {
   if (execution.result === 'succeeded') return 'succeeded'
   if (execution.result === 'failed') return 'failed'

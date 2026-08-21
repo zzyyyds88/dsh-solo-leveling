@@ -17,7 +17,11 @@ declare global {
   var __dshTaskboardApplied: boolean | undefined
 }
 
-/** Claims the plugin apply slot. Returns true when this call won the slot. */
+/**
+ * Claims the plugin apply slot.
+ * @returns true when this call won the slot (first claim); false when the
+ *   slot was already claimed by an earlier factory run.
+ */
 export function claimTaskboardApply(): boolean {
   if (globalThis.__dshTaskboardApplied === true) return false
   globalThis.__dshTaskboardApplied = true

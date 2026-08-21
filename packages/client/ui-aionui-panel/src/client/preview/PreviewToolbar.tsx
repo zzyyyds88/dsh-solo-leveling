@@ -16,7 +16,13 @@ import previewCss from '../styles/preview.module.css'
 /** Refresh button states (AionUi's 4-state machine). */
 export type RefreshState = 'hidden' | 'disabled' | 'idle' | 'updated'
 
-/** Derive the refresh state for one tab. */
+/** Derive the refresh state for one tab.
+ * @param contentType - the contentType.
+ * @param hasContent - the hasContent.
+ * @param loading - the loading.
+ * @param updated - the updated.
+ * @returns - the result.
+ */
 export function refreshStateFor(
   contentType: PreviewContentType,
   hasContent: boolean,
@@ -34,7 +40,9 @@ export function refreshStateFor(
   return updated ? 'updated' : 'idle'
 }
 
-/** Download the current tab's content as a file. */
+/** Download the current tab's content as a file.
+ * @param tab - the tab.
+ */
 export function downloadTab(tab: { title: string; content: string | null; contentType: PreviewContentType }): void {
   if (tab.content === null) return
   const isDataUrl = tab.content.startsWith('data:')

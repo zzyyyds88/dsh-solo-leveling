@@ -11,7 +11,13 @@
  * @module dsh-aionui-panel/client/persist
  */
 
-/** Read a stored number, validating it against [min, max]; fallback otherwise. */
+/** Read a stored number, validating it against [min, max]; fallback otherwise.
+ * @param key - the key.
+ * @param min - the min.
+ * @param max - the max.
+ * @param fallback - the fallback.
+ * @returns - the resulting number.
+ */
 export function readStoredNumber(key: string, min: number, max: number, fallback: number): number {
   try {
     const raw = localStorage.getItem(key)
@@ -25,7 +31,11 @@ export function readStoredNumber(key: string, min: number, max: number, fallback
   }
 }
 
-/** Read a stored string; fallback when absent. */
+/** Read a stored string; fallback when absent.
+ * @param key - the key.
+ * @param fallback - the fallback.
+ * @returns - the resulting string.
+ */
 export function readStoredString(key: string, fallback = ''): string {
   try {
     return localStorage.getItem(key) ?? fallback
@@ -34,7 +44,10 @@ export function readStoredString(key: string, fallback = ''): string {
   }
 }
 
-/** Write a number if it differs from the stored value (avoids churn). */
+/** Write a number if it differs from the stored value (avoids churn).
+ * @param key - the key.
+ * @param value - the value to operate on.
+ */
 export function writeStoredNumber(key: string, value: number): void {
   try {
     const raw = String(Math.round(value))
@@ -45,7 +58,10 @@ export function writeStoredNumber(key: string, value: number): void {
   }
 }
 
-/** Write a string if it differs from the stored value. */
+/** Write a string if it differs from the stored value.
+ * @param key - the key.
+ * @param value - the value to operate on.
+ */
 export function writeStoredString(key: string, value: string): void {
   try {
     if (localStorage.getItem(key) === value) return
@@ -55,7 +71,11 @@ export function writeStoredString(key: string, value: string): void {
   }
 }
 
-/** Debounced writer: coalesces rapid updates (drag frames) into one write. */
+/** Debounced writer: coalesces rapid updates (drag frames) into one write.
+ * @param write - the write.
+ * @param delayMs - the delayMs.
+ * @returns - the result.
+ */
 export function debouncedWriter(write: (value: unknown) => void, delayMs = 150): {
   schedule: (value: unknown) => void
   flush: () => void
@@ -104,7 +124,10 @@ export interface Debounced {
   dispose: () => void
 }
 
-/** Create one debounced scheduler (default 150ms). */
+/** Create one debounced scheduler (default 150ms).
+ * @param delayMs - the delayMs.
+ * @returns - the result.
+ */
 export function createDebounced(delayMs = 150): Debounced {
   let timer: ReturnType<typeof setTimeout> | undefined
   let pending: (() => void) | null = null
@@ -160,6 +183,9 @@ function listStoredKeysByPrefix(prefix: string): string[] {
  * Precisely delete every stored key under a prefix. Only this package's own
  * prefixed keys are removed — foreign-application keys are never touched,
  * replacing the former all-at-once `localStorage.clear()` sweep.
+
+ * @param prefix - the prefix.
+ * @returns - the resulting number.
  */
 export function removeStoredByPrefix(prefix: string): number {
   const keys = listStoredKeysByPrefix(prefix)
@@ -175,7 +201,9 @@ export function removeStoredByPrefix(prefix: string): number {
   return removed
 }
 
-/** All stored preview scopes with their savedAt timestamps, oldest first. */
+/** All stored preview scopes with their savedAt timestamps, oldest first.
+ * @returns - the resulting string.
+ */
 export function listPreviewScopes(): Array<{ root: string; savedAt: number }> {
   const out: Array<{ root: string; savedAt: number }> = []
   for (const key of listStoredKeysByPrefix(PREVIEW_SCOPE_PREFIX)) {
@@ -196,7 +224,9 @@ export function listPreviewScopes(): Array<{ root: string; savedAt: number }> {
   return out
 }
 
-/** Evict the oldest scopes beyond the cap. */
+/** Evict the oldest scopes beyond the cap.
+ * @param keep - the keep.
+ */
 export function evictPreviewScopes(keep: string): void {
   const scopes = listPreviewScopes().filter(scope => scope.root !== keep)
   let excess = scopes.length - (PREVIEW_SCOPE_CAP - 1)
@@ -211,7 +241,11 @@ export function evictPreviewScopes(keep: string): void {
   }
 }
 
-/** Serialize a JSON value with a size guard (quota failures degrade silently). */
+/** Serialize a JSON value with a size guard (quota failures degrade silently).
+ * @param key - the key.
+ * @param value - the value to operate on.
+ * @returns - whether the operation succeeded.
+ */
 export function writeJson(key: string, value: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(value))
@@ -226,7 +260,11 @@ export function writeJson(key: string, value: unknown): boolean {
   }
 }
 
-/** Parse a stored JSON value; fallback on any failure. */
+/** Parse a stored JSON value; fallback on any failure.
+ * @param key - the key.
+ * @param fallback - the fallback.
+ * @returns - the result.
+ */
 export function readJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key)

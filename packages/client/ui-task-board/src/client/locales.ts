@@ -225,13 +225,21 @@ export type TaskBoardKey = keyof typeof zh
 /** The settings-card slice of the task-board dictionary. */
 export type SettingsCardKey = TaskBoardKey
 
-/** Active dictionary, picked by the document language at call time. */
+/**
+ * Active dictionary, picked by the document language at call time.
+ * @returns the en or zh dictionary that matches the document language (zh fallback).
+ */
 export function dictionary(): Record<TaskBoardKey, string> {
   const lang = typeof document !== 'undefined' ? document.documentElement.lang : 'zh'
   return lang.toLowerCase().startsWith('en') ? en : zh
 }
 
-/** Translate a key with optional {name} template params. */
+/**
+ * Translate a key with optional {name} template params.
+ * @param key - the dictionary key to translate.
+ * @param params - optional substitutions for `{name}` placeholders in the text.
+ * @returns the translated text with any params substituted.
+ */
 export function t(key: TaskBoardKey, params?: Record<string, string>): string {
   let text: string = dictionary()[key]
   if (params !== undefined) {

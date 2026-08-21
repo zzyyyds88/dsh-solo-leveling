@@ -7,43 +7,84 @@
 
 import type { GitError, GitErrorCode } from './types.ts'
 
-/** `git rev-parse --show-toplevel` — canonical repository root. */
+/**
+ * `git rev-parse --show-toplevel` — canonical repository root.
+ * @returns the argv for the rev-parse invocation.
+ */
 export const topLevelArgv = (): string[] => ['rev-parse', '--show-toplevel']
 
-/** `git rev-parse --abbrev-ref HEAD` — current branch ('HEAD' when detached). */
+/**
+ * `git rev-parse --abbrev-ref HEAD` — current branch ('HEAD' when detached).
+ * @returns the argv for the rev-parse invocation.
+ */
 export const headBranchArgv = (): string[] => ['rev-parse', '--abbrev-ref', 'HEAD']
 
-/** `git rev-parse --short HEAD` — short head id. */
+/**
+ * `git rev-parse --short HEAD` — short head id.
+ * @returns the argv for the rev-parse invocation.
+ */
 export const headShortArgv = (): string[] => ['rev-parse', '--short', 'HEAD']
 
-/** `git for-each-ref refs/heads --format=%(refname:short)%00%(HEAD)%00%(objectname)` — local branches. */
+/**
+ * `git for-each-ref refs/heads --format=%(refname:short)%00%(HEAD)%00%(objectname)` — local branches.
+ * @returns the argv for the for-each-ref invocation.
+ */
 export const forEachRefArgv = (): string[] => [
   'for-each-ref', 'refs/heads',
   '--format=%(refname:short)%00%(HEAD)%00%(objectname)',
 ]
 
-/** `git status --porcelain` — worktree dirtiness and conflicts. */
+/**
+ * `git status --porcelain` — worktree dirtiness and conflicts.
+ * @returns the argv for the status invocation.
+ */
 export const statusPorcelainArgv = (): string[] => ['status', '--porcelain']
 
-/** `git diff --name-only --diff-filter=U` — unmerged (conflict) files. */
+/**
+ * `git diff --name-only --diff-filter=U` — unmerged (conflict) files.
+ * @returns the argv for the diff invocation.
+ */
 export const unmergedArgv = (): string[] => ['diff', '--name-only', '--diff-filter=U']
 
-/** `git worktree list --porcelain` — all worktrees and their checked-out branches. */
+/**
+ * `git worktree list --porcelain` — all worktrees and their checked-out branches.
+ * @returns the argv for the worktree-list invocation.
+ */
 export const worktreeListArgv = (): string[] => ['worktree', 'list', '--porcelain']
 
-/** `git rev-parse --verify --quiet refs/heads/<branch>` — branch existence probe. */
+/**
+ * `git rev-parse --verify --quiet refs/heads/<branch>` — branch existence probe.
+ * @param branch - the short branch name to probe.
+ * @returns the argv for the rev-parse invocation.
+ */
 export const verifyRefArgv = (branch: string): string[] => ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]
 
-/** `git check-ref-format --branch <name>` — the authoritative branch-name gate. */
+/**
+ * `git check-ref-format --branch <name>` — the authoritative branch-name gate.
+ * @param name - the proposed branch name to validate.
+ * @returns the argv for the check-ref-format invocation.
+ */
 export const checkRefFormatArgv = (name: string): string[] => ['check-ref-format', '--branch', name]
 
-/** `git switch --no-guess -- <branch>` — workspace-level branch switch (ZCode semantics). */
+/**
+ * `git switch --no-guess -- <branch>` — workspace-level branch switch (ZCode semantics).
+ * @param branch - the branch to switch to.
+ * @returns the argv for the switch invocation.
+ */
 export const switchArgv = (branch: string): string[] => ['switch', '--no-guess', '--', branch]
 
-/** `git switch --no-guess -c <name>` — create from current HEAD and switch. */
+/**
+ * `git switch --no-guess -c <name>` — create from current HEAD and switch.
+ * @param name - the name for the new branch.
+ * @returns the argv for the switch invocation.
+ */
 export const createBranchArgv = (name: string): string[] => ['switch', '--no-guess', '-c', name]
 
-/** Graph log: `git log --branches --tags --remotes --topo-order --parents --format=... --max-count <n>`. */
+/**
+ * Graph log: `git log --branches --tags --remotes --topo-order --parents --format=... --max-count <n>`.
+ * @param limit - the maximum number of commits to fetch.
+ * @returns the argv for the log invocation.
+ */
 export const graphLogArgv = (limit: number): string[] => [
   'log', '--branches', '--tags', '--remotes', '--topo-order', '--parents',
   '--format=%H%x00%P%x00%an%x00%at%x00%D%x00%s%x1e',
@@ -61,6 +102,8 @@ export const OPERATION_MARKERS = [
  * on-disk path. Kept as the per-marker probe for the service's fallback
  * when the single combined spawn fails (a hung or non-zero combined call
  * must not silently hide an in-progress operation).
+ * @param marker - the operation marker name (e.g. MERGE_HEAD).
+ * @returns the argv for the rev-parse invocation.
  */
 export const gitPathArgv = (marker: string): string[] => ['rev-parse', '--git-path', marker]
 
@@ -70,6 +113,7 @@ export const gitPathArgv = (marker: string): string[] => ['rev-parse', '--git-pa
  * repeatable, unlike positional paths). On Windows, where each git.exe cold
  * start costs about 0.7s, this replaces the previous 7 sequential marker
  * probes with a single process.
+ * @returns the argv for the rev-parse invocation.
  */
 export const operationMarkersArgv = (): string[] => [
   'rev-parse',

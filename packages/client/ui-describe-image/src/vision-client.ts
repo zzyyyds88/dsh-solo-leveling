@@ -233,7 +233,10 @@ export async function readBoundedText(response: Response, cap: number): Promise<
   return text.length > cap ? text.slice(0, cap) : text
 }
 
-/** Extract the single text answer from an OpenAI-compatible chat-completions payload. */
+/** Extract the single text answer from an OpenAI-compatible chat-completions payload.
+ * @param payload - the parsed JSON response body.
+ * @returns the message text content.
+ */
 export function extractChatCompletionsContent(payload: unknown): string {
   const root = asRecord(payload)
   const choices = root?.choices
@@ -246,7 +249,10 @@ export function extractChatCompletionsContent(payload: unknown): string {
   return content
 }
 
-/** Extract the text answer from an OpenAI Responses payload: every `output_text` part of assistant messages. */
+/** Extract the text answer from an OpenAI Responses payload: every `output_text` part of assistant messages.
+ * @param payload - the parsed JSON response body.
+ * @returns the joined `output_text` parts.
+ */
 export function extractResponsesContent(payload: unknown): string {
   const root = asRecord(payload)
   const output = root?.output
@@ -272,7 +278,12 @@ export function extractResponsesContent(payload: unknown): string {
   return text
 }
 
-/** Build the request the configured style sends: its path and JSON body. */
+/** Build the request the configured style sends: its path and JSON body.
+ * @param spec - validated configuration facts.
+ * @param prompt - the instruction sent with the image.
+ * @param image - the loaded image bytes and media type.
+ * @returns the endpoint path and the JSON-encoded request body.
+ */
 export function buildVisionRequest(spec: ResolvedConfig, prompt: string, image: LoadedImage): { path: string; body: string } {
   const dataUrl = `data:${image.mimeType};base64,${image.bytes.toString('base64')}`
   if (spec.apiStyle === 'responses') {
@@ -328,7 +339,10 @@ export interface VisionCache {
   clear(): void
 }
 
-/** Create a TTL-expiring, capacity-capped vision answer cache. */
+/** Create a TTL-expiring, capacity-capped vision answer cache.
+ * @param options - optional lifetime and capacity bounds.
+ * @returns the cache handle.
+ */
 export function createVisionCache(options?: { ttlMs?: number; maxEntries?: number }): VisionCache {
   const ttlMs = options?.ttlMs ?? DEFAULT_CACHE_TTL_MS
   const maxEntries = Math.max(1, options?.maxEntries ?? DEFAULT_CACHE_MAX_ENTRIES)
@@ -360,7 +374,12 @@ export function createVisionCache(options?: { ttlMs?: number; maxEntries?: numbe
   }
 }
 
-/** The semantic identity of one vision request: endpoint fields plus the same image bytes and prompt. */
+/** The semantic identity of one vision request: endpoint fields plus the same image bytes and prompt.
+ * @param spec - validated configuration facts.
+ * @param prompt - the instruction sent with the image.
+ * @param image - the loaded image bytes and media type.
+ * @returns the stable cache key.
+ */
 export function semanticRequestKey(spec: ResolvedConfig, prompt: string, image: LoadedImage): string {
   return JSON.stringify([
     spec.baseURL, spec.model, spec.maxOutputTokens, spec.apiStyle,
@@ -368,7 +387,15 @@ export function semanticRequestKey(spec: ResolvedConfig, prompt: string, image: 
   ])
 }
 
-/** Call the configured vision endpoint and return its text answer, with short-lifetime caching for repeats. */
+/** Call the configured vision endpoint and return its text answer, with short-lifetime caching for repeats.
+ * @param spec - validated configuration facts.
+ * @param apiKey - the resolved API key for the authorization header.
+ * @param prompt - the instruction sent with the image.
+ * @param image - the loaded image bytes and media type.
+ * @param signal - caller cancellation; aborts the in-flight attempt.
+ * @param cache - optional answer cache to check before the call and fill on success.
+ * @returns the endpoint's text answer.
+ */
 export async function callVision(
   spec: ResolvedConfig,
   apiKey: string,

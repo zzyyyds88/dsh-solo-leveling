@@ -153,16 +153,18 @@ export interface NumberConstraints {
   integer?: boolean
   /** The accepted value must be at least this. */
   min?: number
+  /** The accepted value must be at most this. */
+  max?: number
 }
 
 /** A whole- or decimal-number field. An empty draft clears the field; any other draft that is
  * not a finite number within the constraints blocks the save.
- * @param field - field name inside the namespace section.
- * @param constraints - the constraints a numeric draft must satisfy.
- * @returns the field spec.
+ * @param field - the field name inside the namespace section this spec renders.
+ * @param constraints - the numeric bounds an accepted draft must satisfy; defaults to no constraints.
+ * @returns - a field spec whose parse accepts only finite numbers within the constraints.
  */
 export function numberField(field: string, constraints: NumberConstraints = {}): FieldSpec {
-  const { integer = false, min } = constraints
+  const { integer = false, min, max } = constraints
   return {
     field,
     format: value => typeof value === 'number' ? String(value) : '',
@@ -173,14 +175,15 @@ export function numberField(field: string, constraints: NumberConstraints = {}):
       if (!Number.isFinite(parsed)) return undefined
       if (integer && !Number.isInteger(parsed)) return undefined
       if (min !== undefined && parsed < min) return undefined
+      if (max !== undefined && parsed > max) return undefined
       return { kind: 'set', value: parsed }
     },
   }
 }
 
 /** A free-text field. An empty draft clears the field.
- * @param field - field name inside the namespace section.
- * @returns the field spec.
+ * @param field - the field name inside the namespace section this spec renders.
+ * @returns - a field spec whose parse accepts any non-empty draft as its text.
  */
 export function textField(field: string): FieldSpec {
   return {
@@ -198,16 +201,16 @@ export function textField(field: string): FieldSpec {
  * (role('secret') in the section schema). The card still edits it like text,
  * but a save never compares the redacted value back and relies on the scope
  * reporting the write landed.
- * @param field - field name inside the namespace section.
- * @returns the field spec.
+ * @param field - the field name inside the namespace section this spec renders.
+ * @returns - a text field spec marked secret; its save relies on the scope reporting the write landed.
  */
 export function secretField(field: string): FieldSpec {
   return { ...textField(field), secret: true }
 }
 
 /** A boolean field, edited through true/false draft text.
- * @param field - field name inside the namespace section.
- * @returns the field spec.
+ * @param field - the field name inside the namespace section this spec renders.
+ * @returns - a field spec whose parse accepts only the literal true and false drafts.
  */
 export function booleanField(field: string): FieldSpec {
   return {
@@ -224,9 +227,9 @@ export function booleanField(field: string): FieldSpec {
 }
 
 /** An enumerated string field; only the listed choices are accepted. An empty draft clears the field.
- * @param field - field name inside the namespace section.
- * @param choices - the accepted values.
- * @returns the field spec.
+ * @param field - the field name inside the namespace section this spec renders.
+ * @param choices - the accepted values; a draft outside them blocks the save.
+ * @returns - a field spec whose parse accepts only the listed choices.
  */
 export function choiceField(field: string, choices: readonly string[]): FieldSpec {
   return {
@@ -264,9 +267,10 @@ export class CardForm<T> {
     scope.subscribe(() => { this.publish() })
   }
 
-  /** Publish a projection of this form, rebuilt whenever the scope or a draft changes.
-   * @param project - the projection of the staged form to publish.
-   * @returns the snapshot store the renderer subscribes to.
+  /**
+   * Publish a projection of this form, rebuilt whenever the scope or a draft changes.
+   * @param project - a pure function computing the published snapshot from the current form state.
+   * @returns - a snapshot store the projection is published into on every scope or draft change.
    */
   bind<S>(project: () => S): SnapshotStore<S> {
     const store = createSnapshotStore(project())
@@ -274,8 +278,9 @@ export class CardForm<T> {
     return store
   }
 
-  /** Read the card-level state: what the Host serves, and what a save would do.
-   * @returns the card-level projection.
+  /**
+   * Read the card-level state: what the Host serves, and what a save would do.
+   * @returns - the card-level shell state.
    */
   shell(): CardShell {
     const snapshot = this.scope.getSnapshot()
@@ -292,9 +297,10 @@ export class CardForm<T> {
     }
   }
 
-  /** Read one field's state from the effective section and its staged draft.
-   * @param field - the field name to read.
-   * @returns the field's rendered state.
+  /**
+   * Read one field's state from the effective section and its staged draft.
+   * @param field - the name of the field this card declared.
+   * @returns - the rendered state for that field.
    */
   field(field: string): FieldState {
     const spec = this.specOf(field)
@@ -310,8 +316,9 @@ export class CardForm<T> {
     }
   }
 
-  /** The actions the card's slot registration injects.
-   * @returns the action bundle the slot registration injects.
+  /**
+   * The actions the card's slot registration injects.
+   * @returns - the action set the card UI drives: edit, resetField, save, and discard.
    */
   actions(): CardActions {
     return {

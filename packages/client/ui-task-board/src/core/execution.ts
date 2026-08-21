@@ -140,6 +140,14 @@ export class ExecutionService {
   /** @param env - the runtime faces (real or fake). */
   constructor(private readonly env: ExecutionEnvironment) {}
 
+  /**
+   * Run one task to completion (or to a settled failure). Never rejects;
+   * every failure path is reported as a settled event.
+   * @param task - the task being executed.
+   * @param execution - the freshly opened execution record (id + start time).
+   * @param onEvent - callback for started/settled events.
+   * @returns resolves when the run settles or fails to start.
+   */
   async run(
     task: TaskRecord,
     execution: ExecutionRecord,

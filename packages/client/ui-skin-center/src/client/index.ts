@@ -9,6 +9,8 @@
  */
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type { ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
+// Type-only: pulls the client module loader's Context merge (ctx.modules).
+import type {} from '@deepseek-ai/dsh-client-modules/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: pulls the settings-surface Context merge (ctx.settingsScope).
@@ -34,8 +36,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 }
 
-/** Required services: slots + locale (plugin card), theme (preview toggle), and settingsScope + its transport (background scrim). */
-export const inject = ['slots', 'locale', 'theme', 'settingsScope']
+/** Required services: slots + locale (plugin card), theme (preview toggle),
+ * settingsScope + its transport, and modules (tried-on skin bundles). */
+export const inject = ['slots', 'locale', 'theme', 'settingsScope', 'modules']
 
 /**
  * Register the skin-center dictionaries, the body scope attribute, and the
@@ -53,7 +56,14 @@ export function apply(ctx: ClientContext): void {
   }, 'ui-skin-center: body scope')
 
   const theme = ctx.get('theme') as ThemeRuntime
-  const controller = new TryOnController()
+  // Materialize tried-on skin bundles through the shell's module system (the
+  // skin bundle's factory is already registered by its script tag).
+  const controller = new TryOnController({
+    modules: () => ({
+      import: (specifier) => { return ctx.modules.import(specifier, '', {}) },
+      invalidate: (id) => { ctx.modules.invalidate(id) },
+    }),
+  })
   // Background occluder over the shared skin-background namespace. The scope
   // is bound to this plugin's fiber, so it is torn down with the card.
   const backgroundScope = ctx.settingsScope.bind<{ backgroundOpacity?: number }>({ namespace: SKIN_BACKGROUND_NS })
@@ -74,7 +84,7 @@ export function apply(ctx: ClientContext): void {
 
   ctx.slots.inject('settings.plugin.item', () => ctx.slots.register({
     name: 'settings.plugin.item',
-    key: 'skins',
+    key: SKIN_BACKGROUND_NS,
     priority: 110,
     locale: NS,
     inject: injected,

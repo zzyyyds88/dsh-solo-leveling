@@ -31,6 +31,7 @@ export type SkinCenterKey =
   | 'backgroundHint'
   | 'backgroundHintInert'
 
+/** English copy for the skin-center plugin card and in-GUI center. */
 export const en: Record<SkinCenterKey, string> = {
   title: 'Skin Center',
   cardDescription: 'Try on any installed skin live in the GUI — exit restores instantly, applying persists in one click.',
@@ -58,6 +59,7 @@ export const en: Record<SkinCenterKey, string> = {
   backgroundHintInert: 'Only applies to skins that paint a backdrop (Blue Fantasy / Whale Song). Applies to the official default automatically once such a skin is active.',
 }
 
+/** Simplified Chinese copy for the skin-center plugin card and in-GUI center. */
 export const zh: Record<SkinCenterKey, string> = {
   title: '皮肤中心',
   cardDescription: '在 GUI 内即时试穿任意皮肤，退出即完全还原；应用一键完成并自动刷新。',

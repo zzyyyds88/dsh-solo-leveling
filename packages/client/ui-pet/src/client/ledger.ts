@@ -99,27 +99,37 @@ function persist(): void {
   } catch {}
 }
 
-/** 账房设置修订号（费率/预算/enabled 变化时自增；订阅用，避免整快照比较）。 */
+/** 账房设置修订号（费率/预算/enabled 变化时自增；订阅用，避免整快照比较）。
+ * @returns the current revision, incremented on every persisted settings change.
+ */
 export function ledgerRevisionOf(): number {
   return ledgerRevision
 }
 
-/** 账房面板是否开启。 */
+/** 账房面板是否开启。
+ * @returns true when the ledger panel is enabled.
+ */
 export function isLedgerEnabled(): boolean {
   return ledger.enabled
 }
 
-/** 会话预算封顶（元）。 */
+/** 会话预算封顶（元）。
+ * @returns the per-session budget cap in yuan.
+ */
 export function ledgerBudget(): number {
   return ledger.budget
 }
 
-/** 当前费率（¥/百万 token）。 */
+/** 当前费率（¥/百万 token）。
+ * @returns a copy of the current billing rates in ¥ per million tokens.
+ */
 export function ledgerRates(): LedgerRates {
   return { ...ledger.rates }
 }
 
-/** 读取全量账房设置快照（设置卡片用）。 */
+/** 读取全量账房设置快照（设置卡片用）。
+ * @returns a copy of the full ledger settings.
+ */
 export function ledgerSettingsSnapshot(): LedgerSettings {
   return {
     enabled: ledger.enabled,
@@ -128,7 +138,10 @@ export function ledgerSettingsSnapshot(): LedgerSettings {
   }
 }
 
-/** 设置卡片批量保存：一次写入多个字段（enabled/budget/rates），返回新快照。 */
+/** 设置卡片批量保存：一次写入多个字段（enabled/budget/rates），返回新快照。
+ * @param patch - partial settings to apply; only defined fields are written.
+ * @returns the new settings snapshot after the patch is applied.
+ */
 export function applyLedgerSettings(patch: Partial<LedgerSettings>): LedgerSettings {
   if (typeof patch.enabled === 'boolean') ledger.enabled = patch.enabled
   if (typeof patch.budget === 'number' && Number.isFinite(patch.budget) && patch.budget >= 0) ledger.budget = patch.budget
@@ -144,7 +157,10 @@ export function applyLedgerSettings(patch: Partial<LedgerSettings>): LedgerSetti
   return ledgerSettingsSnapshot()
 }
 
-/** 订阅账房设置变化（桌宠本体 / 设置卡片共用）。 */
+/** 订阅账房设置变化（桌宠本体 / 设置卡片共用）。
+ * @param listener - invoked on every ledger-settings change, locally and across tabs.
+ * @returns an unsubscribe function that removes both listeners.
+ */
 export function subscribeLedgerSettings(listener: () => void): () => void {
   window.addEventListener('deepseek-pet:ledger-changed', listener)
   window.addEventListener('storage', listener)
@@ -156,7 +172,10 @@ export function subscribeLedgerSettings(listener: () => void): () => void {
 
 /* ---------------- 用量聚合（来自轨迹会话视图） ---------------- */
 
-/** 从 session snapshot 读会话累计用量。无数据返回 null。 */
+/** 从 session snapshot 读会话累计用量。无数据返回 null。
+ * @param snapshot - the conversation session snapshot; its trajectory view carries per-request usage.
+ * @returns aggregated per-session token usage, or null when no request carried numeric usage.
+ */
 export function usageFromSnapshot(snapshot: unknown): TokenUsage | null {
   const requests = (snapshot as { views?: Map<string, { requests?: Array<{ usage?: RawUsage }> }> }).views?.get('trajectory')?.requests
   if (!Array.isArray(requests) || requests.length === 0) return null
@@ -175,18 +194,28 @@ export function usageFromSnapshot(snapshot: unknown): TokenUsage | null {
   return found ? acc : null
 }
 
-/** 计入计费的输入 token = 未命中输入 + 缓存写入（缓存读取按命中价单算）。 */
+/** 计入计费的输入 token = 未命中输入 + 缓存写入（缓存读取按命中价单算）。
+ * @param usage - aggregated token usage, or a partial/nullable view of it.
+ * @returns billable input tokens: uncached input plus cache writes.
+ */
 export function billedInput(usage: Partial<TokenUsage> | null | undefined): number {
   return (usage?.input ?? 0) + (usage?.cacheWrite ?? 0)
 }
 
-/** 缓存命中率（缓存读取 / 全部输入），无输入返回 null。 */
+/** 缓存命中率（缓存读取 / 全部输入），无输入返回 null。
+ * @param usage - aggregated token usage, or a partial/nullable view of it.
+ * @returns cache hit rate as a rounded percentage, or null when there is no input to measure.
+ */
 export function cacheHitRate(usage: Partial<TokenUsage> | null | undefined): number | null {
   const denom = (usage?.input ?? 0) + (usage?.cacheRead ?? 0) + (usage?.cacheWrite ?? 0)
   return denom === 0 ? null : Math.round((usage?.cacheRead ?? 0) / denom * 100)
 }
 
-/** 预估价格（¥），费率 ¥/百万 token。 */
+/** 预估价格（¥），费率 ¥/百万 token。
+ * @param usage - aggregated token usage; null yields zero cost.
+ * @param rates - billing rates in ¥ per million tokens; defaults to the current ledger rates.
+ * @returns the estimated cost in yuan.
+ */
 export function estimateCost(usage: Partial<TokenUsage> | null, rates: LedgerRates = ledger.rates): number {
   if (!usage) return 0
   const uncached = billedInput(usage) / 1e6
@@ -199,8 +228,9 @@ export function estimateCost(usage: Partial<TokenUsage> | null, rates: LedgerRat
 
 /**
  * 追加一次成本采样，返回新历史（最多保留 200 点）。
- * @param {Array<{t:number, cost:number}>} history 既有历史
- * @param {number} cost 本次成本
+ * @param history - the existing cost history to append to.
+ * @param cost - the cost of the current sample, in yuan.
+ * @returns the new history with the sample appended, capped at 200 points.
  */
 export function pushCostSample(history: CostSample[], cost: number): CostSample[] {
   const next = [...history, { t: Date.now(), cost }]
@@ -209,7 +239,7 @@ export function pushCostSample(history: CostSample[], cost: number): CostSample[
 
 /**
  * 峰谷判定：与近 10 分钟平均增速相比。
- * @param {Array<{t:number, cost:number}>} history 成本历史
+ * @param history - the cost history to analyze.
  * @returns {'peak'|'valley'|'normal'}
  */
 export function detectTrend(history: CostSample[]): 'peak' | 'valley' | 'normal' {
@@ -232,12 +262,19 @@ export function detectTrend(history: CostSample[]): 'peak' | 'valley' | 'normal'
   return 'normal'
 }
 
-/** 是否超过预算封顶。 */
+/** 是否超过预算封顶。
+ * @param cost - the accumulated session cost in yuan.
+ * @param budget - the budget cap in yuan.
+ * @returns true when the cost has reached the budget cap.
+ */
 export function overBudget(cost: number, budget: number): boolean {
   return cost >= budget
 }
 
-/** 把大数字格式化成可读字符串（12,345）。 */
+/** 把大数字格式化成可读字符串（12,345）。
+ * @param value - the token count to format.
+ * @returns the number formatted with thousands separators, e.g. "12,345".
+ */
 export function formatTokens(value: number): string {
   return Math.round(value).toLocaleString('en-US')
 }

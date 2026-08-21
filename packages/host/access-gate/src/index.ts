@@ -89,12 +89,22 @@ const MIN_PASSWORD_LENGTH = 6
 /** webAuth service name the privileged-method fence consults. */
 const WEB_AUTH_SERVICE = 'webAuth'
 
+/**
+ * Plugin config: the password sources, the gate mode, the session TTL, and
+ * the login lockout bounds.
+ */
 export interface AccessGateConfig {
+  /** The gate password; empty means no password is set and the first-run setup page applies. */
   password: string
+  /** Path to a password file the gate reads instead of the inline value. */
   passwordFile: string
+  /** Gate enforcement: `auto` enables auth once a password exists, `on` always, `off` disables the gate. */
   mode: 'auto' | 'on' | 'off'
+  /** How long a signed session cookie remains valid. */
   sessionTtlSeconds: number
+  /** Failed attempts allowed before a login lockout window begins. */
   lockoutMaxAttempts: number
+  /** Length of the login lockout window after too many failed attempts. */
   lockoutWindowMs: number
 }
 

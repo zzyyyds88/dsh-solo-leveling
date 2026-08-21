@@ -79,7 +79,11 @@ export interface ControllerSnapshot {
   executionOptions: ExecutionOptionsSnapshot
 }
 
-/** The selected task (resolved from the ledger), or undefined. */
+/**
+ * The selected task (resolved from the ledger), or undefined.
+ * @param snapshot - the controller snapshot to read the selection from.
+ * @returns the task whose id is selected, or undefined when nothing is selected.
+ */
 export function selectedTaskOf(snapshot: ControllerSnapshot): TaskRecord | undefined {
   if (snapshot.selectedTaskId === undefined) return undefined
   return snapshot.tasks.find(task => task.id === snapshot.selectedTaskId)
@@ -149,6 +153,10 @@ export class BoardController {
 
   // --- snapshot / subscription ------------------------------------------------
 
+  /**
+   * The current immutable controller snapshot.
+   * @returns the full controller snapshot (ledger, board, selection, pickers).
+   */
   getSnapshot(): ControllerSnapshot {
     return {
       tasks: this.tasks,
@@ -158,6 +166,11 @@ export class BoardController {
     }
   }
 
+  /**
+   * Subscribe to controller snapshots.
+   * @param fn - called whenever the snapshot changes.
+   * @returns an unsubscribe function.
+   */
   subscribe(fn: () => void): () => void {
     this.listeners.add(fn)
     return () => { this.listeners.delete(fn) }
@@ -165,6 +178,7 @@ export class BoardController {
 
   // --- view state -------------------------------------------------------------
 
+  /** Open the board view (a no-op when already open). */
   openBoard(): void {
     if (this.boardOpen) return
     // Baseline the selection the board opened against: the board stays open
@@ -175,17 +189,23 @@ export class BoardController {
     this.notify()
   }
 
+  /** Close the board view (a no-op when already closed). */
   closeBoard(): void {
     if (!this.boardOpen) return
     this.boardOpen = false
     this.notify()
   }
 
+  /** Toggle the board view between open and closed. */
   toggleBoard(): void {
     if (this.boardOpen) this.closeBoard()
     else this.openBoard()
   }
 
+  /**
+   * Select a task for the detail view; ignored when the id is not in the ledger.
+   * @param id - the task to select.
+   */
   openTask(id: string): void {
     if (this.tasks.some(task => task.id === id)) {
       this.selectedTaskId = id
@@ -193,6 +213,7 @@ export class BoardController {
     }
   }
 
+  /** Clear the task selection (a no-op when nothing is selected). */
   closeTask(): void {
     if (this.selectedTaskId === undefined) return
     this.selectedTaskId = undefined
@@ -201,6 +222,11 @@ export class BoardController {
 
   // --- task mutations (use-case transitions in core/use-cases) -----------------
 
+  /**
+   * Create a task in the ledger (blank titles are rejected).
+   * @param input - raw user input for the new task.
+   * @returns the minted task, or undefined when the input was rejected.
+   */
   createTask(input: NewTaskInput): TaskRecord | undefined {
     const { task, tasks } = applyCreateTask(this.tasks, input, this.now(), this.uuid())
     if (task === undefined) return undefined
@@ -209,6 +235,11 @@ export class BoardController {
     return task
   }
 
+  /**
+   * Apply an editable-field patch to one task.
+   * @param id - the task to update.
+   * @param patch - fields to change (explicit undefined clears a field).
+   */
   updateTask(id: string, patch: TaskUpdatePatch): void {
     this.tasks = [...applyUpdateTask(this.tasks, id, patch, this.now())]
     this.persistAndNotify()
@@ -217,17 +248,27 @@ export class BoardController {
   /**
    * Replace (a part of) the picker option sets the UI feeds (workspace list
    * and agent-preset roster come from the runtime, not the ledger).
+   * @param patch - option sets to replace (absent fields keep their current value).
    */
   setExecutionOptions(patch: Partial<ExecutionOptionsSnapshot>): void {
     this.executionOptions = { ...this.executionOptions, ...patch }
     this.notify()
   }
 
+  /**
+   * Move a task to a new column.
+   * @param id - the task to move.
+   * @param status - the target column.
+   */
   moveTask(id: string, status: TaskStatus): void {
     this.tasks = this.tasks.map(task => task.id === id ? withStatus(task, status, this.now()) : task)
     this.persistAndNotify()
   }
 
+  /**
+   * Delete a task from the ledger, clearing the selection when it referenced it.
+   * @param id - the task to remove.
+   */
   deleteTask(id: string): void {
     const { tasks, selectionCleared } = applyDeleteTask(this.tasks, this.selectedTaskId, id)
     this.tasks = [...tasks]
@@ -258,6 +299,9 @@ export class BoardController {
    * Roll a task's schedule forward (scheduler callback): persist the next due
    * instant and the trigger instant of this run. No-op when the task has no
    * schedule rule (it was deleted mid-tick, for example).
+   * @param id - the task to roll forward.
+   * @param nextRunAt - the next due instant (undefined clears it).
+   * @param lastTriggeredAt - the trigger instant of this run.
    */
   applyScheduleNextRun(id: string, nextRunAt: number | undefined, lastTriggeredAt: number | undefined): void {
     const next = applyScheduleRollForward(this.tasks, id, nextRunAt, lastTriggeredAt, this.now())
@@ -280,6 +324,8 @@ export class BoardController {
    * Execute a task for real: move it to 'running', open an execution record,
    * and hand off to the ExecutionService. A second call while the task is
    * already running is ignored.
+   * @param id - the task to execute.
+   * @returns true when the run was launched, false when the task is unknown or already running.
    */
   async runTask(id: string): Promise<boolean> {
     const task = this.tasks.find(candidate => candidate.id === id)
@@ -296,7 +342,10 @@ export class BoardController {
     return true
   }
 
-  /** Re-run a settled task: move it back to 'todo' first, then execute. */
+  /**
+   * Re-run a settled task: move it back to 'todo' first, then execute.
+   * @param id - the task to re-run (a no-op when the task is unknown).
+   */
   async rerunTask(id: string): Promise<void> {
     const task = this.tasks.find(candidate => candidate.id === id)
     if (task === undefined) return

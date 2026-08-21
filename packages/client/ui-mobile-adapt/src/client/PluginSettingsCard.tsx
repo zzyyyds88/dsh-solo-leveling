@@ -195,11 +195,12 @@ export interface FieldProps {
   onEdit: (text: string) => void
   /** Stage a clear so the field re-inherits the composition layer. */
   onReset: () => void
-}
-
-/** A staged value field. `numeric` only hints the keypad: which drafts a field accepts is decided by its spec.
+}/**
  * @param props - the props.
  */
+
+
+/** A staged value field. `numeric` only hints the keypad: which drafts a field accepts is decided by its spec. */
 export function ValueField(props: FieldProps & {
   /** Hints a numeric keypad without narrowing what the control accepts. */
   numeric?: boolean
@@ -242,11 +243,12 @@ export function ValueField(props: FieldProps & {
       </p>
     </div>
   )
-}
-
-/** A staged boolean field: 继承 / 开 / 关.
+}/**
  * @param props - the props.
  */
+
+
+/** A staged boolean field: 继承 / 开 / 关. */
 export function BooleanField(props: FieldProps & {
   /** Copy for the inherit option. */
   inheritLabel: string
@@ -289,11 +291,12 @@ export function BooleanField(props: FieldProps & {
       <p className={css.hint}>{props.hint}</p>
     </div>
   )
-}
-
-/** A staged enumerated field rendered as a select.
+}/**
  * @param props - the props.
  */
+
+
+/** A staged enumerated field rendered as a select. */
 export function ChoiceField(props: FieldProps & {
   /** Copy for the inherit option (draft text is the empty string). */
   inheritLabel: string

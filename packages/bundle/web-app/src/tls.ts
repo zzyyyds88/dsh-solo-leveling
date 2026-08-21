@@ -27,7 +27,9 @@ export interface TlsMaterial {
 /** 证书剩余有效期低于该值（30 天）即视为不适用、重新生成。 */
 const MIN_VALID_MS = 30 * 24 * 3600 * 1000
 
-/** 本机非内网 IPv4 地址（局域网访问候选）。 */
+/** 本机非内网 IPv4 地址（局域网访问候选）。
+ * @returns the host's non-internal IPv4 addresses (LAN access candidates).
+ */
 export function lanIpv4s(): string[] {
   return Object.values(networkInterfaces()).flat()
     .filter((iface): iface is NonNullable<typeof iface> => iface !== undefined && iface.family === 'IPv4' && !iface.internal)
@@ -39,7 +41,10 @@ function defaultAltHosts(): string[] {
   return ['localhost', '127.0.0.1', ...lanIpv4s()]
 }
 
-/** 生成覆盖一组 host/IP 的自签 RSA-2048 证书（纯 JS，无 openssl）。 */
+/** 生成覆盖一组 host/IP 的自签 RSA-2048 证书（纯 JS，无 openssl）。
+ * @param hosts - host names and/or IPs the certificate's SAN must cover.
+ * @returns the generated certificate/key PEM pair.
+ */
 export function generateSelfSignedCert(hosts: string[]): TlsMaterial {
   const commonName = hosts.find(host => !/^[0-9.]+$/.test(host)) ?? hosts[0] ?? 'localhost'
   const altNames = hosts.map(host => (/^[0-9.]+$/.test(host)
@@ -63,6 +68,10 @@ export function generateSelfSignedCert(hosts: string[]): TlsMaterial {
  * 校验 PEM 证书/私钥对：可解析、私钥匹配、剩余有效期 ≥ 30 天。
  * `hosts` 非空时额外要求 SAN 覆盖每一个 host/IP（自签场景）；
  * 自有证书场景传空数组跳过 SAN 校验（SAN 由用户负责）。
+ * @param certPem - the certificate PEM text.
+ * @param keyPem - the private key PEM text; must match the certificate.
+ * @param hosts - host/IP SANs the certificate must cover; pass [] to skip SAN checks.
+ * @returns ok=true when the pair is usable, or ok=false with the reason.
  */
 export function validateTlsMaterial(certPem: string, keyPem: string, hosts: readonly string[]): { ok: boolean; error?: string } {
   let cert: X509Certificate
@@ -87,7 +96,9 @@ export function validateTlsMaterial(certPem: string, keyPem: string, hosts: read
   return { ok: true }
 }
 
-/** 本实例证书目录（$DSH_HOME/https）。 */
+/** 本实例证书目录（$DSH_HOME/https）。
+ * @returns the HTTPS material directory under the DSH home.
+ */
 export function tlsDir(): string {
   return join(resolveDshHome(), 'https')
 }

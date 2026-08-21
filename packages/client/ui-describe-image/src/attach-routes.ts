@@ -60,7 +60,9 @@ const ATTACHMENT_REF_REGISTRY = new Map<string, ImageAttachmentRef>()
 /** Registry capacity; beyond it the oldest entry is dropped. */
 const ATTACHMENT_REF_REGISTRY_CAP = 128
 
-/** Remember one persisted reference by its attachment id. */
+/** Remember one persisted reference by its attachment id.
+ * @param ref - the persisted attachment reference to register.
+ */
 export function registerAttachmentRef(ref: ImageAttachmentRef): void {
   ATTACHMENT_REF_REGISTRY.delete(ref.attachmentId)
   ATTACHMENT_REF_REGISTRY.set(ref.attachmentId, ref)
@@ -71,7 +73,10 @@ export function registerAttachmentRef(ref: ImageAttachmentRef): void {
   }
 }
 
-/** Look up a persisted reference by its bare attachment id, if still in the registry. */
+/** Look up a persisted reference by its bare attachment id, if still in the registry.
+ * @param id - the attachment id (e.g. `sha256:…`).
+ * @returns the registered reference, or undefined when it has fallen out of the registry.
+ */
 export function attachmentRefById(id: string): ImageAttachmentRef | undefined {
   return ATTACHMENT_REF_REGISTRY.get(id)
 }
@@ -90,7 +95,10 @@ export function attachmentMarkdown(id: string): string {
   return `![图片](/describe-image/raw/${encodeURIComponent(id).replace(/%3A/gi, ':')})`
 }
 
-/** Build the `[image attachment …]` note text for one reference. */
+/** Build the `[image attachment …]` note text for one reference.
+ * @param ref - the persisted attachment reference.
+ * @returns the note text to splice into the composer draft.
+ */
 export function attachmentNote(ref: ImageAttachmentRef): string {
   return `[image attachment ${JSON.stringify(ref)}]`
 }

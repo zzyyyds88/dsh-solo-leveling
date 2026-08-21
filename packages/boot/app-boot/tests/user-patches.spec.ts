@@ -44,6 +44,20 @@ describe('loadOptionalPatches', () => {
     expect(loadOptionalPatches(NAME, join(tmp(), PROFILE_PATCH_FILENAME))).toBeUndefined()
   })
 
+  it('treats a comment-only file (an empty managed section) as an empty patch list', () => {
+    const dir = tmp()
+    // The skin-switch writer emits a delimiter-only managed section when every
+    // skin is enabled (a bundle-wired active skin carries no rows); the document
+    // parses to null, which must not fail loud — a present file with no rows is
+    // still "no rows", not a misconfiguration.
+    writeFileSync(join(dir, PROFILE_PATCH_FILENAME), [
+      '# --- dsh-skin managed (auto-generated; do not edit) ---',
+      '# --- end dsh-skin managed ---',
+      '',
+    ].join('\n'))
+    expect(loadOptionalPatches(NAME, join(dir, PROFILE_PATCH_FILENAME))).toEqual([])
+  })
+
   it('parses a patch list and preserves !!js expressions as loader expression nodes', () => {
     const dir = tmp()
     writeFileSync(join(dir, PROFILE_PATCH_FILENAME), [

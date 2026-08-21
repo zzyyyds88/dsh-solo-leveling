@@ -6,14 +6,14 @@
  * the skin's prebuilt `lib/client.js` as a same-origin script (mirroring
  * the kernel's own defaultLoadBundle — see dsh-client-modules), and its
  * body calls `window.__ModuleLoader__.load({id, factory})`, which only
- * REGISTERS the factory. `window.__DSH_MODULES__.import(package)` (the
- * kernel's ClientModuleSystem, contract C5/C6) then materializes it — which
- * auto-injects the skin's CSS `<style data-plugin>` tag — and
- * `surface.apply(miniCtx)` mounts the skin exactly as the fiber system
- * would, returning a full disposer. That makes try-on and its teardown the
- * real code paths, with no CSP `unsafe-eval` dependence and no startup
- * cost: the ~700KB of embedded art base64 is only parsed when a skin is
- * actually tried on.
+ * REGISTERS the factory. The shell's `modules` service (the
+ * `ClientModuleSystem`, contract C5/C6, reached as `ctx.modules`) then
+ * materializes it — which auto-injects the skin's CSS `<style data-plugin>`
+ * tag — and `surface.apply(miniCtx)` mounts the skin exactly as the fiber
+ * system would, returning a full disposer. That makes try-on and its
+ * teardown the real code paths, with no CSP `unsafe-eval` dependence and no
+ * startup cost: the ~700KB of embedded art base64 is only parsed when a
+ * skin is actually tried on.
  *
  * Mutual exclusion: the GUI never hosts two skins at once. The currently
  * ACTIVE skin is owned by its own cordis fiber (its disposer is not
@@ -62,10 +62,19 @@ const NEUTRALIZE_CSS: Record<string, string> = {
 /** The window surfaces the boot protocol installs (manifest.ts contract). */
 interface SkinCenterWindow {
   __DSH_BOOT__?: { entries?: Array<{ id: string }> }
-  __DSH_MODULES__?: {
-    import(specifier: string): Promise<unknown>
-    invalidate(id: string): void
-  }
+  __DSH_MODULES__?: SkinModuleFace
+}
+
+/**
+ * The module-system face the try-on controller needs from the shell. The web
+ * shell provides the real system as the `modules` service (`ctx.modules`,
+ * materializes a registered bundle factory and drops its module record); the
+ * legacy `window.__DSH_MODULES__` global is kept as a fallback for embedders
+ * that still expose the old ClientModuleSystem contract.
+ */
+export interface SkinModuleFace {
+  import(specifier: string): Promise<unknown>
+  invalidate(id: string): void
 }
 
 /** Host base path of the skin bundle route (registered by src/routes.ts). */
@@ -105,7 +114,10 @@ function bootEntryIds(): string[] {
   return boot?.entries?.map(entry => entry.id) ?? []
 }
 
-/** The skin package currently ACTIVE in the boot graph, if it is one of ours. */
+/**
+ * The skin package currently ACTIVE in the boot graph, if it is one of ours.
+ * @returns the active skin entry, or undefined when no skin-center package is booted.
+ */
 export function activeSkinEntry(): SkinCenterEntry | undefined {
   const ids = new Set(bootEntryIds())
   return SKIN_CENTER_ENTRIES.find(entry => ids.has(entry.package))
@@ -206,8 +218,20 @@ export class TryOnController {
    */
   private readonly loadBundle: (entry: SkinCenterEntry) => Promise<void>
 
-  constructor(options: { loadBundle?: (entry: SkinCenterEntry) => Promise<void> } = {}) {
+  /** Module-system provider (the shell's `modules` service); falls back to the legacy window global. */
+  private readonly modules: () => SkinModuleFace | undefined
+
+  constructor(options: {
+    loadBundle?: (entry: SkinCenterEntry) => Promise<void>
+    modules?: () => SkinModuleFace | undefined
+  } = {}) {
     this.loadBundle = options.loadBundle ?? (entry => loadBundleScript(`${BUNDLE_ROUTE}/${encodeURIComponent(entry.id)}`))
+    this.modules = options.modules ?? (() => (window as SkinCenterWindow).__DSH_MODULES__)
+  }
+
+  /** The module system to materialize tried-on bundles, or undefined when the shell provides none. */
+  private getModules(): SkinModuleFace | undefined {
+    return this.modules()
   }
   /** The skin currently being tried on, if any. */
   get trying(): SkinCenterEntry | null {
@@ -227,6 +251,7 @@ export class TryOnController {
    * mount the new one against the SAME captured active-skin snapshot. This
    * avoids the expensive preview -> active -> preview round trip and prevents
    * a flash of the active skin between consecutive try-ons.
+   * @param entry - the skin package entry to try on.
    * @returns whether this request mounted the target (false when superseded).
    */
   async tryOn(entry: SkinCenterEntry): Promise<boolean> {
@@ -337,8 +362,8 @@ export class TryOnController {
 
   /** Execute + materialize the target skin through the real loader. */
   private async loadModule(entry: SkinCenterEntry): Promise<(ctx: unknown) => unknown> {
-    const modules = (window as SkinCenterWindow).__DSH_MODULES__
-    if (modules === undefined) throw new Error('skin-center: window.__DSH_MODULES__ missing')
+    const modules = this.getModules()
+    if (modules === undefined) throw new Error('skin-center: the client module system is unavailable')
     // This try-on session owns the module record for the package for its
     // whole life (a try-on of the ACTIVE skin is rejected above, and the GUI
     // never hosts two skins at once). Drop any factory a crashed earlier
@@ -377,8 +402,7 @@ export class TryOnController {
 
   /** Drop the tried-on module record + its injected style tag. */
   private cleanupModule(entry: SkinCenterEntry): void {
-    const modules = (window as SkinCenterWindow).__DSH_MODULES__
-    modules?.invalidate(entry.package)
+    this.getModules()?.invalidate(entry.package)
     for (const el of document.querySelectorAll(`style[data-plugin=${JSON.stringify(entry.package)}]`)) {
       el.remove()
     }

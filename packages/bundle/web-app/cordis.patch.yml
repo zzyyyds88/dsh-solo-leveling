@@ -314,6 +314,8 @@
 
     # Defaults card (default working directory + retry count), keyed by the
     # `dsh-defaults` namespace the host `dsh-defaults` plugin registers.
+    - id: dsh-defaults
+      name: '@deepseek-ai/dsh-defaults'
     - id: ui-defaults
       name: '@deepseek-ai/dsh-client-ui-defaults'
 

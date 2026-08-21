@@ -85,7 +85,11 @@ function normalizeTargetId(value: string | undefined): string | undefined {
   return value !== undefined && value.trim() === '' ? undefined : value
 }
 
-/** A task record is structurally valid if it round-trips through the UI. */
+/**
+ * A task record is structurally valid if it round-trips through the UI.
+ * @param value - the unknown value to test.
+ * @returns true when the value is a structurally valid task record.
+ */
 export function isTaskRecord(value: unknown): value is TaskRecord {
   return isTaskRecordShape(value) && isTaskStatus(value.status)
 }
@@ -116,7 +120,11 @@ function normalizeSchedule(schedule: unknown): ScheduleRule | undefined {
   }
 }
 
-/** Parse + validate a persisted ledger document; invalid rows are dropped. */
+/**
+ * Parse + validate a persisted ledger document; invalid rows are dropped.
+ * @param raw - the persisted document (null when nothing is stored).
+ * @returns the valid task rows in the document.
+ */
 export function parseLedger(raw: string | null): TaskRecord[] {
   if (raw === null) return []
   let parsed: unknown

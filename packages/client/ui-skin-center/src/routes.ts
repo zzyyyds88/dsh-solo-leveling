@@ -250,6 +250,7 @@ function bundleRoute(): WebRoute {
 /**
  * Build the skin-center route family.
  * @param deps - optional runner override (tests).
+ * @returns the /state, /bundle and /apply route handlers.
  */
 export function makeSkinCenterRoutes(deps: SkinCenterRoutesDeps = {}): WebRoute[] {
   const run = deps.run ?? runDshSkin

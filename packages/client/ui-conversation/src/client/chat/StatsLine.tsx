@@ -224,8 +224,13 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
       <div ref={rootRef} className={css.root}>
         {groups.map((group, i) => (
           <Fragment key={group}>
-            {i > 0 && <><span className={css.sep} aria-hidden>|</span>{' '}</>}
-            <span>{group}</span>
+            {i > 0 && <><span className={css.sep} data-sep aria-hidden>|</span>{' '}</>}
+            {group.split(' · ').map((part, j) => (
+              <Fragment key={`${group}#${j}`}>
+                {j > 0 && <>{' '}<span className={css.dot} data-dot aria-hidden>·</span>{' '}</>}
+                <span className={css.group} data-group>{part}</span>
+              </Fragment>
+            ))}
           </Fragment>
         ))}
       </div>

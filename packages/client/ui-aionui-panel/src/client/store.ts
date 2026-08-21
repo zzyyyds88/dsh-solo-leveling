@@ -30,7 +30,10 @@ export interface StateHandle<S> {
   update: (fn: (prev: S) => S) => void
 }
 
-/** Create a state handle with an immutable snapshot (new object per update). */
+/** Create a state handle with an immutable snapshot (new object per update).
+ * @param initial - the initial.
+ * @returns - the result.
+ */
 export function createState<S>(initial: S): StateHandle<S> {
   let state = initial
   const listeners = new Set<() => void>()
@@ -55,20 +58,28 @@ export function createState<S>(initial: S): StateHandle<S> {
 export const MIN_CHAT_PANEL_PX = 360
 /** Preview region width contract. */
 export const MIN_PREVIEW_PANEL_PX = 340
+/** Default preview region width in px. */
 export const DEFAULT_PREVIEW_REGION_PX = 480
+/** Preview region width ceiling in px. */
 export const MAX_PREVIEW_REGION_PX = 1200
 /** Explorer (workspace) width contract. */
 export const MIN_WORKSPACE_PANEL_PX = 220
+/** Explorer (workspace) width ceiling in px. */
 export const MAX_WORKSPACE_PANEL_PX = 500
+/** Default explorer (workspace) width in px. */
 export const DEFAULT_WORKSPACE_PANEL_PX = 260
 /** Preview region horizontal chrome (margins + borders) the clamps subtract. */
 export const PREVIEW_REGION_CHROME_PX = 24
 
 /** Storage keys (AionUi contract, verbatim). */
 export const KEY_EXPLORER_WIDTH = 'chat-workspace-width-px'
+/** Storage key of the preview width preference (AionUi contract, verbatim). */
 export const KEY_PREVIEW_WIDTH = 'chat-preview-width-px'
+/** Storage key prefix of the explorer collapse preference per project root. */
 export const KEY_COLLAPSE = 'project-panel-collapse:'
+/** Storage key prefix of the explorer UI preference per project root. */
 export const KEY_EXPLORER_UI = 'explorer-ui:'
+/** Storage key prefix of the SCM UI preference per project root. */
 export const KEY_SCM_UI = 'scm-ui:'
 
 /**
@@ -76,6 +87,11 @@ export const KEY_SCM_UI = 'scm-ui:'
  * (min + chrome) when open, so the explorer never grows into the preview's
  * space; floor at the explorer minimum so a narrow container cannot squeeze
  * it to nothing.
+
+ * @param requested - the requested.
+ * @param available - the available.
+ * @param previewOpen - the previewOpen.
+ * @returns - the resulting number.
  */
 export function clampExplorerWidth(requested: number, available: number, previewOpen: boolean): number {
   const reserve = MIN_CHAT_PANEL_PX + (previewOpen ? MIN_PREVIEW_PANEL_PX + PREVIEW_REGION_CHROME_PX : 0)
@@ -87,6 +103,11 @@ export function clampExplorerWidth(requested: number, available: number, preview
  * Preview clamp (runs after the explorer clamp): reserve chat's floor plus
  * the already-clamped explorer width plus the region chrome. The ordered pair
  * guarantees chat = available - explorer - preview >= 360.
+
+ * @param requested - the requested.
+ * @param available - the available.
+ * @param explorerWidth - the explorerWidth.
+ * @returns - the resulting number.
  */
 export function clampPreviewWidth(requested: number, available: number, explorerWidth: number): number {
   const maxByContainer = Math.max(
@@ -124,10 +145,15 @@ export interface LayoutStore extends StateHandle<LayoutState> {
   shrinkToFit: (state: LayoutState) => void
 }
 
-/** Storage key of the collapse preference for one root. */
+/** Storage key of the collapse preference for one root.
+ * @param root - the project root identifier.
+ * @returns the full localStorage key for the root.
+ */
 export const collapseKey = (root: string): string => `${KEY_COLLAPSE}${root}`
 
-/** Create the layout store (reads persisted widths on init). */
+/** Create the layout store (reads persisted widths on init).
+ * @returns - the result.
+ */
 export function createLayoutStore(): LayoutStore {
   const handle = createState<LayoutState>({
     root: '',
@@ -164,7 +190,11 @@ export function createLayoutStore(): LayoutStore {
   return store
 }
 
-/** Switch the layout to a project root (restores collapse + widths). */
+/** Switch the layout to a project root (restores collapse + widths).
+ * @param store - the store.
+ * @param root - the root.
+ * @param previewOpen - the previewOpen.
+ */
 export function layoutSetRoot(store: LayoutStore, root: string, previewOpen: boolean): void {
   store.update((prev) => {
     if (prev.root === root && prev.previewOpen === previewOpen) return prev
@@ -219,7 +249,10 @@ export interface ExplorerStore extends StateHandle<ExplorerState> {
   handleFsChange: () => void
 }
 
-/** Read the persisted explorer UI state for a root (range-guarded). */
+/** Read the persisted explorer UI state for a root (range-guarded).
+ * @param root - the root.
+ * @returns - the resulting string.
+ */
 export function readExplorerUi(root: string): { expanded: string[]; selected: string | null } {
   const stored = readJson<{ expanded?: unknown; selected?: unknown }>(`${KEY_EXPLORER_UI}${root}`, {})
   const expanded = Array.isArray(stored.expanded)
@@ -231,7 +264,10 @@ export function readExplorerUi(root: string): { expanded: string[]; selected: st
 
 const EMPTY_SEARCH = { query: '', status: 'idle' as const, hits: [], truncated: false }
 
-/** Create the explorer store (per-root persistence, debounced writes). */
+/** Create the explorer store (per-root persistence, debounced writes).
+ * @param api - the api.
+ * @returns - the result.
+ */
 export function createExplorerStore(api: PanelApi): ExplorerStore {
   const handle = createState<ExplorerState>({
     root: '',
@@ -471,7 +507,10 @@ export interface ScmStore extends StateHandle<ScmState> {
   select: (path: string | null) => void
 }
 
-/** Read the persisted scm UI state for a root (guarded). */
+/** Read the persisted scm UI state for a root (guarded).
+ * @param root - the root.
+ * @returns - whether the operation succeeded.
+ */
 export function readScmUi(root: string): { viewMode: 'list' | 'tree'; sectionCollapsed: Record<string, boolean>; treeExpanded: string[]; selected: string | null } {
   const stored = readJson<{ viewMode?: unknown; sectionCollapsed?: unknown; treeExpanded?: unknown; selected?: unknown }>(`${KEY_SCM_UI}${root}`, {})
   const viewMode = stored.viewMode === 'tree' ? 'tree' : 'list'
@@ -485,7 +524,10 @@ export function readScmUi(root: string): { viewMode: 'list' | 'tree'; sectionCol
   return { viewMode, sectionCollapsed, treeExpanded, selected }
 }
 
-/** Create the scm store (host status is the only truth — no optimistic rows). */
+/** Create the scm store (host status is the only truth — no optimistic rows).
+ * @param api - the api.
+ * @returns - the result.
+ */
 export function createScmStore(api: PanelApi): ScmStore {
   const handle = createState<ScmState>({
     root: '',
@@ -697,7 +739,10 @@ interface PersistedTab {
   savedAt: number
 }
 
-/** Read persisted tabs for a root (guarded, content-less). */
+/** Read persisted tabs for a root (guarded, content-less).
+ * @param root - the root.
+ * @returns - the resulting array.
+ */
 export function readPreviewTabs(root: string): PersistedTab[] {
   const stored = readJson<{ savedAt?: unknown; tabs?: unknown }>(`preview-ui:${root}`, {})
   if (!Array.isArray(stored.tabs)) return []
@@ -724,7 +769,10 @@ export function readPreviewTabs(root: string): PersistedTab[] {
   return out
 }
 
-/** Create the preview store (per-root tab persistence with LRU scopes). */
+/** Create the preview store (per-root tab persistence with LRU scopes).
+ * @param api - the api.
+ * @returns - the result.
+ */
 export function createPreviewStore(api: PanelApi): PreviewStore {
   const handle = createState<PreviewState>({
     root: '',
@@ -1126,7 +1174,10 @@ export interface PanelStoresWithFlush extends PanelStores {
   flushNow: () => void
 }
 
-/** Create the full store bundle. */
+/** Create the full store bundle.
+ * @param api - the api.
+ * @returns - the result.
+ */
 export function createPanelStores(api: PanelApi): PanelStoresWithFlush {
   const layout = createLayoutStore()
   const explorer = createExplorerStore(api)

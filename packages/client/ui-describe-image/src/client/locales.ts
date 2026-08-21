@@ -121,7 +121,9 @@ export const dictionaries: Record<string, Record<DescribeImageClientKey, string>
 /** Current UI language, mirrored from the shell (defaults to zh). */
 let currentLanguage: string = 'zh'
 
-/** Switch the client copy language. */
+/** Switch the client copy language.
+ * @param language - the language key selecting the active dictionary.
+ */
 export function setLanguage(language: string): void {
   currentLanguage = language
 }
@@ -132,7 +134,11 @@ function format(template: string, params: Record<string, string | number>): stri
     name in params ? String(params[name]) : match)
 }
 
-/** Translate one key; falls back to the zh dictionary for unknown keys. */
+/** Translate one key; falls back to the zh dictionary for unknown keys.
+ * @param key - the namespace key to translate.
+ * @param params - optional `{name}` template values.
+ * @returns the localized string.
+ */
 export function t(key: DescribeImageClientKey, params?: Record<string, string | number>): string {
   const table = dictionaries[currentLanguage] ?? zh
   // oxlint-disable-next-line no-unnecessary-condition -- zh fallback guards incomplete dictionaries

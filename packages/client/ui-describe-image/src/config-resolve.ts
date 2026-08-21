@@ -27,6 +27,7 @@ export const DEFAULT_MAX_RETRIES = 2
 export const MAX_RETRIES_LIMIT = 10
 /** Protocol styles the tool can speak to the configured endpoint. */
 export const API_STYLES = ['chat-completions', 'responses'] as const
+/** One protocol style the tool can speak to the configured endpoint. */
 export type ApiStyle = typeof API_STYLES[number]
 /** Protocol style used unless the configuration overrides it. */
 export const DEFAULT_API_STYLE: ApiStyle = 'chat-completions'

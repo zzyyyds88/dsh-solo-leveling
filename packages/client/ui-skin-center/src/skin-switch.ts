@@ -66,6 +66,7 @@ export function findScopedAnchor(fromDir: string): string | null {
  * @param fromUrl - the module URL to resolve from (defaults to this module's
  *   own import.meta.url); injectable so tests can place the module inside a
  *   simulated install layout and exercise the real candidate chain.
+ * @returns the absolute directory holding the skin packages.
  */
 export function resolveSkinsDir(fromUrl: string = import.meta.url): string {
   const fromEnv = process.env.DSH_SKINS_DIR
@@ -89,6 +90,7 @@ export const SKINS_DIR = resolveSkinsDir()
 
 /** Managed patch-section delimiters (the CLI's SINGLE authority boundaries). */
 export const MANAGED_START = '# --- dsh-skin managed (auto-generated; do not edit) ---'
+/** The closing delimiter of the managed patch section (see MANAGED_START). */
 export const MANAGED_END = '# --- end dsh-skin managed ---'
 
 /** Legal npm package name (scoped or unscoped). skin.json `package` is joined
@@ -252,6 +254,7 @@ export function loadRegistry(skinsDir: string = SKINS_DIR): Record<string, SkinS
  * wired by an installed per-skin bundle are detected dynamically per profile
  * by activeSkinIsBundleWired / registryWithProfileWiring.
  * @param registry - the derived registry (or a partial override in tests).
+ * @returns the names of skins the bundle layer wires (no insert row needed).
  */
 export function wiredNames(registry: Record<string, SkinSwitchEntry>): Set<string> {
   const out = new Set<string>()
@@ -273,6 +276,7 @@ export function wiredNames(registry: Record<string, SkinSwitchEntry>): Set<strin
  * rows (`- id: ui-skin-xp` + `disabled: true`) carry no `name:` line and
  * must survive: they are the mutual-exclusion wiring, not inserts.
  * @param patch - raw patch file text.
+ * @returns the patch text with legacy skin rows and touch comments removed.
  */
 export function stripLegacySkinRows(patch: string): string {
   const lines = patch.split(/\r?\n/)
@@ -339,6 +343,7 @@ function dropEmptyInserts(text: string): string {
  * Remove the managed skin section. Throws on an unterminated section (a
  * malformed boot patch must fail loudly, never be silently half-written).
  * @param patch - raw patch file text.
+ * @returns the patch text with the managed skin section removed.
  */
 export function stripManaged(patch: string): string {
   const start = patch.indexOf(MANAGED_START)
@@ -361,6 +366,7 @@ function yamlSingleQuote(value: string): string {
  * insert row — the bundle layer already provides it.
  * @param active - skin id, or null for the official stock look.
  * @param registry - registry to render against (defaults to the repo registry).
+ * @returns the rendered managed patch section, delimiters included.
  */
 export function renderManaged(active: string | null, registry: Record<string, SkinSwitchEntry> = loadRegistry()): string {
   const wired = wiredNames(registry)
@@ -386,6 +392,7 @@ export function renderManaged(active: string | null, registry: Record<string, Sk
  * (last non-disabled skin row) remains for pre-bundle layouts.
  * @param patch - raw patch file text.
  * @param registry - registry to read against (defaults to the repo registry).
+ * @returns the active skin id, or null for the official stock look.
  */
 export function currentActive(patch: string, registry: Record<string, SkinSwitchEntry> = loadRegistry()): string | null {
   const disabled = new Set<string>()
@@ -530,6 +537,8 @@ function isDshSkinsCarrierPath(dir: string): boolean {
  * @param entry - the skin switch entry.
  * @param profileModulesDir - the profile's node_modules dir.
  * @param profileManifestPath - optional profile package.json path.
+ * @returns whether the active skin's loader row is already provided elsewhere,
+ *   so the managed section must not add a duplicate insert row.
  */
 export function activeSkinIsBundleWired(entry: SkinSwitchEntry, profileModulesDir: string, profileManifestPath?: string): boolean {
   if (entry.bundleWired) return true
@@ -682,6 +691,7 @@ function firstNonBlank(...values: Array<string | undefined>): string | undefined
  * @param optsHome - injectable HOME (tests); default resolves from env/homedir.
  * @param env - environment map (defaults to process.env).
  * @param installHome - harness home from resolveInstallLayout (no suffix).
+ * @returns the DSH harness home directory.
  */
 export function resolveHarnessHome(optsHome?: string, env: NodeJS.ProcessEnv = process.env, installHome?: string): string {
   if (optsHome !== undefined) return joinPath(optsHome, '.dsh')
@@ -705,6 +715,7 @@ export function resolveHarnessHome(optsHome?: string, env: NodeJS.ProcessEnv = p
  * @param cwd - current working directory (defaults to process.cwd()).
  * @param profilesRoot - `<harnessHome>/profiles` dir (defaults to the root
  *   derived from env/homedir).
+ * @returns the resolved profile name.
  */
 export function resolveProfile(
   optsProfile?: string,
@@ -754,6 +765,7 @@ function profileFromCwd(cwd: string, profilesRoot: string): string | undefined {
  * @param profile - profile name (defaults via the precedence above).
  * @param fromUrl - module URL the install layout is derived from (defaults
  *   to this module's import.meta.url); injectable for tests.
+ * @returns the resolved patch, profile node_modules, and profile manifest paths.
  */
 export function resolvePaths(home?: string, profile?: string, fromUrl: string = import.meta.url): SkinSwitchPaths {
   const install = resolveInstallLayout(fromUrl)
@@ -1022,7 +1034,15 @@ export function useSkin(name: string, opts: { home?: string; profile?: string; r
   }
 
   const patch = stripLegacySkinRows(stripManaged(readPatch(paths.patchPath)))
-  let next = `${patch.replace(/\s+$/, '')}\n\n${renderManaged(official ? null : name, renderRegistry)}\n`
+  // The boot patch must stay ONE valid YAML document. An empty/placeholder
+  // base (blank, `[]`, `null`, `~`, `---`) is replaced by the managed section
+  // alone; a real row list keeps its rows and the managed entries join it.
+  const base = patch.replace(/\s+$/, '')
+  const baseTrimmed = base.trim()
+  const emptyBase = baseTrimmed === '' || baseTrimmed === '[]' || /^(?:null|~|---)$/.test(baseTrimmed)
+  const appendManaged = (active: string | null): string =>
+    emptyBase ? `${renderManaged(active, renderRegistry)}\n` : `${base}\n\n${renderManaged(active, renderRegistry)}\n`
+  let next = appendManaged(official ? null : name)
   let skippedInsert = false
   if (!official && countInsertId(next, (renderRegistry[name] as SkinSwitchEntry).id) > 1) {
     // Another insert row for the same loader id already exists elsewhere in
@@ -1031,8 +1051,7 @@ export function useSkin(name: string, opts: { home?: string; profile?: string; r
     // one id fail the boot with "duplicate loader entry id" (issue #267), so
     // drop OUR row and keep the pre-existing one: the managed section then
     // only carries the mutual-exclusion disabled rows.
-    const wired = { ...renderRegistry, [name]: { ...(renderRegistry[name] as SkinSwitchEntry), bundleWired: true } }
-    next = `${patch.replace(/\s+$/, '')}\n\n${renderManaged(name, wired)}\n`
+    next = appendManaged(name)
     skippedInsert = true
   }
   writePatchAtomic(paths.patchPath, next)

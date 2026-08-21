@@ -29,6 +29,7 @@ export interface SetScheduleResult {
  * @param id - the task to schedule.
  * @param patch - rule fields to change (absent fields keep their current value).
  * @param now - clock instant (ms epoch).
+ * @returns the next ledger and whether the rule was applied.
  */
 export function applySetSchedule(
   tasks: readonly TaskRecord[],
@@ -59,6 +60,7 @@ export function applySetSchedule(
  * @param nextRunAt - next due instant (may be undefined to clear).
  * @param lastTriggeredAt - the trigger instant of this run.
  * @param now - clock instant (ms epoch).
+ * @returns the next ledger with the rolled-forward schedule applied.
  */
 export function applyScheduleNextRun(
   tasks: readonly TaskRecord[],

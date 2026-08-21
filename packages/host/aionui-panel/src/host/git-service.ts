@@ -36,7 +36,11 @@ const REPO_CACHE_TTL_MS = 60_000
 /** TTL for a negative (null) repo-top-level verdict. */
 const NO_REPO_CACHE_TTL_MS = 30_000
 
-/** Production runner over `ctx.subprocess`: one managed child per command. */
+/**
+ * Production runner over `ctx.subprocess`: one managed child per command.
+ * @param ctx - context carrying the subprocess service.
+ * @returns the git runner.
+ */
 export function subprocessRunner(ctx: Context): GitRunner {
   return {
     async run(argv, cwd) {
@@ -83,7 +87,11 @@ export function subprocessRunner(ctx: Context): GitRunner {
   }
 }
 
-/** Map one porcelain letter to the row state (unknown letters stay unknown). */
+/**
+ * Map one porcelain letter to the row state (unknown letters stay unknown).
+ * @param letter - the porcelain v1 status letter (A/M/D/R/C/U/?).
+ * @returns the row state; 'unknown' for unrecognized letters.
+ */
 export function porcelainState(letter: string): GitFileState {
   switch (letter) {
     case 'A': return 'created'
@@ -145,7 +153,13 @@ export function parsePorcelain(output: string): {
   return { staged, unstaged, untracked }
 }
 
-/** Parse the porcelain row set into the status view shape. */
+/**
+ * Parse the porcelain row set into the status view shape.
+ * @param root - the canonical project root the status is scoped to.
+ * @param branch - the current branch name ('' when detached).
+ * @param output - raw `git status --porcelain=v1 -z` output.
+ * @returns the status view with staged/unstaged/untracked rows.
+ */
 export function parseStatusView(root: string, branch: string, output: string): GitStatusView {
   const { staged, unstaged, untracked } = parsePorcelain(output)
   return { root, branch, staged, unstaged, untracked }
@@ -188,6 +202,7 @@ export class GitService {
    * the stable "not a git repository" state after a single failed spawn,
    * instead of re-spawning ENOENT on every poll tick. The cache stays false
    * even if git is installed later; the host restart picks it up.
+   * @returns true when `git --version` succeeded (cached for the service lifetime).
    */
   gitAvailable(): Promise<boolean> {
     if (this.availablePromise === undefined) {
@@ -246,6 +261,8 @@ export class GitService {
    * Whether an already-gated canonical root is a git repository. Skips the
    * workspace gate so the SSE poll does not double-gate every 2s tick; the
    * underlying repoOf cache keeps rev-parse probes at TTL cadence.
+   * @param canonicalRoot - an already-gated canonical workspace root.
+   * @returns true when the canonical root is inside a git repository.
    */
   isRepositoryCanonical(canonicalRoot: string): Promise<boolean> {
     return this.repoOf(canonicalRoot).then(repo => repo !== null)
@@ -254,6 +271,8 @@ export class GitService {
   /**
    * Whether a workspace root is a git repository. Gates the root first (POST
    * route entry point); the SSE poll should use `isRepositoryCanonical`.
+   * @param root - the requested workspace root.
+   * @returns true when the gated root is inside a git repository.
    */
   async isRepository(root: string): Promise<boolean> {
     const gated = await this.gate(root)
@@ -275,7 +294,11 @@ export class GitService {
     return this.runner.run(argv, cwd)
   }
 
-  /** The repo status view; null when the root is not a repository. */
+  /**
+   * The repo status view; null when the root is not a repository.
+   * @param root - the requested workspace root.
+   * @returns the status view, null when git is unavailable or the root is not a repository, else a PanelError.
+   */
   async status(root: string): Promise<GitStatusView | null | PanelError> {
     // A missing git binary answers before any spawn: the probe runs once per
     // service lifetime, so a git-less machine never re-spawns ENOENT here.
@@ -289,6 +312,8 @@ export class GitService {
    * The repo status view for an already-gated canonical root; null when it is
    * not a repository. Skips the workspace gate (SSE subscribers were gated at
    * connect) and reuses the same repoOf cache + status parsing as `status`.
+   * @param canonicalRoot - an already-gated canonical workspace root.
+   * @returns the status view, or null when the root is not a repository.
    */
   async statusCanonical(canonicalRoot: string): Promise<GitStatusView | null> {
     const repo = await this.repoOf(canonicalRoot)
@@ -306,7 +331,11 @@ export class GitService {
     return parseStatusView(root, branch, statusResult.stdout)
   }
 
-  /** The repo root for the watch layer (null when not a repository). */
+  /**
+   * The repo root for the watch layer (null when not a repository).
+   * @param root - the requested workspace root.
+   * @returns the repository top-level path, or null when gating fails or the root is not a repository.
+   */
   async repoRoot(root: string): Promise<string | null> {
     const repo = await this.repo(root)
     return repo.ok ? repo.repo : null
@@ -318,6 +347,10 @@ export class GitService {
    * worktree against the index. Untracked paths have no index/HEAD entry, so
    * they diff against /dev/null (the canonical new-file shape); its exit code
    * is 1 — differences exist — which is a success here, not a failure.
+   * @param root - the requested workspace root.
+   * @param path - repository-relative path whose diff to fetch.
+   * @param staged - diff the index against HEAD instead of the worktree.
+   * @returns the unified diff text, or a PanelError.
    */
   async diff(root: string, path: string, staged: boolean): Promise<{ content: string } | PanelError> {
     const repo = await this.repo(root)
@@ -344,7 +377,12 @@ export class GitService {
     return abs.filter(p => isPathInside(repo, p)).map(p => p)
   }
 
-  /** Stage paths (git add). Batch result reflects the post-op status. */
+  /**
+   * Stage paths (git add). Batch result reflects the post-op status.
+   * @param root - the requested workspace root.
+   * @param paths - repository-relative paths to stage.
+   * @returns applied/failed path batches, or a PanelError.
+   */
   async stage(root: string, paths: string[]): Promise<GitBatchResult | PanelError> {
     return this.batch(root, paths, async (repo, inside) => {
       const result = await this.run(['add', '--', ...inside], repo)
@@ -352,7 +390,12 @@ export class GitService {
     })
   }
 
-  /** Unstage paths (git restore --staged). */
+  /**
+   * Unstage paths (git restore --staged).
+   * @param root - the requested workspace root.
+   * @param paths - repository-relative paths to unstage.
+   * @returns applied/failed path batches, or a PanelError.
+   */
   async unstage(root: string, paths: string[]): Promise<GitBatchResult | PanelError> {
     return this.batch(root, paths, async (repo, inside) => {
       const result = await this.run(['restore', '--staged', '--', ...inside], repo)
@@ -364,6 +407,9 @@ export class GitService {
    * Discard paths (worktree side only). Tracked paths are restored from the
    * index; untracked paths are deleted through the fs seam. The batch reports
    * applied/failed per path.
+   * @param root - the requested workspace root.
+   * @param paths - repository-relative paths to discard (worktree side only).
+   * @returns applied/failed path batches, or a PanelError.
    */
   async discard(root: string, paths: string[]): Promise<GitBatchResult | PanelError> {
     const repo = await this.repo(root)

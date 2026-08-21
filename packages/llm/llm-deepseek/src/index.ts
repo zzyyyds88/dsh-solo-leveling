@@ -187,6 +187,9 @@ function resolveModels(models: readonly DeepSeekCatalogModel[] | undefined): Dee
  * the product CLI. Every layer may supply an endpoint: the product trusts the
  * project it is launched in, so a checkout can point its own agent at the
  * gateway that checkout is meant to use.
+ * @param defaults - the `dsh-defaults` settings section supplying the fallback
+ * retry count for a profile that names no retryPolicy, or `undefined` to keep
+ * the official default.
  * @returns validated connection facts plus the credential reference.
  */
 export function resolveAdapterOptions(

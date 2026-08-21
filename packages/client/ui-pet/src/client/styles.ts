@@ -1,3 +1,4 @@
+/** The pet's injected stylesheet text, scoped under [data-dsh-live2d-root]. */
 export const STYLES = `
 [data-dsh-live2d-root] {
   --pet-blue:#5594f1; --pet-cyan:#75ddff;
@@ -65,7 +66,12 @@ export const STYLES = `
 @media(prefers-reduced-motion:reduce){[data-dsh-live2d-root] *,[data-dsh-live2d-root] *:before{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
 `
 
-export function installStyles() {
+/**
+ * Inject the pet's stylesheet into the document head, scoped under
+ * [data-dsh-live2d-root]; a no-op when the style element already exists.
+ * @returns a cleanup function that removes the injected style element.
+ */
+export function installStyles(): () => void {
   const existing = document.querySelector('style[data-plugin="deepseek-pet"]')
   if (existing) return () => {}
   const style = document.createElement('style')

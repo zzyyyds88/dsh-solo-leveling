@@ -22,6 +22,11 @@ export const name = 'defaults'
 /** Settings namespace holding the GUI-configured defaults. */
 const NS = settingsNamespace('dsh-defaults')
 
+/**
+ * The `dsh-defaults` settings namespace shape: the default directory the
+ * picker opens and the default retry count for providers that declare no
+ * retryPolicy.
+ */
 export interface DefaultsConfig {
   /** 目录选择器打开的默认目录；空字符串 = 官方行为（host 主目录）。 */
   defaultWorkingDirectory: string

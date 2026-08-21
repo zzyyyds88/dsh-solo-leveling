@@ -34,6 +34,7 @@ function normalizePermission(
  * @param id - the task to update.
  * @param patch - editable-field changes.
  * @param now - clock instant (ms epoch).
+ * @returns the next ledger with the matched task updated.
  */
 export function applyUpdateTask(
   tasks: readonly TaskRecord[],

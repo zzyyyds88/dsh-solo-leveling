@@ -108,6 +108,17 @@ function forbidden(res: ServerResponse): void {
   res.end(JSON.stringify({ error: 'forbidden: loopback-only' }))
 }
 
+/**
+ * Whether an authenticated remote caller may reach the /git routes. The fork
+ * serves the LAN behind the access gate, so a logged-in remote caller is
+ * trusted the same way the settings plane trusts `webAuthAuthed`; anonymous
+ * LAN callers stay refused by the loopback fence above.
+ */
+function webAuthAuthed(ctx: Context, request: IncomingMessage): boolean {
+  const webAuth = ctx.get('webAuth') as { isAuthenticated?: (request: IncomingMessage) => boolean } | undefined
+  return webAuth?.isAuthenticated?.(request) === true
+}
+
 /** Read a JSON request body into an unknown value; null when unparseable. */
 async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = []
@@ -208,7 +219,7 @@ export function registerGitRoutes(ctx: Context, service: GitService): () => void
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // Loopback fence first: never let a LAN client reach any /git operation,
     // regardless of method or content-type.
-    if (!isLoopbackRequest(req)) {
+    if (!isLoopbackRequest(req) && !webAuthAuthed(ctx, req)) {
       forbidden(res)
       return
     }
@@ -282,7 +293,7 @@ export function registerGitRoutes(ctx: Context, service: GitService): () => void
   const sse = (req: IncomingMessage, res: ServerResponse): void => {
     // Reject non-loopback clients before the stream opens: subscribing must
     // never work for a LAN-exposed deployment.
-    if (!isLoopbackRequest(req)) {
+    if (!isLoopbackRequest(req) && !webAuthAuthed(ctx, req)) {
       forbidden(res)
       return
     }

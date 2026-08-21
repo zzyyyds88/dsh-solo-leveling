@@ -37,6 +37,7 @@ export interface PetState {
   [key: string]: unknown
 }
 
+/** All possible derived pet state kinds, in the order the state machine walks them. */
 export const PET_STATES = Object.freeze([
   'idle',
   'listening',
@@ -71,7 +72,8 @@ const TOOL_LABELS = Object.freeze({
 
 /**
  * Derive the pet's immediate state from the Harness Web conversation snapshot.
- * @param {Record<string, any> | null | undefined} snapshot
+ * @param snapshot - the conversation snapshot the pet reads; null or undefined yields the idle state.
+ * @returns the derived pet state: kind, label, and detail.
  */
 export function stateFromSnapshot(snapshot: PetSnapshot | null | undefined): PetState {
   if (!snapshot) return state('idle', '等待选择任务', '暂无活动任务')
@@ -116,7 +118,10 @@ export function stateFromSnapshot(snapshot: PetSnapshot | null | undefined): Pet
   return state('idle', '任务已就绪', '随时可以继续')
 }
 
-/** Latest human input contains an image attachment. */
+/** Latest human input contains an image attachment.
+ * @param snapshot - the conversation snapshot to inspect.
+ * @returns true when the latest human turn or the pending queue carries an image attachment.
+ */
 export function hasRecentImage(snapshot: PetSnapshot | null | undefined): boolean {
   const queued = Array.isArray(snapshot?.queue) ? snapshot.queue : []
   if (queued.some(item => contentHasImage(item.content))) return true
@@ -129,7 +134,10 @@ export function hasRecentImage(snapshot: PetSnapshot | null | undefined): boolea
   return false
 }
 
-/** Latest human turn explicitly corrects the assistant. */
+/** Latest human turn explicitly corrects the assistant.
+ * @param snapshot - the conversation snapshot to inspect.
+ * @returns true when the latest human text matches a correction pattern.
+ */
 export function hasRecentCorrection(snapshot: PetSnapshot | null | undefined): boolean {
   const text = latestHumanText(snapshot)
   if (!text) return false
@@ -138,7 +146,10 @@ export function hasRecentCorrection(snapshot: PetSnapshot | null | undefined): b
   return cnRe.test(text) || enRe.test(text)
 }
 
-/** Number of question/uncertainty cues in the current reasoning stream. */
+/** Number of question/uncertainty cues in the current reasoning stream.
+ * @param snapshot - the conversation snapshot whose reasoning stream is scanned.
+ * @returns the count of question marks and uncertainty cues found.
+ */
 export function reasoningQuestionCount(snapshot: PetSnapshot | null | undefined): number {
   const reasoning = streamFromSnapshot(snapshot).reasoning
   if (!reasoning) return 0
@@ -147,7 +158,10 @@ export function reasoningQuestionCount(snapshot: PetSnapshot | null | undefined)
   return punctuation + cues
 }
 
-/** Current stream copy for the companion's scrolling transcript. */
+/** Current stream copy for the companion's scrolling transcript.
+ * @param snapshot - the conversation snapshot whose partial blocks are copied.
+ * @returns the joined reasoning and reply text accumulated so far.
+ */
 export function streamFromSnapshot(snapshot: PetSnapshot | null | undefined): { reasoning: string; reply: string } {
   const blocks = Array.isArray(snapshot?.partial?.blocks) ? snapshot.partial.blocks : []
   const reasoning = blocks.filter(block => block.kind === 'reasoning').map(block => block.text ?? '').join('\n').trim()
@@ -188,7 +202,9 @@ function recentToolFailure(snapshot: PetSnapshot | null | undefined): string {
   return ''
 }
 
-/** A successful running→idle edge is shown temporarily as completion. */
+/** A successful running→idle edge is shown temporarily as completion.
+ * @returns the temporary success state shown when a task completes.
+ */
 export function completionState(): PetState {
   return state('success', '任务完成', '完成啦！')
 }

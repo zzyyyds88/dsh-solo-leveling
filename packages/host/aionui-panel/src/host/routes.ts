@@ -47,6 +47,9 @@ const HEARTBEAT_MS = 15_000
  * (inclusive). Multi-range requests are treated as invalid — the panel only
  * ever serves single ranges. Suffix ranges (`bytes=-N`) select the last N
  * bytes. Range support added after human review on #242 (pdf seeking).
+ * @param header - the raw Range request header (undefined when absent).
+ * @param size - the file size the range is clamped against.
+ * @returns the clamped inclusive start/end, 'invalid' for a malformed or unsatisfiable range, or null when no range was requested.
  */
 export function parseRangeHeader(
   header: string | undefined,
@@ -121,6 +124,17 @@ function isLoopbackRequest(request: IncomingMessage): boolean {
 function forbidden(res: ServerResponse): void {
   res.writeHead(403, { 'content-type': 'application/json; charset=utf-8' })
   res.end(JSON.stringify({ error: 'forbidden: loopback-only' }))
+}
+
+/**
+ * Whether an authenticated remote caller may reach the /aionui-panel routes.
+ * The fork serves the LAN behind the access gate, so a logged-in remote caller
+ * is trusted the same way the settings plane trusts `webAuthAuthed`; anonymous
+ * LAN callers stay refused by the loopback fence.
+ */
+function webAuthAuthed(ctx: Context, request: IncomingMessage): boolean {
+  const webAuth = ctx.get('webAuth') as { isAuthenticated?: (request: IncomingMessage) => boolean } | undefined
+  return webAuth?.isAuthenticated?.(request) === true
 }
 
 /** Read a JSON request body into an unknown value; null when unparseable. */
@@ -308,7 +322,7 @@ export function registerPanelRoutes(ctx: Context, fs: FsService, git: GitService
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // Loopback fence first: never let a LAN client reach any /aionui-panel
     // operation, regardless of method or content-type.
-    if (!isLoopbackRequest(req)) {
+    if (!isLoopbackRequest(req) && !webAuthAuthed(ctx, req)) {
       forbidden(res)
       return
     }
@@ -457,7 +471,7 @@ export function registerPanelRoutes(ctx: Context, fs: FsService, git: GitService
   const sse = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     // Reject non-loopback clients before gating the root or opening the
     // stream: a LAN-exposed deployment must not offer a subscription at all.
-    if (!isLoopbackRequest(req)) {
+    if (!isLoopbackRequest(req) && !webAuthAuthed(ctx, req)) {
       forbidden(res)
       return
     }

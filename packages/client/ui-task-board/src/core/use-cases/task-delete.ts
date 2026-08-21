@@ -19,6 +19,7 @@ export interface DeleteTaskResult {
  * @param tasks - current ledger.
  * @param selectedTaskId - the currently selected task id (may be undefined).
  * @param id - the task to remove.
+ * @returns the next ledger and whether the selection referenced the removed task.
  */
 export function applyDeleteTask(
   tasks: readonly TaskRecord[],

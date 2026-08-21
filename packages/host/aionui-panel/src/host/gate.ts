@@ -24,6 +24,8 @@ export type WorkspaceGate = (root: string) => Promise<GateVerdict>
  * a case-insensitive FS cannot trip the membership check (the drive letter and
  * every segment are compared case-insensitively). On any other platform the
  * path separator and case are left untouched.
+ * @param value - the path to normalize.
+ * @returns the normalized path (forward slashes, no trailing slash, lower-cased on win32).
  */
 export function normalizeForPrefix(value: string): string {
   const normalized = value.replaceAll('\\', '/').replace(/\/+$/, '')
@@ -36,6 +38,9 @@ export function normalizeForPrefix(value: string): string {
  * git (`rev-parse --show-toplevel`) and the browser (`./x`) yield forward
  * slashes, so both sides are normalized to forward slashes before comparing,
  * and the comparison is case-insensitive on win32 (the FS is case-insensitive).
+ * @param root - the containing path.
+ * @param child - the path to test for containment.
+ * @returns true when child equals root or lives directly inside it.
  */
 export function isPathInside(root: string, child: string): boolean {
   if (root === '' || child === '') return false

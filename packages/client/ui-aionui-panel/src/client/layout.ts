@@ -31,7 +31,9 @@ import type { LayoutStore } from './store.ts'
 /** The frame grid element (portals target it). */
 let frameElement: HTMLElement | null = null
 
-/** Read the current frame element (undefined while the shell is not mounted). */
+/** Read the current frame element (undefined while the shell is not mounted).
+ * @returns - the result.
+ */
 export function getFrameElement(): HTMLElement | null {
   return frameElement
 }
@@ -53,6 +55,9 @@ function findFrame(): HTMLElement | null {
 /**
  * Parse an inline grid-template-columns string into its tracks. Handles
  * "minmax(0, 1fr)" (spaces inside parens must not split). Empty on failure.
+
+ * @param input - the input.
+ * @returns - the resulting string.
  */
 export function parseGridTracks(input: string): string[] {
   const tracks: string[] = []
@@ -74,7 +79,10 @@ export function parseGridTracks(input: string): string[] {
   return tracks
 }
 
-/** Extract a px width from one track (0 for fr/minmax/non-px tracks). */
+/** Extract a px width from one track (0 for fr/minmax/non-px tracks).
+ * @param track - the track.
+ * @returns - the resulting number.
+ */
 export function trackPx(track: string): number {
   const match = /^(-?[\d.]+)px$/.exec(track.trim())
   return match === null ? 0 : Number(match[1])
@@ -82,6 +90,7 @@ export function trackPx(track: string): number {
 
 /** One drag handle's geometry (hit zone + visual line) — pure CSS in the module. */
 export const EXPLORER_HANDLE_WIDTH = 12
+/** Preview drag handle's hit-zone width in px. */
 export const PREVIEW_HANDLE_WIDTH = 20
 
 /** The layout controller: frame sync, handles, floating button, width math. */
@@ -306,7 +315,9 @@ export class PanelLayoutController {
     })
   }
 
-  /** Toggle the preview region (open = tabs exist; close keeps tabs). */
+  /** Toggle the preview region (open = tabs exist; close keeps tabs).
+   * @param open - whether the preview region should be visible.
+   */
   setPreviewOpen(open: boolean): void {
     this.instant(() => {
       this.layout.update(prev => ({ ...prev, previewOpen: open }))

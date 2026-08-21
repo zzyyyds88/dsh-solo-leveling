@@ -9,6 +9,7 @@ interface WindowControlsOverlay extends EventTarget {
   visible: boolean
 }
 
+/** Global Navigator surface: the optional Window Controls Overlay accessor. */
 interface Navigator {
   readonly windowControlsOverlay?: WindowControlsOverlay
 }

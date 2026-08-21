@@ -20,6 +20,7 @@ export interface CreateTaskResult {
  * @param input - raw user input (title/description/prompt).
  * @param now - clock instant (ms epoch).
  * @param id - minted task id.
+ * @returns the minted task and the next ledger (the input ledger when rejected).
  */
 export function applyCreateTask(
   tasks: readonly TaskRecord[],

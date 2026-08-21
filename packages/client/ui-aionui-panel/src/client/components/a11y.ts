@@ -9,7 +9,7 @@ import type { KeyboardEvent } from 'react'
  * @param handler - the activation handler (the element's click action).
  * @returns a keydown handler for the focusable element.
  */
-export function activateOnKey(handler: () => void) {
+export function activateOnKey(handler: () => void): (event: KeyboardEvent<HTMLElement>) => void {
   return (event: KeyboardEvent<HTMLElement>): void => {
     if (event.target !== event.currentTarget) return
     if (event.key === 'Enter' || event.key === ' ') {

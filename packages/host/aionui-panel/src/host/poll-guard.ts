@@ -19,6 +19,10 @@ const DEFAULT_TIMERS: PollTimers = {
   clear: (handle) => { clearTimeout(handle as ReturnType<typeof setTimeout>) },
 }
 
+/**
+ * Bounds for a PollGuard loop: the base interval, wall-clock deadline, and
+ * failure-backoff cap, plus the optional timer seam and lifecycle callbacks.
+ */
 export interface PollGuardOptions {
   /** Base interval between runs. */
   intervalMs: number

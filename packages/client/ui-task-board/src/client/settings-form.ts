@@ -155,8 +155,13 @@ export interface NumberConstraints {
   min?: number
 }
 
-/** A whole- or decimal-number field. An empty draft clears the field; any other draft that is
- * not a finite number within the constraints blocks the save. */
+/**
+ * A whole- or decimal-number field. An empty draft clears the field; any other draft that is
+ * not a finite number within the constraints blocks the save.
+ * @param field - field name inside the namespace section.
+ * @param constraints - numeric constraints the accepted drafts must satisfy.
+ * @returns the field spec.
+ */
 export function numberField(field: string, constraints: NumberConstraints = {}): FieldSpec {
   const { integer = false, min } = constraints
   return {
@@ -174,7 +179,11 @@ export function numberField(field: string, constraints: NumberConstraints = {}):
   }
 }
 
-/** A free-text field. An empty draft clears the field. */
+/**
+ * A free-text field. An empty draft clears the field.
+ * @param field - field name inside the namespace section.
+ * @returns the field spec.
+ */
 export function textField(field: string): FieldSpec {
   return {
     field,
@@ -191,12 +200,18 @@ export function textField(field: string): FieldSpec {
  * (role('secret') in the section schema). The card still edits it like text,
  * but a save never compares the redacted value back and relies on the scope
  * reporting the write landed.
+ * @param field - field name inside the namespace section.
+ * @returns the field spec.
  */
 export function secretField(field: string): FieldSpec {
   return { ...textField(field), secret: true }
 }
 
-/** A boolean field, edited through true/false draft text. */
+/**
+ * A boolean field, edited through true/false draft text.
+ * @param field - field name inside the namespace section.
+ * @returns the field spec.
+ */
 export function booleanField(field: string): FieldSpec {
   return {
     field,
@@ -211,7 +226,12 @@ export function booleanField(field: string): FieldSpec {
   }
 }
 
-/** An enumerated string field; only the listed choices are accepted. An empty draft clears the field. */
+/**
+ * An enumerated string field; only the listed choices are accepted. An empty draft clears the field.
+ * @param field - field name inside the namespace section.
+ * @param choices - the accepted values for this field.
+ * @returns the field spec.
+ */
 export function choiceField(field: string, choices: readonly string[]): FieldSpec {
   return {
     field,
@@ -248,14 +268,21 @@ export class CardForm<T> {
     scope.subscribe(() => { this.publish() })
   }
 
-  /** Publish a projection of this form, rebuilt whenever the scope or a draft changes. */
+  /**
+   * Publish a projection of this form, rebuilt whenever the scope or a draft changes.
+   * @param project - reads the current form state into the projected value.
+   * @returns a snapshot store publishing the projection.
+   */
   bind<S>(project: () => S): SnapshotStore<S> {
     const store = createSnapshotStore(project())
     this.listeners.add(() => { store.set(project()) })
     return store
   }
 
-  /** Read the card-level state: what the Host serves, and what a save would do. */
+  /**
+   * Read the card-level state: what the Host serves, and what a save would do.
+   * @returns the card shell state.
+   */
   shell(): CardShell {
     const snapshot = this.scope.getSnapshot()
     const plan = this.plan()
@@ -271,7 +298,11 @@ export class CardForm<T> {
     }
   }
 
-  /** Read one field's state from the effective section and its staged draft. */
+  /**
+   * Read one field's state from the effective section and its staged draft.
+   * @param field - the field name to read.
+   * @returns the field state for the control to render.
+   */
   field(field: string): FieldState {
     const spec = this.specOf(field)
     const staged = this.staged.get(field)
@@ -286,7 +317,10 @@ export class CardForm<T> {
     }
   }
 
-  /** The actions the card's slot registration injects. */
+  /**
+   * The actions the card's slot registration injects.
+   * @returns the card action set.
+   */
   actions(): CardActions {
     return {
       edit: (field, text) => { this.stage(field, { text, clear: false }) },

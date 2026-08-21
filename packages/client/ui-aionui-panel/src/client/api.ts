@@ -37,52 +37,95 @@ async function post<T>(path: string, payload: Record<string, unknown>): Promise<
 
 /** Typed panel operations over the wire. */
 export class PanelApi {
-  /** List one directory of the project root (rel path; '' = root). */
+  /** List one directory of the project root (rel path; '' = root).
+   * @param root - the project root identifier.
+   * @param path - directory path relative to the root ('' = root).
+   * @returns the directory listing envelope.
+   */
   list(root: string, path: string): Promise<PanelEnvelope<DirListing>> {
     return post('/aionui-panel/list', { root, path })
   }
 
-  /** Read one file (text or image data URL). */
+  /** Read one file (text or image data URL).
+   * @param root - the project root identifier.
+   * @param path - file path relative to the root.
+   * @param asImage - request an image data URL instead of text.
+   * @returns the file contents envelope.
+   */
   read(root: string, path: string, asImage: boolean): Promise<PanelEnvelope<FileRead>> {
     return post('/aionui-panel/read', { root, path, asImage })
   }
 
-  /** Write text content back with an optional mtime conflict base. */
+  /** Write text content back with an optional mtime conflict base.
+   * @param root - the project root identifier.
+   * @param path - file path relative to the root.
+   * @param content - the text to write.
+   * @param baseMtime - expected current mtime; when set, the write is rejected if it no longer matches.
+   * @returns the envelope carrying the new file mtime.
+   */
   write(root: string, path: string, content: string, baseMtime?: number): Promise<PanelEnvelope<{ mtime: number }>> {
     return post('/aionui-panel/write', { root, path, content, baseMtime })
   }
 
-  /** Filename search under the root. */
+  /** Filename search under the root.
+   * @param root - the project root identifier.
+   * @param query - filename fragment to match.
+   * @returns the search results envelope.
+   */
   search(root: string, query: string): Promise<PanelEnvelope<SearchView>> {
     return post('/aionui-panel/search', { root, query })
   }
 
-  /** Delete a path (untracked discard). */
+  /** Delete a path (untracked discard).
+   * @param root - the project root identifier.
+   * @param path - path relative to the root to delete.
+   * @returns the operation result envelope.
+   */
   delete(root: string, path: string): Promise<PanelEnvelope<{ ok: true }>> {
     return post('/aionui-panel/delete', { root, path })
   }
 
-  /** The repo status view; null when the root is not a repository. */
+  /** The repo status view; null when the root is not a repository.
+   * @param root - the project root identifier.
+   * @returns the status view envelope (null value when the root is not a repository).
+   */
   gitStatus(root: string): Promise<PanelEnvelope<GitStatusView | null>> {
     return post('/aionui-panel/git-status', { root })
   }
 
-  /** The unified diff text of one path (staged = index vs HEAD). */
+  /** The unified diff text of one path (staged = index vs HEAD).
+   * @param root - the project root identifier.
+   * @param path - file path relative to the root.
+   * @param staged - compare the index to HEAD (true) or the worktree to the index (false).
+   * @returns the diff text envelope.
+   */
   gitDiff(root: string, path: string, staged: boolean): Promise<PanelEnvelope<{ content: string }>> {
     return post('/aionui-panel/git-diff', { root, path, staged })
   }
 
-  /** Stage paths. */
+  /** Stage paths.
+   * @param root - the project root identifier.
+   * @param paths - file paths relative to the root to stage.
+   * @returns the batch result envelope.
+   */
   gitStage(root: string, paths: string[]): Promise<PanelEnvelope<GitBatchResult>> {
     return post('/aionui-panel/git-stage', { root, paths })
   }
 
-  /** Unstage paths. */
+  /** Unstage paths.
+   * @param root - the project root identifier.
+   * @param paths - file paths relative to the root to unstage.
+   * @returns the batch result envelope.
+   */
   gitUnstage(root: string, paths: string[]): Promise<PanelEnvelope<GitBatchResult>> {
     return post('/aionui-panel/git-unstage', { root, paths })
   }
 
-  /** Discard paths (worktree side; untracked paths are deleted). */
+  /** Discard paths (worktree side; untracked paths are deleted).
+   * @param root - the project root identifier.
+   * @param paths - file paths relative to the root to discard.
+   * @returns the batch result envelope.
+   */
   gitDiscard(root: string, paths: string[]): Promise<PanelEnvelope<GitBatchResult>> {
     return post('/aionui-panel/git-discard', { root, paths })
   }

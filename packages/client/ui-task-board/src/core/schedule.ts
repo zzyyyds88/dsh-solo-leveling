@@ -37,6 +37,7 @@ const FIELD_RANGES: ReadonlyArray<readonly [number, number]> = [
 
 /**
  * Parse a 5-field cron expression.
+ * @param expr - the 5-field cron expression to parse.
  * @returns the match sets, or null when the expression is invalid.
  */
 export function parseCron(expr: string): CronSchedule | null {
@@ -65,7 +66,11 @@ export function parseCron(expr: string): CronSchedule | null {
   }
 }
 
-/** Whether the expression parses. */
+/**
+ * Whether the expression parses.
+ * @param expr - the 5-field cron expression to validate.
+ * @returns true when the expression parses, false otherwise.
+ */
 export function isValidCron(expr: string): boolean {
   return parseCron(expr) !== null
 }
@@ -75,6 +80,9 @@ export function isValidCron(expr: string): boolean {
  * at minute granularity, strictly greater than `fromMs`. Returns the ms epoch
  * of the matching minute's start, or undefined when nothing matches within
  * 366 days (e.g. `0 0 30 2 *`).
+ * @param expr - the 5-field cron expression to match.
+ * @param fromMs - the instant to scan forward from (exclusive, ms epoch).
+ * @returns the ms epoch of the next matching minute, or undefined when none matches.
  */
 export function nextRunAtMs(expr: string, fromMs: number): number | undefined {
   const schedule = parseCron(expr)

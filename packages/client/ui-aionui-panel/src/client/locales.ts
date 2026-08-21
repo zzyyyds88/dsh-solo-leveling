@@ -177,12 +177,17 @@ const en: Record<keyof typeof zh, string> = {
   'settings.invalidNumber': 'Enter a number, or leave blank to use the default.',
 }
 
+/** One dictionary key this package owns (every zh/en copy string). */
 export type AionUiPanelKey = keyof typeof zh
 
 /** The dictionary namespace this plugin owns. */
 export const NS = 'aionui-panel'
 
-/** Format one copy string with {name} placeholders. */
+/** Format one copy string with {name} placeholders.
+ * @param template - the template.
+ * @param params - the params.
+ * @returns - the resulting string.
+ */
 export function format(template: string, params: Record<string, string | number>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => String(params[key] ?? `{${key}}`))
 }
@@ -192,12 +197,18 @@ export const dictionaries: Record<'zh' | 'en', Record<AionUiPanelKey, string>> =
 
 let currentLanguage: 'zh' | 'en' = 'zh'
 
-/** Set the active language (the client mirrors the locale service). */
+/** Set the active language (the client mirrors the locale service).
+ * @param language - the language.
+ */
 export function setLanguage(language: string): void {
   currentLanguage = language === 'en' ? 'en' : 'zh'
 }
 
-/** Translate one key with optional params. */
+/** Translate one key with optional params.
+ * @param key - the key.
+ * @param params - the params.
+ * @returns - the resulting string.
+ */
 export function t(key: AionUiPanelKey, params?: Record<string, string | number>): string {
   const table = dictionaries[currentLanguage]
   const template = table[key]

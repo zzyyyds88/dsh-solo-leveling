@@ -42,27 +42,50 @@ async function post<T>(path: string, payload: Record<string, unknown>): Promise<
 
 /** Typed git operations over the wire. */
 export class GitApi {
-  /** The repository snapshot (null: not a git repository / not a workspace). */
+  /**
+   * The repository snapshot (null: not a git repository / not a workspace).
+   * @param path - workspace root to query.
+   * @returns the snapshot envelope, or an error envelope.
+   */
   status(path: string): Promise<ApiResult<RepoStatus | null>> {
     return post('/git/status', { path })
   }
 
-  /** Local branch list with the current branch marked. */
+  /**
+   * Local branch list with the current branch marked.
+   * @param path - workspace root to query.
+   * @returns the branches view envelope, or an error envelope.
+   */
   branches(path: string): Promise<ApiResult<BranchesView | null>> {
     return post('/git/branches', { path })
   }
 
-  /** Workspace-level `git switch --no-guess <branch>` (host guards first). */
+  /**
+   * Workspace-level `git switch --no-guess <branch>` (host guards first).
+   * @param path - workspace root to switch in.
+   * @param branch - target branch name.
+   * @returns the checked-out branch name on success, or an error envelope.
+   */
   switchBranch(path: string, branch: string): Promise<ApiResult<{ branch: string }>> {
     return post('/git/switch', { path, branch })
   }
 
-  /** `git switch --no-guess -c <name>` from the current HEAD. */
+  /**
+   * `git switch --no-guess -c <name>` from the current HEAD.
+   * @param path - workspace root to create the branch in.
+   * @param name - name for the new branch.
+   * @returns the created branch name on success, or an error envelope.
+   */
   createBranch(path: string, name: string): Promise<ApiResult<{ branch: string }>> {
     return post('/git/create-branch', { path, name })
   }
 
-  /** Topo-ordered commit graph across branches/tags/remotes. */
+  /**
+   * Topo-ordered commit graph across branches/tags/remotes.
+   * @param path - workspace root to query.
+   * @param limit - maximum commit count (all commits when omitted).
+   * @returns the graph view envelope, or an error envelope.
+   */
   graph(path: string, limit?: number): Promise<ApiResult<GraphView | null>> {
     return post('/git/graph', limit === undefined ? { path } : { path, limit })
   }

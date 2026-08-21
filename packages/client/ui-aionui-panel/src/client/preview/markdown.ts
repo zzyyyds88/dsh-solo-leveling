@@ -6,7 +6,10 @@
  * @module dsh-aionui-panel/client/preview/markdown
  */
 
-/** Escape HTML special characters. */
+/** Escape HTML special characters.
+ * @param text - the text value.
+ * @returns - the resulting string.
+ */
 export function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -65,6 +68,10 @@ function decodePathPart(raw: string): string {
  * - The path portion is percent-decoded (markdown authors encode spaces in
  *   filenames) and any ?query#fragment suffix is preserved verbatim, so
  *   cache-busting srcs like ./img.png?v=2 still fetch img.png.
+
+ * @param filePath - the filePath.
+ * @param src - the src.
+ * @returns - the result.
  */
 export function resolveMarkdownImage(filePath: string, src: string): MarkdownImageResolution {
   const trimmed = src.trim()
@@ -102,6 +109,9 @@ export interface MarkdownRenderOptions {
  * paths (./ ../ / and plain filenames) pass through unchanged. Anything with
  * a scheme outside the allow-list — javascript:, data:, vbscript:, etc. —
  * is rejected so the value never reaches dangerouslySetInnerHTML.
+
+ * @param raw - the raw.
+ * @returns - the resulting string.
  */
 export function safeUrl(raw: string): string | null {
   const trimmed = raw.trim()
@@ -113,7 +123,11 @@ export function safeUrl(raw: string): string | null {
   return name === 'http' || name === 'https' || name === 'mailto' ? trimmed : null
 }
 
-/** Inline pass: code spans, bold, italic, images, links. */
+/** Inline pass: code spans, bold, italic, images, links.
+ * @param text - the text value.
+ * @param options - the call options.
+ * @returns - the resulting string.
+ */
 export function renderInline(text: string, options?: MarkdownRenderOptions): string {
   let out = ''
   let i = 0
@@ -212,7 +226,11 @@ export function renderInline(text: string, options?: MarkdownRenderOptions): str
   return out
 }
 
-/** Render a markdown document to HTML (block pass). */
+/** Render a markdown document to HTML (block pass).
+ * @param source - the source.
+ * @param options - the call options.
+ * @returns - the resulting string.
+ */
 export function renderMarkdown(source: string, options?: MarkdownRenderOptions): string {
   const lines = source.replace(/\r\n/g, '\n').split('\n')
   const out: string[] = []

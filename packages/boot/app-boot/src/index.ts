@@ -326,6 +326,11 @@ function parsePatchList(
   } catch (error) {
     throw new Error(`${binName}: failed to parse ${label} ${file}: ${String(error)}`)
   }
+  // A comment-only or empty document parses to null/undefined and is a legitimately
+  // empty patch layer (the skin-switch writer emits a delimiter-only managed section
+  // when every skin is enabled). Treat it as `[]` — an absent file means "no layer",
+  // but a present file with no rows is still "no rows", not a misconfiguration.
+  if (parsed === undefined || parsed === null) parsed = []
   if (!Array.isArray(parsed)) {
     throw new Error(`${binName}: ${label} ${file} must be a top-level YAML array of loader patch entries`)
   }

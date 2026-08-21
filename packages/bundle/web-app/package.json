@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-agent-presets": "workspace:^",
+    "@deepseek-ai/dsh-defaults": "workspace:^",
     "@deepseek-ai/dsh-api-remotes": "workspace:^",
     "@deepseek-ai/dsh-app-boot": "workspace:^",
     "@deepseek-ai/dsh-client-connection": "workspace:^",

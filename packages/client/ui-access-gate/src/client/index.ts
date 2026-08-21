@@ -111,6 +111,8 @@ export class AccessGateCardController {
    * password untouched; `customCert`/`customKey` are only written in `custom`
    * mode with non-empty PEM drafts (existing stored cert is kept otherwise).
    * Resolves true only when the store confirms the fields landed.
+   * @param fields - the editable card fields to write.
+   * @returns whether the store confirmed every applicable field landed.
    */
   async save(fields: {
     password: string
@@ -143,7 +145,10 @@ export class AccessGateCardController {
     return certLanded && keyLanded
   }
 
-  /** Build the face the card's slot registration injects. */
+  /**
+   * Build the face the card's slot registration injects.
+   * @returns the card's injected face.
+   */
   inject(): AccessGateCardFace {
     return {
       hooks: { accessGateCard: this.store },

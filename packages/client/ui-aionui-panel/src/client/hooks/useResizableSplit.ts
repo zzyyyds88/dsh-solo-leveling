@@ -11,6 +11,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { handlePointerDragStart } from '../drag.ts'
 import { readStoredNumber, writeStoredNumber } from '../persist.ts'
 
+/** The width contract and persistence key one resizable split is created with. */
 export interface UseResizableSplitOptions {
   /** Default width (px or percent). */
   defaultWidth?: number
@@ -24,6 +25,7 @@ export interface UseResizableSplitOptions {
   unit?: 'px' | 'ratio'
 }
 
+/** Pointer-event props a drag-handle element must spread onto its DOM node. */
 export interface DragHandleProps {
   onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void
   onDoubleClick: () => void
@@ -34,7 +36,15 @@ export interface DragHandleProps {
  * @param options - width contract + persistence key.
  * @returns current width, the committed setter, handle props, and the clamp.
  */
-export function useResizableSplit(options: UseResizableSplitOptions = {}) {
+export function useResizableSplit(
+  options: UseResizableSplitOptions = {},
+): {
+  width: number
+  setWidth: (value: number) => void
+  handleProps: DragHandleProps
+  clamp: (value: number) => number
+  isPx: boolean
+} {
   const {
     defaultWidth = 50,
     minWidth = 20,

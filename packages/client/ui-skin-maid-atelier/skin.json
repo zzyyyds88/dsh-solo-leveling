@@ -18,7 +18,7 @@
   "package": "@deepseek-ai/dsh-client-ui-skin-maid-atelier",
   "wiring": {
     "id": "ui-skin-maid-atelier",
-    "bundleWired": false
+    "bundleWired": true
   },
   "preview": {
     "light": "packages/skins/maid-atelier/preview/light.webp",

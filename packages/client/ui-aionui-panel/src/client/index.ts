@@ -41,7 +41,9 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Required services: sessions (project root), locale (copy), settingsScope (master switch), slots (settings card). */
 export const inject = ['sessions', 'locale', 'settingsScope', 'slots']
 
-/** Apply the browser half. */
+/** Apply the browser half.
+ * @param ctx - the plugin context.
+ */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, dictionaries), 'dsh-aionui-panel: dictionaries')
 

@@ -17,5 +17,9 @@ export const inject = ['invariants']
 const install: InvariantInstaller = () => {}
 
 /** Register this package's invariant companion. */
-export const apply = (ctx: Context): Promise<() => void> =>
-  Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))
+export const/**
+ * @param ctx - the plugin context.
+ * @returns - the result.
+ */
+  apply = (ctx: Context): Promise<() => void> =>
+    Promise.resolve(ctx.invariants.register(PACKAGE_NAME, install))

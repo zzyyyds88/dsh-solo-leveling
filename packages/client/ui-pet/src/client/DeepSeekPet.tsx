@@ -14,7 +14,7 @@ import {
 } from './pet-state.ts'
 import {
   ALERT_GROUPS, ALERT_LABELS, alertEnabled, alertToggles, armAutoplayUnlock, audioError, audioState, beep, getVolume,
-  isMuted, playCelebrate, playPoke, playPrompt, playSad, playTool, setAlertEnabled,
+  isMuted, playCelebrate, playLedger, playPoke, playPrompt, playSad, playTool, setAlertEnabled,
   setVolume, speakVoice, toggleMuted, unlockAudio,
 } from './sound.ts'
 import { isPetEnabled, subscribeAppSettings } from './app-settings.ts'
@@ -109,7 +109,8 @@ const COMFORT_LINES = Object.freeze([
  * 语音台词 key 候选（voice.generated.js）。
  * 分两套，避免同一事件被播两次：
  *  - VOICE_FOR_EVENT：由事件驱动的一次性函数播（celebrateCompletion / comfortError）
- *  - VOICE_FOR_STATE：由状态 effect 播（进入 approval/waiting/busy/thinking 时，30s 冷却）
+ *  - VOICE_FOR_STATE：由状态 effect 播（进入 approval/waiting/busy/thinking 时；
+ *    状态语音 busy/thinking 带 30s 冷却防刷屏，提问/审批提示无冷却每次都提示）
  * success/error/tool-error 只属于 EVENT，不属于 STATE——否则完成任务/出错时
  * 事件函数和状态 effect 各播一次，语音叠加。
  */
@@ -216,6 +217,8 @@ interface DerivedVisual extends PetVisual {
   label: string
   detail: string
   promptKind?: string | undefined
+  /** Greeting voice key for the current time period (morning/noon/afternoon/night), absent when asleep. */
+  greetingVoice?: string | undefined
 }
 
 interface PetProps {
@@ -330,6 +333,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const wasPartialRef = useRef(false)
   const goalPhaseRef = useRef<GoalPhase | undefined>(goalProjection?.goal.phase)
   const prevWorkingRef = useRef(false)
+  // 状态语音冷却：思考/忙碌语音 30s 内只播一次（thinking↔busy 频繁切换时不刷屏）。
+  const lastStateVoiceAtRef = useRef(0)
+  // 问候语音防重：同一时间段（早上/中午/下午/晚上）只播一次，随页面加载自然触发。
+  const lastGreetingVoiceRef = useRef<string | null>(null)
 
   useEffect(() => {
     let transitionTimer: ReturnType<typeof setTimeout> | undefined
@@ -444,7 +451,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
         return clamped.x === current.x && clamped.y === current.y ? current : clamped
       })
     })
-    return () => cancelAnimationFrame(frame)
+    return () => { cancelAnimationFrame(frame) }
   }, [])
 
   // 页面任意一次用户交互即解锁音频（自动播放策略；完成庆祝在后台触发，不能依赖点桌宠）
@@ -711,9 +718,9 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     }
   }, [effectiveVisual.kind, comfortError, petEnabled])
 
-  // 进入等待批准/提问/忙碌/思考等状态时播提示音+语音（无冷却，每次都提示）。
-  // waiting 用 effectiveVisual.promptKind 区分「审批」与「提问」，播不同台词。
-  // 分两类开关：提问/审批（prompt）走提示音+语音；思考/忙碌（state）只播状态语音。
+  // 进入等待批准/提问/忙碌/思考等状态时播提示音+语音。
+  // 提问/审批（prompt）是「正在等你」的提醒，无冷却每次都提示；状态语音
+  // （busy/thinking）属于环境提示，30s 冷却防刷屏。
   useEffect(() => {
     if (!petEnabled) return
     const kind = effectiveVisual.kind
@@ -727,10 +734,23 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     const isState = voiceKey === 'busy' || voiceKey === 'thinking'
     if (isPrompt && !alertEnabled('prompt')) return
     if (isState && !alertEnabled('state')) return
+    if (isState && Date.now() - lastStateVoiceAtRef.current < 30_000) return
+    if (isState) lastStateVoiceAtRef.current = Date.now()
     unlockAudio()
     if (isPrompt) playPrompt()
     void speakVoice(pickVoiceKey(keys))
   }, [effectiveVisual.kind, (effectiveVisual as DerivedVisual).promptKind, petEnabled])
+
+  // 问候语音：进入空闲（带时间段问候）时按当前时段播一次（同时间段不重复）。
+  useEffect(() => {
+    if (!petEnabled) return
+    const voice = (effectiveVisual as DerivedVisual).greetingVoice
+    if (!voice || voice === lastGreetingVoiceRef.current) return
+    lastGreetingVoiceRef.current = voice
+    if (!alertEnabled('greeting')) return
+    unlockAudio()
+    void speakVoice(voice)
+  }, [(effectiveVisual as DerivedVisual).greetingVoice, petEnabled])
 
   // 调用工具时播工具调用语音（进入 working 状态时，短促咔哒音提示「正在调用工具」）。
   useEffect(() => {
@@ -759,6 +779,13 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const lastSampledCostRef = useRef<number | null>(null)
   const [ledgerTrend, setLedgerTrend] = useState('normal')
 
+  // 账房提醒音：价格峰谷 / 预算封顶提醒发声（受「账房提醒音」开关控制）。
+  const ringLedgerAlert = useCallback(() => {
+    if (!alertEnabled('ledger')) return
+    unlockAudio()
+    playLedger()
+  }, [])
+
   // 峰谷/封顶提醒：成本相比上次采样有实质变化（≥1 分）才采样一次，避免流式快照
   // 每帧重算时把相同成本重复入历史、稀释峰谷判定；封顶提醒 30 分钟内只响一次。
   useEffect(() => {
@@ -775,11 +802,13 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
       peakFlagRef.current = true
       valleyFlagRef.current = false
       setLedgerTrend('peak')
+      ringLedgerAlert()
       speak(`💸 价格高峰！这一阵子烧得飞快（约 +¥${delta.toFixed(2)}），悠着点～`, '')
     } else if (trend === 'valley' && !valleyFlagRef.current) {
       valleyFlagRef.current = true
       peakFlagRef.current = false
       setLedgerTrend('valley')
+      ringLedgerAlert()
       speak('🕊️ 价格低谷！这会儿几乎没烧钱，安心摸鱼～', '')
     } else if (trend === 'normal') {
       peakFlagRef.current = false
@@ -788,9 +817,10 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     }
     if (ledgerOver && Date.now() - capAlertedAtRef.current > 30 * 60_000) {
       capAlertedAtRef.current = Date.now()
+      ringLedgerAlert()
       speak(`🚨 预算封顶提醒！本会话预计已花 ¥${ledgerCost.toFixed(2)}，超了 ¥${ledgerBudgetNow} 的封顶线！`, '')
     }
-  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, ledgerBudgetNow, speak])
+  }, [usage, ledgerCost, ledgerOver, ledgerOpen, petEnabled, ledgerEnabled, ledgerBudgetNow, ringLedgerAlert, speak])
 
   /** 账房面板行数据（供渲染）。 */
   const ledgerRows = useMemo(() => {
@@ -836,9 +866,13 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   /** 切换静音（工具条按钮）。双击不再触发。 */
   const handleToggleMute = useCallback(() => {
     unlockAudio()
+    // 「声音已关闭」须在静音生效前播（静音后 speakVoice 会静默跳过）；
+    // 「声音已开启」在取消静音后播。反馈音走「静音/取消静音反馈」开关。
+    const muting = !isMuted()
+    if (alertEnabled('feedback') && muting) void speakVoice('muted')
     const nextMuted = toggleMuted()
     setMuted(nextMuted)
-    if (alertEnabled('prompt')) void speakVoice(nextMuted ? 'muted' : 'unmuted')
+    if (alertEnabled('feedback') && !muting) void speakVoice('unmuted')
     speak(nextMuted ? '声音已关闭 🔇（工具条可恢复）' : '声音已开启 🔊', '')
   }, [speak])
 
@@ -916,7 +950,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
 
   /** 诊断面板内容。 */
   const diagLines = useMemo(() => {
-    const running = runningSessions.length + (focusedSession?.running && focusedSession?.origin !== 'subagent' ? 1 : 0)
+    const running = runningSessions.length + (focusedSession?.running && focusedSession.origin !== 'subagent' ? 1 : 0)
     const audio = audioState()
     const audioErr = audioError()
     return [
@@ -1035,7 +1069,7 @@ export function deriveVisual(
     if ((signals.idleMs ?? 0) >= ONE_HOUR) return { kind: 'sleeping', label: '已经睡着了', detail: '挂机超过 1 小时' }
     if ((signals.idleMs ?? 0) >= THIRTY_MINUTES) return { kind: 'sleepy', label: '抱着枕头犯困', detail: '挂机超过 30 分钟' }
     if ((signals.idleMs ?? 0) >= TEN_MINUTES) return { kind: 'hungry', label: '肚子饿了', detail: '挂机超过 10 分钟' }
-    return { ...visual, label: greeting.label, detail: greeting.detail }
+    return { ...visual, label: greeting.label, detail: greeting.detail, greetingVoice: greeting.greetingVoice }
   }
   return visual
 }
@@ -1043,10 +1077,10 @@ export function deriveVisual(
 export function greetingForHour(hour: number): DerivedVisual {
   if (hour >= 0 && hour < 6) return { kind: 'sleeping', label: '夜深了，已经睡着啦', detail: '记得早点休息' }
   if (hour >= 23) return { kind: 'sleepy', label: '夜深了，好困啊', detail: '记得早点休息' }
-  if (hour < 11) return { kind: 'idle', label: '早上好，今天又是新的一天', detail: '一起把今天的任务做好吧' }
-  if (hour < 14) return { kind: 'idle', label: '中午好', detail: '别忘了按时吃饭' }
-  if (hour < 18) return { kind: 'idle', label: '下午好', detail: '继续加油，也记得活动一下' }
-  return { kind: 'idle', label: '晚上好', detail: '今天也辛苦啦' }
+  if (hour < 11) return { kind: 'idle', label: '早上好，今天又是新的一天', detail: '一起把今天的任务做好吧', greetingVoice: 'morning' }
+  if (hour < 14) return { kind: 'idle', label: '中午好', detail: '别忘了按时吃饭', greetingVoice: 'noon' }
+  if (hour < 18) return { kind: 'idle', label: '下午好', detail: '继续加油，也记得活动一下', greetingVoice: 'afternoon' }
+  return { kind: 'idle', label: '晚上好', detail: '今天也辛苦啦', greetingVoice: 'night' }
 }
 
 function sharedPrefixLength(left: string, right: string): number {

@@ -15,7 +15,10 @@ export const IMAGE_MEDIA_TYPES: readonly ImageMimeType[] = ['image/png', 'image/
 /** Upper bound on image bytes (local files and downloaded URLs alike). */
 export const DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 
-/** Whether the declared media type is one the plugin accepts. */
+/** Whether the declared media type is one the plugin accepts.
+ * @param value - the declared media type.
+ * @returns true when the value is one of the accepted image media types.
+ */
 export function isImageMimeType(value: unknown): value is ImageMimeType {
   return typeof value === 'string' && (IMAGE_MEDIA_TYPES as readonly string[]).includes(value)
 }

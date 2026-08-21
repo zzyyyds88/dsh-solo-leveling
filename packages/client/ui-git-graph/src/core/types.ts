@@ -90,7 +90,11 @@ export interface GraphView {
   hasMore: boolean
 }
 
-/** Parse output of `git for-each-ref refs/heads --format=...`. */
+/**
+ * Parse output of `git for-each-ref refs/heads --format=...`.
+ * @param stdout - the for-each-ref output, one NUL-separated row per line.
+ * @returns one row per branch, sorted by name.
+ */
 export function parseBranches(stdout: string): BranchRow[] {
   const rows: BranchRow[] = []
   for (const line of stdout.split('\n')) {
@@ -103,7 +107,11 @@ export function parseBranches(stdout: string): BranchRow[] {
   return rows
 }
 
-/** Parse `git worktree list --porcelain` into the branch refs checked out (porcelain prints `branch refs/heads/<name>`). */
+/**
+ * Parse `git worktree list --porcelain` into the branch refs checked out (porcelain prints `branch refs/heads/<name>`).
+ * @param stdout - the worktree-list output.
+ * @returns the checked-out branch names, deduplicated.
+ */
 export function parseWorktreeBranches(stdout: string): string[] {
   const branches: string[] = []
   for (const line of stdout.split('\n')) {
@@ -114,7 +122,11 @@ export function parseWorktreeBranches(stdout: string): string[] {
   return branches
 }
 
-/** Parse the porcelain status into counts. */
+/**
+ * Parse the porcelain status into counts.
+ * @param stdout - the `git status --porcelain` output.
+ * @returns counts of dirty, untracked, and conflicted entries.
+ */
 export function parsePorcelain(stdout: string): { dirtyFiles: number; untrackedFiles: number; conflicts: number } {
   let dirtyFiles = 0
   let untrackedFiles = 0
@@ -134,6 +146,8 @@ export function parsePorcelain(stdout: string): { dirtyFiles: number; untrackedF
  * log` (tformat) appends a newline after the record separator, so every
  * record except the first carries a leading `\n` — strip it or the oid gets
  * corrupted and a trailing `\n` would parse as a phantom commit.
+ * @param stdout - raw graph-format output (records split by \x1e).
+ * @returns one commit per record, in output order.
  */
 export function parseGraph(stdout: string): GraphCommit[] {
   const commits: GraphCommit[] = []
@@ -154,7 +168,11 @@ export function parseGraph(stdout: string): GraphCommit[] {
   return commits
 }
 
-/** Decoration → ref names: split entries, drop the `HEAD -> ` handoff prefix, drop `tag: `. */
+/**
+ * Decoration → ref names: split entries, drop the `HEAD -> ` handoff prefix, drop `tag: `.
+ * @param decoration - the `%D` decoration field.
+ * @returns the ref names with the handoff and `tag:` prefixes stripped.
+ */
 export function parseDecoration(decoration: string): string[] {
   if (decoration === '') return []
   return decoration.split(', ').map((part) => {
@@ -235,7 +253,11 @@ export function computeLanes(rows: readonly GraphCommit[]): GraphRowLanes[] {
  * @module dsh-git-graph/core/types
  */
 
-/** Narrow an unknown value onto {@link RepoStatus}. */
+/**
+ * Narrow an unknown value onto {@link RepoStatus}.
+ * @param value - the value to narrow.
+ * @returns whether `value` has the RepoStatus shape.
+ */
 export function isRepoStatus(value: unknown): value is RepoStatus {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
@@ -248,14 +270,22 @@ export function isRepoStatus(value: unknown): value is RepoStatus {
     && typeof record.operationInProgress === 'boolean'
 }
 
-/** Narrow an unknown value onto {@link BranchRow}. */
+/**
+ * Narrow an unknown value onto {@link BranchRow}.
+ * @param value - the value to narrow.
+ * @returns whether `value` has the BranchRow shape.
+ */
 export function isBranchRow(value: unknown): value is BranchRow {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
   return typeof record.name === 'string' && typeof record.current === 'boolean'
 }
 
-/** Narrow an unknown value onto {@link BranchesView}. */
+/**
+ * Narrow an unknown value onto {@link BranchesView}.
+ * @param value - the value to narrow.
+ * @returns whether `value` has the BranchesView shape.
+ */
 export function isBranchesView(value: unknown): value is BranchesView {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
@@ -268,7 +298,11 @@ export function isBranchesView(value: unknown): value is BranchesView {
     && typeof record.operationInProgress === 'boolean'
 }
 
-/** Narrow an unknown value onto {@link GraphCommit}. */
+/**
+ * Narrow an unknown value onto {@link GraphCommit}.
+ * @param value - the value to narrow.
+ * @returns whether `value` has the GraphCommit shape.
+ */
 export function isGraphCommit(value: unknown): value is GraphCommit {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
@@ -280,7 +314,11 @@ export function isGraphCommit(value: unknown): value is GraphCommit {
     && Array.isArray(record.refs) && record.refs.every(ref => typeof ref === 'string')
 }
 
-/** Narrow an unknown value onto {@link GraphView}. */
+/**
+ * Narrow an unknown value onto {@link GraphView}.
+ * @param value - the value to narrow.
+ * @returns whether `value` has the GraphView shape.
+ */
 export function isGraphView(value: unknown): value is GraphView {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
@@ -304,12 +342,20 @@ const GIT_ERROR_CODES = new Set<GitErrorCode>([
   'internal',
 ])
 
-/** Narrow an unknown value onto {@link GitErrorCode}. */
+/**
+ * Narrow an unknown value onto {@link GitErrorCode}.
+ * @param value - the value to narrow.
+ * @returns whether `value` is a member of GitErrorCode.
+ */
 export function isGitErrorCode(value: unknown): value is GitErrorCode {
   return typeof value === 'string' && GIT_ERROR_CODES.has(value as GitErrorCode)
 }
 
-/** Narrow an unknown value onto {@link GitError}. */
+/**
+ * Narrow an unknown value onto {@link GitError}.
+ * @param value - the value to narrow.
+ * @returns whether `value` has the GitError shape.
+ */
 export function isGitError(value: unknown): value is GitError {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>

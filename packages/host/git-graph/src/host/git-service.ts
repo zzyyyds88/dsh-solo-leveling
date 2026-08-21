@@ -117,7 +117,11 @@ export class GitService {
     private readonly gate: WorkspaceGate,
   ) {}
 
-  /** The repository snapshot the branch chip renders; null when not a repository. */
+  /**
+   * The repository snapshot the branch chip renders; null when not a repository.
+   * @param path - workspace root the request is gated against.
+   * @returns the repo snapshot, or null when the path is not a registered workspace or repository.
+   */
   async status(path: string): Promise<RepoStatus | null> {
     const gated = await this.gate(path)
     if (!gated.ok) return null
@@ -141,7 +145,11 @@ export class GitService {
     }
   }
 
-  /** Local branch list with the current branch marked (git for-each-ref refs/heads). */
+  /**
+   * Local branch list with the current branch marked (git for-each-ref refs/heads).
+   * @param path - workspace root the request is gated against.
+   * @returns the branch-list view, or null when the path is not a registered workspace or repository.
+   */
   async branches(path: string): Promise<BranchesView | null> {
     const gated = await this.gate(path)
     if (!gated.ok) return null
@@ -172,6 +180,7 @@ export class GitService {
    * the stable error codes.
    * @param path - workspace root.
    * @param branch - existing local branch name.
+   * @returns the switch outcome (ok with the branch, or a stable rejection).
    */
   async switchBranch(path: string, branch: string): Promise<SwitchResult> {
     const gated = await this.gate(path)
@@ -202,6 +211,7 @@ export class GitService {
    * `git check-ref-format --branch`; duplicates are rejected up front.
    * @param path - workspace root.
    * @param name - proposed branch name.
+   * @returns the create/switch outcome (ok with the branch, or a stable rejection).
    */
   async createBranch(path: string, name: string): Promise<SwitchResult> {
     const mirrorReason = validateBranchName(name)
@@ -227,7 +237,12 @@ export class GitService {
     return { ok: false, error: classifySwitchFailure(created.stderr) }
   }
 
-  /** Topo-ordered commit graph across branches/tags/remotes (read-only). */
+  /**
+   * Topo-ordered commit graph across branches/tags/remotes (read-only).
+   * @param path - workspace root the request is gated against.
+   * @param limit - maximum number of commits to return (default 200).
+   * @returns the graph view (with hasMore when truncated), or null when the path is not a registered workspace or repository.
+   */
   async graph(path: string, limit = 200): Promise<GraphView | null> {
     const gated = await this.gate(path)
     if (!gated.ok) return null

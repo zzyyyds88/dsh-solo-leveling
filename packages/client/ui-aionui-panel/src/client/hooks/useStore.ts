@@ -8,12 +8,18 @@
 import { useCallback, useRef, useSyncExternalStore } from 'react'
 import type { StateHandle } from '../store.ts'
 
-/** Subscribe a component to one store (full snapshot). */
+/** Subscribe a component to one store (full snapshot).
+ * @param store - the store.
+ * @returns - the result.
+ */
 export function useStore<S>(store: StateHandle<S>): S {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot)
 }
 
-/** A callback whose identity never changes but always reads fresh values. */
+/** A callback whose identity never changes but always reads fresh values.
+ * @param fn - the fn.
+ * @returns - the result.
+ */
 export function useLatest<T extends (...args: never[]) => unknown>(fn: T): T {
   const ref = useRef(fn)
   ref.current = fn

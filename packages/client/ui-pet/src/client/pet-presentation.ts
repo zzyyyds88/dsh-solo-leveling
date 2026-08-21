@@ -25,7 +25,12 @@ export interface PetSignals {
   thinkingMs?: number | undefined
 }
 
-/** Select one complete emoji sprite. Motion is applied to the whole sprite in CSS. */
+/** Select one complete emoji sprite. Motion is applied to the whole sprite in CSS.
+ * @param visual - the pet's current visual state from the state machine.
+ * @param phase - an advancing counter used to cycle idle and reaction variants.
+ * @param signals - ambient signals (waiting/idle durations, busy sessions, context ratio, question count) the sprite selection reads.
+ * @returns the chosen sprite name, mirrored as both the expression and the reaction key.
+ */
 export function presentationForState(visual: PetVisual, phase = 0, signals: PetSignals = {}): { expression: string; reaction: string } {
   if (visual.kind === 'whip') return result(visual.reaction ?? 'idle')
   if (visual.kind === 'waiting') return waitingReaction(phase, signals.waitingMs ?? 0)
@@ -85,6 +90,12 @@ function result(reaction: string): { expression: string; reaction: string } {
   return { expression: reaction, reaction }
 }
 
+/**
+ * Tail of the streaming text, trimmed to a display limit.
+ * @param text - the raw streaming reply text.
+ * @param limit - the maximum number of characters to keep; defaults to 180.
+ * @returns the normalized text when within the limit, otherwise a trailing slice starting after the nearest sentence boundary.
+ */
 export function latestOutput(text: string, limit = 180): string {
   const normalized = text.replace(/\s+/gu, ' ').trim()
   if (normalized.length <= limit) return normalized
@@ -93,10 +104,24 @@ export function latestOutput(text: string, limit = 180): string {
   return (boundary >= 0 ? tail.slice(boundary + 1) : tail).trimStart()
 }
 
+/**
+ * Clamp the pet's scale after a wheel-scroll delta.
+ * @param current - the current scale factor.
+ * @param deltaY - the wheel delta used to nudge the scale.
+ * @returns the clamped scale, rounded to two decimals and bounded to [0.65, 1.4].
+ */
 export function clampPetScale(current: number, deltaY: number): number {
   return Math.max(.65, Math.min(1.4, Math.round((current - deltaY * .0012) * 100) / 100))
 }
 
+/**
+ * Rotate a status label while the pet is busy.
+ * @param mode - the active activity mode, e.g. '回复'.
+ * @param phase - the rotation index used to pick the variant.
+ * @param questionCount - number of question cues in the current reasoning stream.
+ * @param thinkingMs - how long the pet has been thinking, in milliseconds.
+ * @returns the status text to display.
+ */
 export function rotatingActivityLabel(mode: string, phase: number, questionCount = 0, thinkingMs = 0): string {
   if (mode === '回复') return (['正在敲字', '整理回复', '组织答案'] as const)[phase % 3] ?? '分析中'
   if (questionCount >= 4) return (['梳理疑问', '逐项排查', '验证线索'] as const)[phase % 3] ?? '分析中'

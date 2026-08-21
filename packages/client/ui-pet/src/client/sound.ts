@@ -10,7 +10,7 @@
 const VOLUME_KEY = 'deepseek-pet:sound'
 
 /** Alert sound keys. */
-export type AlertName = 'celebrate' | 'error' | 'prompt' | 'state' | 'tool' | 'poke' | 'headpat'
+export type AlertName = 'celebrate' | 'error' | 'prompt' | 'state' | 'tool' | 'poke' | 'headpat' | 'feedback' | 'greeting' | 'ledger'
 
 /** Per-action volume group. */
 export type ActionVolume = 'voice' | 'sfx' | 'celebrate'
@@ -34,12 +34,15 @@ export const ALERT_LABELS = Object.freeze({
   tool: '工具调用语音',
   poke: '戳一戳音效',
   headpat: '摸头音效',
+  feedback: '静音/取消静音反馈',
+  greeting: '问候语音',
+  ledger: '账房提醒音',
 })
 
 /** 诊断面板的音效开关分组：基础音效在前，附加音效在后。 */
 export const ALERT_GROUPS = Object.freeze([
-  { title: '基础音效', keys: ['celebrate', 'error', 'prompt', 'poke', 'headpat'] as readonly AlertName[] },
-  { title: '附加音效', keys: ['state', 'tool'] as readonly AlertName[] },
+  { title: '基础音效', keys: ['celebrate', 'error', 'prompt'] as readonly AlertName[] },
+  { title: '附加音效', keys: ['poke', 'headpat', 'state', 'tool', 'feedback', 'greeting', 'ledger'] as readonly AlertName[] },
 ])
 
 /** 各类提醒音效的开关（true = 开启）。用户可在诊断面板/设置卡片配置。 */
@@ -51,6 +54,9 @@ const ALERT_TOGGLES = Object.freeze({
   tool: true,      // 工具调用语音：进入 working（调用工具）时播短促音效
   poke: true,      // 戳一戳音效
   headpat: true,   // 摸头庆祝
+  feedback: true,  // 静音/取消静音反馈（静音时播「声音已关闭」，取消静音播「声音已开启」）
+  greeting: true,  // 问候语音：空闲时按时间段播「早上好/中午好/下午好/晚上好」
+  ledger: true,    // 账房提醒音：价格峰谷 / 预算封顶提醒
 })
 
 /** 音量配置（总音量 + 分动作 + 提醒开关），localStorage 持久化。 */
@@ -86,54 +92,76 @@ function persist(): void {
   } catch {}
 }
 
-/** 某类提醒音效是否开启（celebrate/error/prompt/poke/headpat）。 */
+/** 某类提醒音效是否开启（celebrate/error/prompt/poke/headpat）。
+ * @param name - the alert key to query.
+ * @returns true when that alert sound is enabled.
+ */
 export function alertEnabled(name: AlertName): boolean {
   return settings.alerts[name]
 }
 
-/** 设置某类提醒音效开关。 */
+/** 设置某类提醒音效开关。
+ * @param name - the alert key to configure.
+ * @param enabled - whether the alert should play.
+ */
 export function setAlertEnabled(name: AlertName, enabled: boolean): void {
   settings.alerts = { ...settings.alerts, [name]:  enabled }
   persist()
 }
 
-/** 读取全部提醒开关（诊断面板用）。 */
+/** 读取全部提醒开关（诊断面板用）。
+ * @returns a copy of every alert toggle.
+ */
 export function alertToggles(): Record<AlertName, boolean> {
   return { ...settings.alerts }
 }
 
-/** 是否静音（工具条按钮切换）。 */
+/** 是否静音（工具条按钮切换）。
+ * @returns true when sound is muted.
+ */
 export function isMuted(): boolean { return settings.muted }
 
-/** 切换静音，返回新状态。 */
+/** 切换静音，返回新状态。反馈音（静音/取消静音语音）由调用方在切换前后播放，
+ * 以便「声音已关闭」在静音生效前出声、取消静音后播「声音已开启」。 */
 export function toggleMuted(): boolean {
   settings.muted = !settings.muted
   persist()
-  if (!settings.muted) beep()
   return settings.muted
 }
 
-/** 读取分动作音量（voice/sfx/celebrate）。 */
+/** 读取分动作音量（voice/sfx/celebrate）。
+ * @param action - the volume group to read.
+ * @returns the clamped volume (0–1) for that group.
+ */
 export function actionVolume(action: ActionVolume): number {
   return clampVolume(settings[action])
 }
 
-/** 设置分动作音量（0~1）。 */
+/** 设置分动作音量（0~1）。
+ * @param action - the volume group to write.
+ * @param value - the new volume in the 0–1 range.
+ */
 export function setActionVolume(action: ActionVolume, value: number): void {
   settings[action] = clampVolume(value)
   persist()
 }
 
-/** 读取总音量（0~1）。 */
+/** 读取总音量（0~1）。
+ * @returns the overall volume in the 0–1 range.
+ */
 export function getVolume(): number { return settings.total }
 
-/** 设置总音量（0~1）。 */
+/** 设置总音量（0~1）。
+ * @param value - the new overall volume in the 0–1 range.
+ */
 export function setVolume(value: number): void {
   settings.total = clampVolume(value)
   persist()
 }
 
-/** 读取全量设置快照（设置卡片用）。 */
+/** 读取全量设置快照（设置卡片用）。
+ * @returns a copy of the full sound settings.
+ */
 export function soundSettingsSnapshot(): SoundSettings {
   return {
     muted: settings.muted,
@@ -145,7 +173,10 @@ export function soundSettingsSnapshot(): SoundSettings {
   }
 }
 
-/** 设置卡片批量保存：一次写入多个字段（total/alerts/muted 等），返回新快照。 */
+/** 设置卡片批量保存：一次写入多个字段（total/alerts/muted 等），返回新快照。
+ * @param patch - partial settings to apply; only defined fields are written.
+ * @returns the new settings snapshot after the patch is applied.
+ */
 export function applySoundSettings(patch: Partial<SoundSettings>): SoundSettings {
   if (Number.isFinite(patch.total)) settings.total = clampVolume(patch.total)
   if (Number.isFinite(patch.voice)) settings.voice = clampVolume(patch.voice)
@@ -162,7 +193,9 @@ export function applySoundSettings(patch: Partial<SoundSettings>): SoundSettings
 let audioCtx: AudioContext | null = null
 let lastAudioError: string | null = null
 
-/** 诊断：最近一次音频错误（供三击诊断面板展示）。 */
+/** 诊断：最近一次音频错误（供三击诊断面板展示）。
+ * @returns the last audio error message, or null when none occurred.
+ */
 export function audioError(): string | null {
   return lastAudioError
 }
@@ -188,8 +221,10 @@ function ensureAudio(): AudioContext | null {
   return audioCtx
 }
 
-/** 诊断：当前音频状态（供三击诊断面板展示）。 */
-export function audioState() {
+/** 诊断：当前音频状态（供三击诊断面板展示）。
+ * @returns the current audio context state, volume, and mute facts for the diagnostic panel.
+ */
+export function audioState(): { state: string; muted: boolean; total: number; voice: number; sfx: number; celebrate: number } {
   return {
     state: audioCtx ? audioCtx.state : 'uncreated',
     muted: settings.muted,
@@ -202,12 +237,12 @@ export function audioState() {
 
 /**
  * 一次合成的音（三角波主音 + 可选滑音），音量 = 总音量 × 分动作音量。
- * @param {number} freq 起始频率 Hz
- * @param {number} dur 时长秒
- * @param {number} vol 基础音量 0~1
- * @param {number} when 延迟秒
- * @param {number|null} slideTo 滑音目标频率（无则平直）
- * @param {'voice'|'sfx'|'celebrate'} action 音量档
+ * @param freq - starting frequency in Hz.
+ * @param dur - duration in seconds.
+ * @param vol - base volume in the 0–1 range.
+ * @param when - delay in seconds before the note starts.
+ * @param slideTo - target frequency to glide to, or null for a flat pitch.
+ * @param action - the volume group that scales this note.
  */
 export function bell(freq: number, dur: number, vol: number, when = 0, slideTo: number | null = null, action: ActionVolume = 'sfx'): void {
   if (settings.muted) return
@@ -248,7 +283,7 @@ function shimmer(freq: number, dur: number, vol: number, when = 0, action: Actio
 }
 
 /** 任务完成庆祝琶音：C5 E5 G5 C6 + 高音 shimmer。 */
-export function playCelebrate() {
+export function playCelebrate(): void {
   bell(523.25, 0.5, 0.16, 0, null, 'celebrate')
   bell(659.25, 0.5, 0.16, 0.16, null, 'celebrate')
   bell(783.99, 0.5, 0.16, 0.32, null, 'celebrate')
@@ -256,37 +291,36 @@ export function playCelebrate() {
   shimmer(1046.5, 0.8, 0.05, 0.5, 'celebrate')
 }
 
-/** 撒娇音：上扬 chirp。 */
-export function playCoquetry() {
-  bell(660, 0.25, 0.13, 0, 880, 'sfx')
-  shimmer(880, 0.2, 0.04, 0.1, 'sfx')
-  bell(990, 0.3, 0.1, 0.3, 1180, 'sfx')
+/** 账房提醒音：柔和双音上行（区别于提问/审批提示的两声轻快提示）。 */
+export function playLedger(): void {
+  bell(587.33, 0.2, 0.09, 0, null, 'sfx')
+  bell(880, 0.26, 0.09, 0.18, null, 'sfx')
 }
 
 /** 戳一戳小音效。 */
-export function playPoke() {
+export function playPoke(): void {
   bell(520, 0.1, 0.09, 0, 700, 'sfx')
 }
 
 /** 出错安慰低音。 */
-export function playSad() {
+export function playSad(): void {
   bell(392, 0.5, 0.12, 0, 330, 'sfx')
   shimmer(330, 0.4, 0.03, 0.2, 'sfx')
 }
 
 /** 提示音（取消静音 / 通用反馈）。 */
-export function beep() {
+export function beep(): void {
   bell(880, 0.12, 0.1, 0, null, 'sfx')
 }
 
 /** 提问/审批提示音：两声轻快上行提示（区别于戳音）。 */
-export function playPrompt() {
+export function playPrompt(): void {
   bell(660, 0.18, 0.12, 0, 740, 'sfx')
   bell(880, 0.22, 0.12, 0.16, 990, 'sfx')
 }
 
 /** 工具调用音效：短促咔哒双音（提示「正在调用工具」）。 */
-export function playTool() {
+export function playTool(): void {
   bell(392, 0.07, 0.07, 0, null, 'sfx')
   bell(494, 0.07, 0.07, 0.08, null, 'sfx')
 }
@@ -327,7 +361,9 @@ import { VOICES } from './voice.generated.ts'
 
 const voiceCache = new Map<string, AudioBuffer>()
 
-/** 语音是否可用（已加载合成台词且未静音）。 */
+/** 语音是否可用（已加载合成台词且未静音）。
+ * @returns true when synthesized lines are loaded and sound is not muted.
+ */
 export function hasVoice(): boolean {
   return Object.keys(VOICES).length > 0 && !settings.muted
 }
@@ -335,6 +371,8 @@ export function hasVoice(): boolean {
 /**
  * 播放一条预合成台词。key 不存在时静默跳过（不报错）。
  * 用 AudioContext.decodeAudioData 解码，音量走 voice 档。
+ * @param key - the voice line key to play.
+ * @returns true when the line was scheduled, false when muted, missing, or a decode/playback error occurred.
  */
 export async function speakVoice(key: string): Promise<boolean> {
   if (settings.muted) return false

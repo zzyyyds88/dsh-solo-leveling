@@ -664,10 +664,26 @@ interface ModelReasoning {
  * @param base - the installed catalog entry of the same id, when one exists.
  * @returns the reasoning fields the materialized model carries.
  */
+/**
+ * The reasoning-dispatch map a hand-declared OpenAI-compatible model carries
+ * when it names no `reasoningEfforts`. Fork restoration: the integration
+ * serves third-party endpoints, and a hand-written model has no catalog entry
+ * to inherit a reasoning capability from — without a default it would expose
+ * no thinking control at all. `minimal: null` means "supported, send nothing"
+ * (the parameter's absence), matching pi-ai's convention for `off`.
+ */
+export const DEFAULT_HAND_DECLARED_THINKING_LEVEL_MAP: ThinkingLevelMap = Object.freeze({
+  minimal: null,
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+})
+
 function resolveModelReasoning(
   provider: string,
   entry: PiAiModelProfile,
   base: Model<Api> | undefined,
+  api: string,
 ): ModelReasoning {
   const efforts = entry.reasoningEfforts
   if (efforts === undefined) {
@@ -675,8 +691,14 @@ function resolveModelReasoning(
     // would make pi-ai advertise effort levels with no `thinkingLevelMap` to
     // spell them, and no listing endpoint reports a model's reasoning
     // protocol. The entry's map (when any) arrives through the `...base`
-    // spread in the model literal.
-    return { reasoning: base?.reasoning ?? false }
+    // spread in the model literal. A hand-declared model over an
+    // OpenAI-compatible protocol gets the fork's default thinking map so the
+    // surface still offers a reasoning control for third-party endpoints.
+    if (base?.reasoning) return { reasoning: true }
+    if (api === 'openai-completions' || api === 'openai-responses') {
+      return { reasoning: true, thinkingLevelMap: DEFAULT_HAND_DECLARED_THINKING_LEVEL_MAP }
+    }
+    return { reasoning: false }
   }
   // The installed entry's map may ride along through `...base`; pi-ai never
   // reads it on a non-reasoning model, so stripping it is not worth a field
@@ -895,7 +917,7 @@ export function resolveRouteModels(request: RouteCatalogRequest): RouteCatalog {
       cost: base?.cost ?? NO_COST,
       contextWindow,
       maxTokens,
-      ...resolveModelReasoning(provider, entry, base),
+      ...resolveModelReasoning(provider, entry, base, api),
       ...resolveModelCompat(provider, entry, request.compat, base, api),
     }
   })

@@ -36,6 +36,8 @@ export type DragFileInlayProps =
  * The composer dock entry: a zero-height anchor that shows a hint strip
  * while a file row is dragged over the page and inserts the path on drop.
  * @param props - the composed dock entry props.
+
+ * @returns - the result.
  */
 export function DragFileInlay(props: DragFileInlayProps): ReactElement {
   const [active, setActive] = useState(false)
