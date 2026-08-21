@@ -9,6 +9,25 @@ import { resolve, sep } from 'node:path'
 const ROOT = resolve(import.meta.dirname, '..')
 const DSH_PACKAGE_NAME = /^@deepseek-ai\/dsh(?:-|$)/
 
+/**
+ * Fork packages that retain their upstream license instead of the repository
+ * MIT default. Integrated third-party code keeps its original license (the
+ * task-suite family is Apache-2.0, the maid-atelier skin asset is
+ * CC-BY-NC-SA-4.0); the value pins the exact declaration so a license change
+ * must be an intentional edit here too.
+ */
+const LICENSE_EXCEPTIONS: Readonly<Record<string, string>> = {
+  '@deepseek-ai/dsh-client-ui-aionui-panel': 'Apache-2.0',
+  '@deepseek-ai/dsh-client-ui-describe-image': 'Apache-2.0',
+  '@deepseek-ai/dsh-client-ui-git-graph': 'Apache-2.0',
+  '@deepseek-ai/dsh-client-ui-live-stats': 'Apache-2.0',
+  '@deepseek-ai/dsh-client-ui-skin-center': 'Apache-2.0',
+  '@deepseek-ai/dsh-client-ui-skin-maid-atelier': 'CC-BY-NC-SA-4.0',
+  '@deepseek-ai/dsh-client-ui-task-board': 'Apache-2.0',
+  '@deepseek-ai/dsh-host-aionui-panel': 'Apache-2.0',
+  '@deepseek-ai/dsh-host-git-graph': 'Apache-2.0',
+}
+
 /** Result of checking every DSH package reachable through the root workspace list. */
 export interface DshPackageLicenseReport {
   /** Number of DSH package manifests checked. */
@@ -64,10 +83,11 @@ export function inspectDshPackageLicenses(root: string): DshPackageLicenseReport
     if (typeof name !== 'string' || !DSH_PACKAGE_NAME.test(name)) continue
 
     packageCount++
-    if (manifest.license !== 'MIT') {
+    const expected = LICENSE_EXCEPTIONS[name] ?? 'MIT'
+    if (manifest.license !== expected) {
       const normalizedFile = file.split(sep).join('/')
       failures.push(
-        `${normalizedFile}: ${name} must declare "license": "MIT"; found ${printable(manifest.license)}.`,
+        `${normalizedFile}: ${name} must declare "license": ${JSON.stringify(expected)}; found ${printable(manifest.license)}.`,
       )
     }
   }

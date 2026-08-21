@@ -65,9 +65,9 @@ function workspacePackages() {
   return out
 }
 
-console.log('== 1/2 构建（pnpm run build）==')
+console.log('== 1/2 构建（pnpm run build:official）==')
 try {
-  execFileSync('pnpm', ['run', 'build'], { stdio: 'inherit', shell: process.platform === 'win32' })
+  execFileSync('pnpm', ['run', 'build:official'], { stdio: 'inherit', shell: process.platform === 'win32' })
 } catch (error) {
   console.error('构建失败:', error.message)
   process.exit(1)
@@ -97,5 +97,5 @@ console.log(`
 本地测试（用户侧）：
   npm i -g ./dist/npm/*.tgz   # 或逐个安装
   dsh web                     # 默认 HTTPS：https://0.0.0.0:3080
-正式发布：换个人 scope（--scope @zzyyyds88）后 npm publish 全部 tarball；
-  @deepseek-ai scope 归官方所有，无法发布。`)
+正式发布（个人 scope）：node scripts/package-npm.mjs --scope @zzyyyds88 后 npm publish；
+  bin 仍叫 dsh，发布包归 @zzyyyds88 scope。`)

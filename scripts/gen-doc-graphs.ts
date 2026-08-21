@@ -479,14 +479,6 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Providers implement transports; the service also owns optional Activation-based continuation orchestration, tool-subagent selects one-shot or continuable delegation, tool-subagent-control delivers follow-ups, and tool-ralph requires one fresh structured-output route.',
   },
   {
-    key: 'agentTeams',
-    pkg: 'agent-team',
-    title: 'Agent Teams coordination domain',
-    mode: 'core',
-    consumers: ['tool-agent-team'],
-    note: 'Owns the implicit-root roster, durable peer mailbox, shared task DAG, and continuable-child lifecycle; tool-agent-team contributes the scoped model policy and controls.',
-  },
-  {
     key: 'jobs',
     pkg: 'jobs',
     title: 'Background job registry',

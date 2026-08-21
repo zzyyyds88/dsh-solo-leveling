@@ -18,7 +18,11 @@
  *
  * Run: `pnpm run build:native` (Linux with musl-gcc on PATH:
  * `apt-get install musl-tools`). Non-Linux hosts fail fast — no platform
- * package exists for them to build.
+ * package exists for them to build. Cross-compiling another architecture's
+ * binary is an explicit opt-in through `TARGET_PLATFORM` plus the `CC`
+ * environment variable (e.g. `TARGET_PLATFORM=linux-arm64 CC=aarch64-linux-musl-gcc
+ * pnpm run build:native` with the musl.cc toolchain); the default stays
+ * native-only so CI's per-arch runners remain the builders of record.
  */
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs'
@@ -35,7 +39,7 @@ if (process.platform !== 'linux') {
   console.error(`build: native tools are built natively per Linux architecture (no cross toolchain) — nothing to build on ${process.platform}. CI's per-arch runners build and rehearse every platform package.`)
   process.exit(1)
 }
-const hostPlatform = `linux-${process.arch}`
+const hostPlatform = process.env.TARGET_PLATFORM ?? `linux-${process.arch}`
 
 /** This host's platform packages, from the checked-in matrix. */
 const targets: { packageDir: string; tool: string; binaryPath: string; kind: string }[] = []
@@ -73,13 +77,16 @@ for (const target of targets) {
   // -static against musl: self-contained, no loader/libc expectations on the
   // consumer host. -Werror is safe to keep hard: CI pins the builder images,
   // and a new warning on a toolchain bump deserves a look, not a pass.
-  const result = spawnSync('musl-gcc', [
+  // `CC` overrides the compiler (musl-gcc by default) so a cross toolchain
+  // can build a different architecture's package when TARGET_PLATFORM names it.
+  const cc = process.env.CC ?? 'musl-gcc'
+  const result = spawnSync(cc, [
     '-std=c11', '-Os', '-Wall', '-Wextra', '-Werror', '-static', '-s',
     '-o', binary, join(repoRoot, tool.source),
   ], { stdio: ['ignore', 'inherit', 'inherit'] })
   if (result.error !== undefined || result.status !== 0) {
-    console.error('build: musl-gcc failed' +
-      (result.error ? ` (${result.error.message} — is musl-tools installed?)` : ''))
+    console.error(`build: ${cc} failed` +
+      (result.error ? ` (${result.error.message} — is the toolchain installed?)` : ''))
     process.exit(1)
   }
   console.log(`build: built ${basename(target.packageDir)}/${target.binaryPath}`)

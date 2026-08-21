@@ -96,6 +96,20 @@
     { "path": "./packages/client/locale" },
     { "path": "./packages/client/ui-renderer" },
     { "path": "./packages/client/web" },
-    { "path": "./apps/web" }
+    { "path": "./apps/web" },
+    // Fork / self-authored client packages (rebuilt by this aggregate — tsdown
+    // bundles each package's lib/types, so a package left out of the references
+    // ships a stale bundle after source edits).
+    { "path": "./packages/client/ui-access-gate" },
+    { "path": "./packages/client/ui-aionui-panel" },
+    { "path": "./packages/client/ui-defaults" },
+    { "path": "./packages/client/ui-describe-image" },
+    { "path": "./packages/client/ui-git-graph" },
+    { "path": "./packages/client/ui-live-stats" },
+    { "path": "./packages/client/ui-mobile-adapt" },
+    { "path": "./packages/client/ui-pet" },
+    { "path": "./packages/client/ui-skin-center" },
+    { "path": "./packages/client/ui-skin-maid-atelier" },
+    { "path": "./packages/client/ui-task-board" }
   ]
 }

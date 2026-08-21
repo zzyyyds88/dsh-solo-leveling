@@ -28,8 +28,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-echo "== 1/3 构建（pnpm run build）=="
-pnpm run build
+echo "== 1/3 构建（pnpm run build:official —— 官方客户端 profile：品牌/标题为 DeepSeek Harness）=="
+pnpm run build:official
 
 echo "== 2/3 打包全部 workspace 包（dsh CLI + vendor fork + packages/*/*）=="
 rm -rf dist/npm && mkdir -p dist/npm
@@ -59,5 +59,5 @@ echo
 echo "本地测试（用户侧）："
 echo "  npm i -g ./dist/npm/*.tgz   # 或逐个安装"
 echo "  dsh web                     # 默认 HTTPS：https://0.0.0.0:3080"
-echo "正式发布：换个人 scope（--scope @zzyyyds88）后 pnpm publish 全部 tarball；"
-echo "  @deepseek-ai scope 归官方所有，无法发布（见 docs/整合迁移路线图.md §8）。"
+echo "正式发布（个人 scope）：bash scripts/package-npm.sh --scope @zzyyyds88 后 pnpm publish；"
+echo "  bin 仍叫 dsh，发布包归 @zzyyyds88 scope。"

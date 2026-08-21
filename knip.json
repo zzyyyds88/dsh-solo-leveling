@@ -6,7 +6,6 @@
   "ignoreBinaries": [
     "bwrap",
     "icacls",
-    "musl-gcc",
     "python3",
     "sandbox-exec",
     "tar",
