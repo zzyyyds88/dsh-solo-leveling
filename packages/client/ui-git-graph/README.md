@@ -1,7 +1,5 @@
 # dsh-git-graph
 
-English | [中文](README.zh.md)
-
 External dsh Web GUI plugin: a **git branch selector** and **Git graph** panel, mounted in the context hole of the official input selector row (`conversation.input.selector.context`, a session-maybe list slot) next to the official workspace selector pill, just above the input card; if the running shell does not declare that slot (the npm SDK rc.6 removed it), it waits `CONTEXT_FALLBACK_MS` then falls back to `conversation.input.dock` (the 0.1.9 mount point). On the dock, the active phase measures the input card's left edge so the chip starts flush with the card, and the hero (blank-session) phase lifts the chip into the official hero row immediately after the agent-preset seat — right of the preset name, with the same transparent 28px pill recipe and the same `--dsw-*` theme tokens as the official workspace/preset chips. Git capabilities run for real in the host process (checkout-tree `git switch`), the UI is browser React; workspace selection is left entirely to the official entry (product decision: the in-house selector is retired, no dual entry is kept).
 
 Behavior aligns with ZCode's `GitBranchSwitcher`: searchable popover, a checkmark on the current item, bottom actions "创建并检出新分支… / Git 图谱" (Create and check out new branch… / Git graph), a switch guard (unresolved conflicts / an operation in progress / the target branch checked out by another worktree) and readable errors.
@@ -69,7 +67,6 @@ dsh plugin --profile web remove @zzyyyds88/dsh-client-ui-git-graph
 
 ## Design notes
 
-- Boundary and load-chain research and key decisions: see [docs/ADR-001-plugin-boundary.md](docs/ADR-001-plugin-boundary.md).
 - The host half's `/git/*` only accepts paths of registered workspaces (realpath check) and loopback clients (loopback socket + loopback Host, the same fence as dsh-ssh); the browser cannot run git against arbitrary directories, and a LAN-exposed dsh web answers non-loopback clients with 403.
 - The switch semantics are workspace-level: `git switch --no-guess <branch>` operates on the repoRoot checkout tree and affects all sessions of that workspace; project switch = activate the target workspace and open its (reused or newly created) blank session, without changing the cwd of existing sessions.
 - Mount seam: `conversation.input.selector.context` (the officially declared session-maybe list slot) — the context hole of the input selector row, next to the official workspace pill; both the hero (blank session) and active-session phases show the branch pill; the branch chip hides itself when there is no session cwd or it is not a git workspace. Declaration-aware with fallback: it waits `CONTEXT_FALLBACK_MS` for the slot declaration (the npm SDK rc.6 shell removed this declaration); if no declaration arrives by the timeout it remounts on `conversation.input.dock`. On the dock the active phase is left-aligned with the input card via a live measurement of its left edge; the hero phase re-anchors the chip into the official hero row after the agent-preset seat (2px official row gap, vertically centered, matching the workspace/preset chip metrics and tokens) and opens the picker downward like the official workspace menu. Only one seat is mounted, and late context declarations after the fallback are ignored.
@@ -83,3 +80,18 @@ pnpm run typecheck
 pnpm test
 pnpm run build
 ```
+
+## Model Experience
+
+None, as the plugin is a browser-side git graph view.
+
+#### KV Cache effect
+
+The plugin composes no model request and contributes no session prefix; git state lives in the browser view and the host git service.
+
+## Known Limitations and Deferred Work
+
+- The branch chip appears only in a session whose workspace is a git checkout; without a session cwd or a non-git workspace it hides itself.
+- The host `/git/*` routes accept only loopback clients and paths of registered workspaces, so a LAN-exposed dsh web answers non-loopback git requests with 403.
+- When the running shell does not declare `conversation.input.selector.context`, the plugin waits `CONTEXT_FALLBACK_MS` and falls back to `conversation.input.dock`, and late context declarations after the fallback are ignored.
+- The `build/tsdown.client.ts` and `build/web/src/platform.ts` presets are copies taken from the main repo and must be kept in sync when the main repo changes.

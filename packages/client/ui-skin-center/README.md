@@ -1,7 +1,5 @@
 # Skin Center (in-GUI embedded skin center)
 
-English | [中文](README.zh.md)
-
 `@zzyyyds88/dsh-client-ui-skin-center` (cordis plugin id `ui-skin-center`) embeds the skin list / try-on / apply into the plugin configuration page of the real dsh Web GUI, as a card in the "Web UI plugins" group (settings → plugin config → Web UI plugins → 皮肤中心 / Skin Center), sharing the same slot (`web-ui.plugin.item`) as the family plugins such as task-board / pet / live-stats, without taking a top-level settings nav item.
 
 - List: shows "官方默认" (official default) plus every skin in the repo (qq98 / ths / xp / blue-fantasy / dragon-heir / minecraft) with its name, tagline, and accent color; the currently active target carries the Active marker.
@@ -104,3 +102,17 @@ Exit try-on = try-on skin disposer (real code path) → module invalidate + styl
 - [x] Regression: the dsh-skin CLI (incl. `use official`), the web gallery, and the official GUI are unaffected
 - [x] On-demand loading: cold start does not parse the ~700KB embedded base64 (`generated/skins.ts` is only ~5KB of metadata); try-on fetches the bundle on demand; no eval (CSP needs no `unsafe-eval`)
 - [x] e2e screenshots live in `docs/e2e/skin-center/`
+
+## Model Experience
+
+None, as the plugin is a browser-side skin-center UI.
+
+#### KV Cache effect
+
+Try-on and apply change only browser styles and the skin patch file; no session prefix is composed or invalidated.
+
+## Known Limitations and Deferred Work
+
+- A skin must be installed and built in the host for the full list and try-on; a missing `lib/client.js` makes the bundle route 404 and try-on reports a generic error and fully restores.
+- One-click apply's home-layer write differs by installation channel: bundle-wired skins get mutual-exclusion `disabled` rows only, while anything else keeps the home insert row.
+- The applied client plugin-graph row changes are outside `dsh-client-hmr` semantics, so a browser refresh is required to pick up the new boot graph after apply.

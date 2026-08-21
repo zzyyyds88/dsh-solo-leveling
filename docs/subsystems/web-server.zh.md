@@ -29,16 +29,20 @@ interface WebRoute {
 ## 配置
 
 ```ts type-equiv
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the optional TLS material. */
 interface Config {
   /** Listen host; the two supported values are loopback and all-interfaces. */
   host: '127.0.0.1' | '0.0.0.0'
   /** Listen port; zero requests an OS-assigned port. */
   port: number
+  /** PEM private key; when both this and `tlsCert` are set the server speaks HTTPS. */
+  tlsKey?: string
+  /** PEM certificate; when both this and `tlsKey` are set the server speaks HTTPS. */
+  tlsCert?: string
 }
 ```
 
-`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（刻意的网络暴露）；没有 TLS、认证或 origin 策略，因此绑定到非回环地址会把服务器暴露给该网络。dist 位置是认领席位的前端插件的组装事实。
+`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（刻意的网络暴露）；TLS 为可选项，且仅在同时设置 `tlsKey` 和 `tlsCert` 时生效，没有认证或 origin 策略，因此绑定到非回环地址会把服务器暴露给该网络。dist 位置是认领席位的前端插件的组装事实。
 
 ## 服务
 
@@ -58,7 +62,7 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 
 ### `ctx.webServer` — `WebServer`
 
-The browser HTTP carrier service. Activation listens immediately. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber.
+The browser HTTP(S) carrier service. Activation listens immediately. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber.
 
 ```ts cordis-catalog
 /**
@@ -88,6 +92,19 @@ registerUpgrade(route: WebUpgradeRoute): () => void
 registerFallback(handler: WebRoute['handler']): () => void
 
 /**
+ * Register the request gate: the one pre-dispatch hook every HTTP request
+ * and WebSocket upgrade passes before route matching. The gate returns
+ * `true` to admit the request, or `false` to reject it — for HTTP the gate
+ * owns the rejection response when it returns false (redirect / 401 / login
+ * page); for upgrades the server answers 403 and destroys the socket. One
+ * gate only; a second registration throws. (Local fork: deployment
+ * authentication hook.)
+ * @param check - `(req, res, pathname) => boolean | Promise<boolean>`; `res` is `null` for upgrades.
+ * @returns the disposer removing the gate.
+ */
+registerGate(check: WebRequestGate): () => void
+
+/**
  * Register an index.html transform, applied by the fallback owner to every
  * index response ({@link applyIndexTaps}) in registration order.
  * @param transform - pure html-to-html function.
@@ -104,5 +121,5 @@ tapIndex(transform: (html: string) => string): () => void
 applyIndexTaps(html: string): string
 ```
 
-Source: [`packages/host/webserver/src/index.ts:59`](../../packages/host/webserver/src/index.ts)
+Source: [`packages/host/webserver/src/index.ts:81`](../../packages/host/webserver/src/index.ts)
 <!-- END GENERATED cordis-surface -->

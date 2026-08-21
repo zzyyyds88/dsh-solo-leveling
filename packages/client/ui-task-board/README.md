@@ -1,7 +1,5 @@
 # dsh-task-board — DSH web GUI task board plugin
 
-English | [中文](README.zh.md)
-
 A hot-pluggable DeepSeek Harness (DSH) client GUI plugin: it adds a **task board** entry below "新会话" (New session) in the sidebar; clicking it switches the middle column entirely to a multi-column kanban view. Tasks execute for **real** through DSH's own session mechanism (`session.prompt`), and execution status is written back to the card in real time.
 
 - No DSH source modification: mounted as a cordis plugin + browser DOM extension (add-on shape identical to `dsh-web-ui/packages/skins/skin-center`).
@@ -134,3 +132,18 @@ The rows registered in the profile manifest:
 - Per-task execution targets: workspace/mode/permission pins persist across refresh, drive the execution session, and an un-appliable pin (missing workspace, locked preset, unknown permission command) fails the run with the reason visible in the execution log
 - One-click mount/unmount; after unmount the GUI restores and other managed segments are unaffected
 - README + automated tests covering storage read/write, state transitions, execution trigger, cron parsing, and the scheduler
+
+## Model Experience
+
+Indirectly, through the system-prompt section the host half injects to announce the task board to every agent.
+
+#### KV Cache effect
+
+Stable while the section is mounted; the announcement text is constant per composition.
+
+## Known Limitations and Deferred Work
+
+- Scheduled tasks run in the in-tab browser scheduler, so a due task is skipped ("miss = skip") while its tab is closed; catch-up only fires for already-deferred due tasks on the next open.
+- The task ledger persists only in browser localStorage, so it is not shared across devices and is cleared with the origin's storage.
+- The scheduler fires at minute granularity, so cron expressions below one minute (or sub-minute delays) are not supported.
+- The injected system-prompt section only appears after a dsh web restart following a composition change; a page refresh alone does not add or remove it.

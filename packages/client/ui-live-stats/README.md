@@ -1,7 +1,5 @@
 # @zzyyyds88/dsh-live-stats
 
-English | [中文](README.zh.md)
-
 Live input/output token estimates and generation throughput for DSH Web. It feeds the built-in session status row: input and output token totals update while a response streams, and the generation throughput group (`TPS 31.4 tok/s`) renders right after the step counts, ahead of the billing groups:
 
 ```text

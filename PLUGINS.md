@@ -1,10 +1,10 @@
 # 插件列表（Plugin List）
 
-> 本仓库 = **大宝贝定制版**：deepseek-harness `dsh-v0.1.0-rc.7` 的 fork 整合包，源码平铺仓库根。
+> 本仓库 = **大宝贝定制版**：deepseek-harness `dsh-v0.1.0-rc.8` 的 fork 整合包，源码平铺仓库根。
 > 所有自研/收录插件已迁入 `packages/<group>/<pkg>/`（包名 `@deepseek-ai/dsh-*`），
 > 按官方分组命名并装配进 `packages/bundle/*/cordis.patch.yml`，`pnpm run build` 后
-> `dsh web` 一装全有，不再走「旧目录 + profile 挂载」老路。迁移映射见
-> [docs/整合迁移路线图.md](docs/整合迁移路线图.md)。
+> `dsh web` 一装全有，不再走「旧目录 + profile 挂载」老路。fork 逐项映射见
+> [docs/升级适配指南.md](docs/升级适配指南.md)。
 
 ## 1. 正在使用的插件
 
@@ -25,15 +25,10 @@
 | `dsh-client-ui-skin-center` | client | **皮肤中心**：列表/试穿/一键应用（host `/api/skin-center/*` 热切换） |
 
 > 8 个同名 fork（webserver / apiproxy / connection / ui-settings / directory-picker-browse /
-> llm / llm-deepseek / llm-pi-ai）已重 base 到 rc.7 对应包源码；其中 apiproxy 的
-> `exposedNamespaces` 与 llm 系列的思考档位已被 rc.7 官方化 → 弃用 fork，其余重试兜底 /
-> 门闸钩子 / settings scope 恒 host 等改动保留在对应包。
->
-> task-suite 的 `web-ui-settings`（rc.6 HTTP bridge + 组卡）、`dsh-skins`（聚合载体）、
-> `dsh-task-suite-all`（聚合包）已退役——前者被官方 rc.7 settings surface 取代，后两者
-> 因只保留单皮肤而无需聚合，各行已在 web-app 直接注册。
+> llm / llm-deepseek / llm-pi-ai）已重 base 到 rc.8 对应包源码，保留/弃用现状见
+> [docs/升级适配指南.md §2](docs/升级适配指南.md)。
 
-### 1.2 补丁项目（安装包级，升级需重打，正逐步被插件化替代）
+### 1.2 已退役的旧部署形态（git 历史可见，不再维护）
 
 | 项目 | 内容 | 现状 |
 |---|---|---|
@@ -48,8 +43,7 @@
 ## 2. 公开插件的使用方法
 
 > 本仓库插件已整合进 harness 源码，**无需** `dsh plugin add` 单独安装——`pnpm run build`
-> 后 `dsh web` 一装全有。对外分发（打包成 npm 包）的流程见
-> [docs/整合迁移路线图.md §8](docs/整合迁移路线图.md)。
+> 后 `dsh web` 一装全有。对外分发（打包成 npm 包）的流程见 [CONTRIBUTING.md §8](CONTRIBUTING.md)。
 
 各插件验证要点（构建后在浏览器或接口上核对）：
 
@@ -61,16 +55,12 @@
 | 桌宠 | 页面右下角出现桌宠；音效/语音/账房/诊断面板正常 |
 | 任务看板 / 实时统计 / Git 图谱 / 右侧面板 / 图像理解 / 皮肤中心 | 见各包 README 与本地打包实测 |
 
-## 3. 插件的更新情况
-
-| 插件 | 适配 DSH 版本 | 状态 |
-|---|---|---|
-| 8 个同名 fork | `dsh-v0.1.0-rc.7` | 已重 base 到 rc.7 对应包源码（apiproxy exposedNamespaces + llm 思考档位官方化 → 弃用） |
-| 访问门禁 / 默认值 / 手机端 / 桌宠 | `dsh-v0.1.0-rc.7` | 已迁移进 `packages/*`，构建 + lint 全绿 |
-| task-suite 8 包 | `dsh-v0.1.0-rc.7` | 已迁移（scope 改名 + rc.7 API 重 base + host/client 拆分），web-ui-settings / dsh-skins / dsh-task-suite-all 退役 |
-
-## 4. 插件维护（DSH 破坏性更新应对）
+## 3. 插件维护（DSH 破坏性更新应对）
 
 **维护原则**：改插件 = 改 `packages/<group>/<pkg>/src` → `pnpm run build` → 本地打包验证；
 任何打包测试只在独立实例（非 3080 端口）进行，通过后才允许正式安装（用户手动执行）。
 正式环境（3080 / `$HOME/.dsh` / 全局安装）绝不触碰。详见 [AGENTS.md](AGENTS.md) 红线。
+
+- fork 保留/弃用与重 base 口径：见 [docs/升级适配指南.md](docs/升级适配指南.md)。
+- 可调参数一律进「设置 → 插件 → 插件配置」卡片（AGENTS.md 红线 8）；手机端适配的
+  断点 / 抽屉宽度 / 桌宠缩放已通过「移动端适配」卡片暴露。

@@ -42,6 +42,8 @@ interface ImageAttachmentLimits {
   maxImagesPerMessage: number
   maxMessageImageBytes: number
   maxImagePixels: number
+  /** Maximum intrinsic width and maximum intrinsic height in pixels for one image. */
+  maxImageDimension: number
   mediaTypes: readonly ImageMediaType[]
 }
 ```
@@ -66,6 +68,18 @@ interface SaveImageAttachment {
 interface StoredImageAttachment {
   ref: ImageAttachmentRef
   data: Uint8Array
+}
+```
+
+```ts type-equiv
+/** Base64-encoded image upload accompanying one wire request. */
+interface EncodedImageAttachment {
+  /** Declared media type, verified against the decoded bytes during admission. */
+  mediaType: ImageMediaType
+  /** Canonical base64 encoding of the image bytes. */
+  data: string
+  /** Optional display name; it is never interpreted as a path. */
+  name?: string
 }
 ```
 
@@ -121,5 +135,5 @@ abstract saveImage(input: SaveImageAttachment): Promise<ImageAttachmentRef>
 abstract readImage(ref: ImageAttachmentRef, signal?: AbortSignal): Promise<StoredImageAttachment>
 ```
 
-Source: [`packages/attachment/attachment/src/index.ts:31`](../../packages/attachment/attachment/src/index.ts)
+Source: [`packages/attachment/attachment/src/index.ts:33`](../../packages/attachment/attachment/src/index.ts)
 <!-- END GENERATED cordis-surface -->
