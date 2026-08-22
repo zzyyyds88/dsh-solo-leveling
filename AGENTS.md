@@ -120,5 +120,6 @@ pnpm run dsh -- web                            # tsx 直跑源码起实例（= n
 - 整合迁移铁律：**官方 rc.2 已实现同功能 → 优先用官方、弃用对应 fork/适配层**；保留的 fork 必须重 base 到 rc.2 源码（见 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)）。
 - 平台支持：Linux / Windows / Termux（Android）三平台均可构建打包运行；打包脚本有跨平台 node（`scripts/package-npm.mjs`）与 bash（`scripts/package-npm.sh`）两个版本。
 - 构建入口：`pnpm install && pnpm run build`；打包 `node scripts/package-npm.mjs`；验证走全局安装（`npm i -g ./dist/npm/*.tgz` → `dsh web`）。
+- **客户端构建固定 official profile**：品牌（鲸鱼标志 + DeepSeek Harness）与页面标题走官方注入，上游 `DSH Local Build` 回退品牌不得出现在本整合包任何构建中（见 [docs/工作区/开发规范.md §2.2](docs/工作区/开发规范.md)）。
 - 皮肤中心只保留 **maid-atelier（Abyssal Maid Atelier）**，其余皮肤源码已删除。
 - **完成定义（验收/打包/发布）**：开发完成后本地打包自测 → `dsh web` 起实例验收 → 用户自测 → **用户测试通过后才 push GitHub**（通过前禁止 push）。

@@ -34,6 +34,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { execa } from 'execa'
 import { build } from 'tsdown'
 import type { TsdownBundle } from 'tsdown'
+import { officialClientBuildEnvironment } from './client-build-environment.ts'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -175,6 +176,15 @@ interface StageHandle {
 const invokedPath = process.argv[1]
 const isMain = invokedPath !== undefined && import.meta.url === pathToFileURL(resolve(invokedPath)).href
 if (isMain) {
+  // This workspace pins the official client build profile: brand and title
+  // ride the official injection, so the upstream `DSH Local Build` fallback
+  // must not surface in any local build. The tsdown stage runs in this
+  // process and the spawned tsc/vite stages inherit process.env, so one
+  // injection covers all three. Explicit environment overrides still win.
+  for (const [name, value] of Object.entries(officialClientBuildEnvironment(repoRoot))) {
+    process.env[name] ??= value
+  }
+
   const pluginDirs = discoverPluginDirs()
   const libraryDirs = discoverLibraryDirs()
   if (pluginDirs.length === 0) {
