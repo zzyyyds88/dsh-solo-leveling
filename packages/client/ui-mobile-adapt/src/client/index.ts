@@ -9,9 +9,12 @@
  *      布局变更都会重写 inline grid，这里用 MutationObserver 持续覆盖；
  *   3. 侧栏抽屉：左缘右滑呼出 + 左上角菜单按钮 + 点遮罩收起，走 ctx.layout
  *      服务（toggleSidebar / closeDetails），不碰 React 内部；
- *   4. 触控/键盘：enterkeyhint=send、禁捏合缩放、命令面板脚本聚焦守卫；
+ *   4. 触控/键盘：enterkeyhint=send、禁捏合缩放、命令面板脚本聚焦守卫、
+ *      visualViewport 键盘避让（--dsm-keyboard-inset + 桌宠让位）；
  *   5. 抽屉默认关闭：启动时以及切换工作区（root 变化导致 aionui 重新展开
- *      文件树）时自动收起；用户主动点浮出按钮打开则放行。
+ *      文件树）时自动收起；用户主动点浮出按钮打开则放行；
+ *   6. aionui 抽屉（文件树/预览）纳入遮罩管理：打开时显示遮罩，点遮罩走
+ *      面板自己的收起控件关闭。
  *
  * 注意：不能用 classList 操作 frame 的 className——React 会重写 className，
  * 与 MutationObserver 形成死循环（实测 renderer 被杀）。一律使用 data-*
@@ -42,6 +45,12 @@ let frameAttrObserver: MutationObserver | null = null
 // 由 ctx.layout 服务注入的 panel 动作
 let toggleSidebar: () => void = () => {}
 let closeDetails: () => void = () => {}
+
+// 键盘避让刷新（installKeyboardInset 注册，断点跨越时由 applyNarrow 调用）
+let syncKeyboard: () => void = () => {}
+// rAF 合并标记与卸载标记（观察器回调节流用）
+let narrowScheduled = false
+let disposed = false
 
 function findFrame(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-dsh-frame]')
@@ -102,6 +111,7 @@ function ensureExplorerWatcher(): void {
 
   lastExpVis = explorer.style.visibility
   expObserver = new MutationObserver(() => {
+    syncChrome()
     const vis = explorer.style.visibility
     if (vis === 'visible' && lastExpVis === 'hidden' && mql.matches) {
       if (Date.now() - userOpenedAt > 600) collapseExplorer()
@@ -109,6 +119,9 @@ function ensureExplorerWatcher(): void {
     lastExpVis = vis
   })
   expObserver.observe(explorer, { attributes: true, attributeFilter: ['style'] })
+  // 预览列同样以 inline visibility 表达开合，纳入同一观察（驱动遮罩显隐）
+  const previewCol = document.querySelector<HTMLElement>('[data-aionui-preview-col]')
+  if (previewCol !== null) expObserver.observe(previewCol, { attributes: true, attributeFilter: ['style'] })
 
   // 启动默认状态：文件树展开时收一次
   if (mql.matches && explorer.style.visibility === 'visible') collapseExplorer()
@@ -129,7 +142,7 @@ function ensureMenuButton(): void {
   document.body.appendChild(menuButton)
 }
 
-/** 抽屉遮罩：侧栏/详情打开时覆盖中心区，点按收起。 */
+/** 抽屉遮罩：侧栏/详情/aionui 抽屉打开时覆盖中心区，点按收起。 */
 function ensureScrim(): void {
   if (scrim !== null) return
   scrim = document.createElement('button')
@@ -138,11 +151,36 @@ function ensureScrim(): void {
   scrim.setAttribute('aria-label', '关闭面板')
   scrim.addEventListener('click', () => {
     const f = frame
-    if (f === null) return
-    if (!f.hasAttribute('data-sidebar-collapsed')) toggleSidebar()
-    if (!f.hasAttribute('data-details-collapsed')) closeDetails()
+    if (f !== null) {
+      if (!f.hasAttribute('data-sidebar-collapsed')) toggleSidebar()
+      if (!f.hasAttribute('data-details-collapsed')) closeDetails()
+    }
+    collapseAionuiDrawers()
   })
   document.body.appendChild(scrim)
+}
+
+/** aionui 抽屉（文件树/预览列）任一 inline visibility 可见即视为打开。 */
+function aionuiDrawerOpen(): boolean {
+  if (!mql.matches) return false
+  for (const col of document.querySelectorAll<HTMLElement>('[data-aionui-explorer-col], [data-aionui-preview-col]')) {
+    if (col.style.visibility === 'visible') return true
+  }
+  return false
+}
+
+/** 点遮罩收起 aionui 抽屉：走面板自己的收起控件（explorer 收起箭头是
+ *  全局类；preview 收起按钮是 CSS-module 哈希类，用双语 aria-label 定位）。 */
+function collapseAionuiDrawers(): void {
+  const explorer = document.querySelector<HTMLElement>('[data-aionui-explorer-col]')
+  if (explorer !== null && explorer.style.visibility === 'visible') {
+    explorer.querySelector<HTMLElement>('.aionui-collapse-chevron')?.click()
+    return
+  }
+  const preview = document.querySelector<HTMLElement>('[data-aionui-preview-col]')
+  if (preview !== null && preview.style.visibility === 'visible') {
+    preview.querySelector<HTMLElement>('[aria-label="收起预览面板"], [aria-label="Collapse preview panel"]')?.click()
+  }
 }
 
 /** 根据窄屏 + 抽屉开合状态刷新遮罩/菜单按钮的可见性。 */
@@ -151,7 +189,8 @@ function syncChrome(): void {
   const narrow = mql.matches
   const drawerOpen = narrow && f !== null
     && (!f.hasAttribute('data-sidebar-collapsed') || !f.hasAttribute('data-details-collapsed'))
-  if (scrim !== null) scrim.hidden = !drawerOpen
+  const overlayOpen = aionuiDrawerOpen()
+  if (scrim !== null) scrim.hidden = !(drawerOpen || overlayOpen)
   if (menuButton !== null) {
     menuButton.hidden = !narrow
     if (f !== null) {
@@ -180,6 +219,7 @@ function applyNarrow(): void {
       delete f.dataset.dshmGrid
     }
     syncChrome()
+    syncKeyboard()
     return
   }
 
@@ -310,29 +350,76 @@ function suppressCommandPanelScriptFocus(): () => void {
   return () => { document.removeEventListener('focusin', onFocusIn, true) }
 }
 
-/** 安装并返回清理函数（供 ctx.effect 使用）。 */
-function install(): () => void {
-  applyNarrow()
+/** 键盘避让：visualViewport 与布局视口的高度差即虚拟键盘高度，写为
+ *  --dsm-keyboard-inset（CSS 消费：输入区滚动余量），并在 body 打
+ *  data-dshm-keyboard（桌宠让位）。Android 键盘弹起时布局视口随之
+ *  压缩、差值趋近 0，由布局自然让位，不会双重抬高；120px 阈值过滤
+ *  地址栏收放造成的小幅抖动。 */
+function installKeyboardInset(): () => void {
+  const vv = window.visualViewport
+  if (vv === null) return () => {}
+  const apply = (): void => {
+    if (!mql.matches) {
+      document.documentElement.style.removeProperty('--dsm-keyboard-inset')
+      document.body.removeAttribute('data-dshm-keyboard')
+      return
+    }
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+    document.documentElement.style.setProperty('--dsm-keyboard-inset', `${Math.round(inset)}px`)
+    if (inset > 120) document.body.setAttribute('data-dshm-keyboard', '')
+    else document.body.removeAttribute('data-dshm-keyboard')
+  }
+  syncKeyboard = apply
+  vv.addEventListener('resize', apply)
+  vv.addEventListener('scroll', apply)
+  apply()
+  return () => {
+    vv.removeEventListener('resize', apply)
+    vv.removeEventListener('scroll', apply)
+    syncKeyboard = () => {}
+    document.documentElement.style.removeProperty('--dsm-keyboard-inset')
+    document.body.removeAttribute('data-dshm-keyboard')
+  }
+}
 
-  mql.addEventListener('change', onMediaChange)
-
-  // 观察 frame 出现/样式变化（aionui 会重写 grid，需持续覆盖）
-  bodyObserver = new MutationObserver(() => {
+/** rAF 合并观察器回调：流式渲染时每个 DOM 变更不再各自触发
+ *  findFrame/applyNarrow，每帧至多跑一次；桌面稳态（frame 未被替换
+ *  且无窄屏残留）直接跳过，避免拖拽/流式期间空转。 */
+function scheduleNarrow(): void {
+  if (narrowScheduled) return
+  narrowScheduled = true
+  requestAnimationFrame(() => {
+    narrowScheduled = false
+    if (disposed) return
+    if (!mql.matches && frame !== null && frame.isConnected
+      && !frame.hasAttribute('data-dshm-narrow') && frame.dataset.dshmGrid !== '1') return
     const f = findFrame()
     if (f !== null && f !== frame) {
       frame = f
       if (styleObserver !== null) styleObserver.disconnect()
-      styleObserver = new MutationObserver(applyNarrow)
+      styleObserver = new MutationObserver(scheduleNarrow)
       styleObserver.observe(f, { attributes: true, attributeFilter: ['style', 'class'] })
       ensureFrameAttrObserver(f)
     }
     applyNarrow()
   })
+}
+
+/** 安装并返回清理函数（供 ctx.effect 使用）。 */
+function install(): () => void {
+  disposed = false
+  applyNarrow()
+
+  mql.addEventListener('change', onMediaChange)
+
+  // 观察 frame 出现/样式变化（aionui 会重写 grid，需持续覆盖）；
+  // 回调经 scheduleNarrow 做 rAF 合并 + 桌面稳态短路
+  bodyObserver = new MutationObserver(scheduleNarrow)
   bodyObserver.observe(document.body, { childList: true, subtree: true })
 
   const f = findFrame()
   if (f !== null) {
-    styleObserver = new MutationObserver(applyNarrow)
+    styleObserver = new MutationObserver(scheduleNarrow)
     styleObserver.observe(f, { attributes: true, attributeFilter: ['style', 'class'] })
     ensureFrameAttrObserver(f)
   }
@@ -341,8 +428,10 @@ function install(): () => void {
   const disposeEnterSend = enableMobileEnterSend()
   const disposeZoomLock = lockMobilePageZoom()
   const disposeCommandGuard = suppressCommandPanelScriptFocus()
+  const disposeKeyboard = installKeyboardInset()
 
   return () => {
+    disposed = true
     mql.removeEventListener('change', onMediaChange)
     if (bodyObserver !== null) bodyObserver.disconnect()
     if (styleObserver !== null) styleObserver.disconnect()
@@ -352,6 +441,7 @@ function install(): () => void {
     disposeEnterSend()
     disposeZoomLock()
     disposeCommandGuard()
+    disposeKeyboard()
     scrim?.remove()
     menuButton?.remove()
     if (frame !== null) {

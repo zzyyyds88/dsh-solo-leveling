@@ -284,7 +284,7 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
   const [visual, setVisual] = useState<DerivedVisual>(immediate)
   // 窄屏（移动端）默认折叠成小圆角标：展开态的角色会遮住底部输入框，
   // 折叠让小圆贴角，双击再展开（桌面端保持展开默认）。
-  const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 760)
+  const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 768)
   const [phase, setPhase] = useState(0)
   const [thinkingMs, setThinkingMs] = useState(0)
   const [visualMs, setVisualMs] = useState(0)

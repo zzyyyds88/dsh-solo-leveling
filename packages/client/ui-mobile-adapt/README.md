@@ -16,6 +16,13 @@ Desktop layout stays untouched. On viewports ≤ 768 px the plugin:
 - polishes the touch composer: 16 px inputs to suppress iOS focus zoom,
   safe-area padding, bottom-docked hero composer, and `enterkeyhint=send` so
   virtual keyboards advertise "Send" instead of "Return";
+- keeps the composer reachable above the virtual keyboard: the browser half
+  writes the keyboard inset to `--dsm-keyboard-inset` (visualViewport vs the
+  layout viewport), the CSS turns it into bottom scroll room, and the pet
+  steps aside while the keyboard is up;
+- covers the aionui drawers (file tree / preview) with the same scrim as the
+  sidebar/details drawers: tapping it closes them through their own collapse
+  controls;
 - stacks the settings dialog rows vertically so labels never render as
   vertical glyph runs, and shrinks the dialog nav to an icon rail;
 - applies phone-tier guards: `100dvh` viewport height, pinch-zoom lock, tooltip
@@ -38,9 +45,11 @@ cordis events, registers no tools or settings, and reads no session data.
 ## Known Limitations and Deferred Work
 
 - The drawer logic queries internal `data-*` frame/panel attributes owned by the
-  shell and the aionui panel plugin, so it couples to that DOM structure.
-- The aionui drawer still exposes no scrim of its own: it closes through the
-  explorer's collapse chevron, not the sidebar/details scrim.
+  shell and the aionui panel plugin, so it couples to that DOM structure. The
+  preview-drawer close control is located through its zh/en `aria-label`
+  (its visual class is a hashed CSS-module name).
 - The maid-atelier skin pins `--maid-sidebar-width` to `0` on mobile (see the
   skin's own mobile media query) because the sidebar is a drawer there, not a
   permanent column; other skins are unaffected.
+- Tunables (breakpoint, drawer widths, pet scale) are still hardcoded; the
+  settings card is a tracked open item (roadmap section 7).

@@ -19,7 +19,10 @@
  *      1. 打 data-dshm-role 角色标记、维护 data-dshm-narrow、强制 grid；
  *      2. 左缘右滑呼出侧栏、点遮罩收起（走 ctx.layout 服务）；
  *      3. enterkeyhint=send、禁捏合缩放、命令面板键盘守卫；
- *      4. 进入窄屏时自动收起 aionui 文件树一次（抽屉默认关闭）。
+ *      4. 进入窄屏时自动收起 aionui 文件树一次（抽屉默认关闭）；
+ *      5. visualViewport 键盘避让：键盘高度写 --dsm-keyboard-inset
+ *         （本文件的输入区规则消费）+ body data-dshm-keyboard（桌宠让位）；
+ *      6. aionui 抽屉打开时同样显示遮罩，点遮罩走面板自身收起控件关闭。
  *
  * 鉴权不变：仍走 dsh-web-auth 登录门闸。
  */
@@ -151,8 +154,11 @@ const MOBILE_CSS = `
   }
 
   /* ── 2. 输入区：贴边 + 安全区 + 16px 防 iOS 聚焦缩放 ───────────── */
+  /* 键盘避让：iOS 布局视口不随键盘压缩，client 半把键盘高度写进
+     --dsm-keyboard-inset，这里加出等高滚动余量让输入卡可滚到键盘上方；
+     Android 布局视口自身会压缩（差值为 0），不会双重抬高 */
   [data-composer-seat] {
-    padding-bottom: max(env(safe-area-inset-bottom), 10px);
+    padding-bottom: calc(max(env(safe-area-inset-bottom), 10px) + var(--dsm-keyboard-inset, 0px));
   }
   /* hero 空会话态：桌面端输入框居中，手机上沉到底部（margin-top:auto 把
      flex 列里的输入座推到底，覆盖 scrollBody 的 justify-content:center） */
@@ -331,6 +337,11 @@ const MOBILE_CSS = `
   }
   /* 弹层打开时把桌宠让开（避免遮挡设置/选择器内容） */
   body:has([role='dialog'][aria-modal='true']) [data-dsh-live2d-root] {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+  /* 虚拟键盘弹起时桌宠让位（避免浮在键盘上方遮挡输入区） */
+  body[data-dshm-keyboard] [data-dsh-live2d-root] {
     opacity: 0 !important;
     pointer-events: none !important;
   }
