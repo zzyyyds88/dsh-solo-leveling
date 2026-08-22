@@ -57,6 +57,14 @@ const NEUTRALIZE_CSS: Record<string, string> = {
     '[data-pane=\'sidebar\'] [class*=\'xpTaskbar\']{background:transparent!important;border-top:none!important;box-shadow:none!important}',
     '[data-pane=\'sidebar\'] [class*=\'xpStart\']{display:none!important}',
   ].join(''),
+  // maid-atelier decorates INSIDE the sidebar (mascot img, frame corners)
+  // and the titlebar — nodes that are not body children, so chrome
+  // detachment never reaches them. Retracting the body attribute de-scopes
+  // their positioning CSS and the raw mascot image collapses into the
+  // sidebar layout at intrinsic size. Hide every skin-owned node instead;
+  // the skin's ghost MutationObserver keeps re-decorating during try-on,
+  // and removing this rule on exit reveals the rebuilt decorations again.
+  'maid-atelier': "[data-skin-owner='maid-atelier']{display:none!important}",
 }
 
 /** The window surfaces the boot protocol installs (manifest.ts contract). */
