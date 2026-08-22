@@ -1,6 +1,6 @@
 # 插件列表（Plugin List）
 
-> 本仓库 = **大宝贝定制版**：deepseek-harness `dsh-v0.1.0-rc.8` 的 fork 整合包，源码平铺仓库根。
+> 本仓库 = **大宝贝定制版**：deepseek-harness `dsh-v0.1.1-rc.2` 的 fork 整合包，源码平铺仓库根。
 > 所有自研/收录插件已迁入 `packages/<group>/<pkg>/`（包名 `@deepseek-ai/dsh-*`），
 > 按官方分组命名并装配进 `packages/bundle/*/cordis.patch.yml`，`pnpm run build` 后
 > `dsh web` 一装全有，不再走「旧目录 + profile 挂载」老路。fork 逐项映射见
@@ -25,7 +25,7 @@
 | `dsh-client-ui-skin-center` | client | **皮肤中心**：列表/试穿/一键应用（host `/api/skin-center/*` 热切换） |
 
 > 8 个同名 fork（webserver / apiproxy / connection / ui-settings / directory-picker-browse /
-> llm / llm-deepseek / llm-pi-ai）已重 base 到 rc.8 对应包源码，保留/弃用现状见
+> llm / llm-deepseek / llm-pi-ai）已重 base 到 rc.2 对应包源码，保留/弃用现状见
 > [docs/升级适配指南.md §2](docs/升级适配指南.md)。
 
 ### 1.2 已退役的旧部署形态（git 历史可见，不再维护）
@@ -38,7 +38,7 @@
 
 ### 1.3 环境
 
-- 正式实例：端口 3080（`$HOME/.dsh`）；验证用独立实例（非 3080 端口，如 3090）。
+- 本机即唯一运行环境：验证与日常使用是同一个 `dsh web`（默认端口 3080，`$HOME/.dsh`）。
 
 ## 2. 公开插件的使用方法
 
@@ -58,10 +58,10 @@
 ## 3. 插件维护（DSH 破坏性更新应对）
 
 **维护原则**：改插件 = 改 `packages/<group>/<pkg>/src` → `pnpm run build` → 本地打包验证；
-任何打包测试只在独立实例（非 3080 端口）进行，通过后才允许正式安装（用户手动执行）。
-正式环境（3080 / `$HOME/.dsh` / 全局安装）绝不触碰。详见 [AGENTS.md](AGENTS.md) 红线。
+打包后全局安装（`npm i -g ./dist/npm/*.tgz`）起实例验收，停/起/重装前先与用户确认。
+详见 [AGENTS.md](AGENTS.md) 红线。
 
 - fork 保留/弃用与重 base 口径：见 [docs/升级适配指南.md](docs/升级适配指南.md)。
-- 可调参数一律进「设置 → 插件 → 插件配置」卡片（AGENTS.md 红线 8）；手机端适配的
+- 可调参数一律进「设置 → 插件 → 插件配置」卡片（AGENTS.md 红线 5）；手机端适配的
   断点 / 抽屉宽度 / 桌宠缩放已通过「移动端适配」卡片暴露（2026-08-22 补齐，
   含总开关，保存即生效）。

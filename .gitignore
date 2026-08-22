@@ -56,6 +56,7 @@ dist/
 # 旧插件工作区备份 / 本地工具配置（运维产物）
 backups/
 opencode.json
+.qoder/
 
 # 日志
 *.log

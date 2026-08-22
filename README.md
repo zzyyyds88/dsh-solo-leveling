@@ -1,6 +1,6 @@
 # 大宝贝定制版（Dabao Custom Edition）
 
-> **DeepSeek Harness 定制整合包 —— 不跟随官方更新，fork 自玩。** 基线：`deepseek-ai/deepseek-harness` @ [`dsh-v0.1.0-rc.8`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.0-rc.8) （commit `f1f7dc36fa`）。
+> **DeepSeek Harness 定制整合包 —— 不跟随官方更新，fork 自玩。** 基线：`deepseek-ai/deepseek-harness` @ [`dsh-v0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2)（上一基线 `dsh-v0.1.0-rc.8`，commit `f1f7dc36fa`）。
 
 ## 为什么 fork（背景）
 
@@ -23,6 +23,7 @@
 | 阶段 | 状态 |
 |---|---|
 | 拉取官方基线（rc.8 `f1f7dc36fa` 平铺到仓库根） | ✅ 完成 |
+| 基线升级 `dsh-v0.1.1-rc.2`（全部 fork 重 base，逐项核对见升级适配指南 §2） | ✅ 完成 |
 | 8 个 `@deepseek-ai/*` 同名 fork 重 base 进对应 `packages/*/*` | ✅ 完成 |
 | 自研插件（门闸 / 默认值 / 桌宠 / 手机端 / 任务套件等 15 包）迁入 `packages/*/*` | ✅ 完成 |
 | 三平台适配（Linux / Windows / Termux）+ 跨平台打包脚本 | ✅ 完成 |
@@ -35,7 +36,7 @@ fork 逐项映射与升级适配见 [docs/升级适配指南.md](docs/升级适�
 仓库根即 harness monorepo；自研/收录内容按官方分组规范并入：
 
 ```
-仓库根                 ← deepseek-harness monorepo（rc.8 平铺）
+仓库根                 ← deepseek-harness monorepo（rc.2 平铺）
 ├── packages/          ← harness 包（host/ client/ llm/ settings/ …）+ 迁入的自研插件
 ├── apps/              ← dsh CLI 与 Web 前端产品装配
 ├── vendor/            ← 上游 vendored 框架包
@@ -55,7 +56,7 @@ pnpm dsh web          # 默认 HTTPS：https://0.0.0.0:3080（局域网 https://
 
 ## 平台支持（Linux / Windows / Termux）
 
-基线 = 官方 deepseek-harness `0.1.0-rc.8` + 本仓库定制（默认 HTTPS、访问门禁、皮肤、桌宠等），三平台均支持：
+基线 = 官方 deepseek-harness `0.1.1-rc.2` + 本仓库定制（默认 HTTPS、访问门禁、皮肤、桌宠等），三平台均支持：
 
 ### Linux（x64 / arm64）
 

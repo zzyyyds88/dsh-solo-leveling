@@ -15,7 +15,7 @@
 
 负责的典型工作：
 
-- **Web GUI**（`dsh web`，正式实例默认 https://127.0.0.1:3080）交互优化；
+- **Web GUI**（`dsh web`，本机即唯一运行环境，默认 https://0.0.0.0:3080）交互优化；
 - **CLI / 工作区 / 会话**等使用体验改进；
 - **第一方插件**：自研/收录能力以 `@deepseek-ai/dsh-*` 第一方包整合进 `packages/*/*`，
   打包进 dsh CLI（整合包），整体分发。
@@ -51,23 +51,23 @@
 > 铁律的**唯一权威**是 [AGENTS.md](AGENTS.md)「红线」一节（AI 代理每轮会话强制生效），
 > 此处只列摘要，冲突时以 AGENTS.md 为准。核心：
 
-1. **正式环境绝不触碰**（`$HOME/.dsh`、全局安装、3080 进程）；一切验证只在独立实例
-   （非 3080 端口）进行，正式安装由用户在 SSH 终端执行。
-2. **agent 禁止自行停/起 `dsh web`**（等于自杀）；「停→改→起」由用户在 SSH 终端执行。
-3. **禁止直接改产物**（node_modules / lib/*.js）；改插件 = 改 `packages/<group>/<pkg>/src`
+1. **绝不直接改产物**（node_modules / 安装包里的 `lib/*.js`）；改插件 = 改 `packages/<group>/<pkg>/src`
    → 构建 → 本地打包验证。
-4. **profile 配置原子化**：停服务 → 写配置 → 再启动（`cordis.patch.yml` 热重载会搞崩进程）。
-5. **可调参数必须进「设置 → 插件 → 插件配置」卡片**，禁止硬编码（AGENTS.md 红线 8）。
+2. **改 harness 源码，不碰产物**：自研/收录能力一律以第一方包整合进 `packages/<group>/<pkg>/`。
+3. **升级重 base 不得静默丢定制**：同步上游后逐文件核对「- 方向」，并起实例做插件存在性冒烟。
+4. **不创建散落文件**：仓库根即 harness monorepo，临时文件用完即删。
+5. **可调参数必须进「设置 → 插件 → 插件配置」卡片**，禁止硬编码。
+6. **停/起/重装全局 `dsh`（`npm i -g`）前先与用户确认**。
 
 ## 4. 目录约定
 
 ```
-仓库根 = harness monorepo（rc.8 平铺）
+仓库根 = harness monorepo（rc.2 平铺）
 ├── packages/            ← harness 包 + 迁入的第一方插件（@deepseek-ai/dsh-*）
 ├── apps/                ← dsh CLI 与 Web 前端产品装配
 ├── vendor/              ← 上游 vendored 框架包
 ├── docs/                ← harness 文档 + 本工作区文档（开发规范 / 升级适配指南）
-├── scripts/             ← harness 脚本 + 打包脚本（package-npm.sh）
+├── scripts/             ← harness 脚本 + 打包脚本（package-npm.mjs / .sh）
 ├── README.md            ← 工作区用途总览
 ├── CONTRIBUTING.md      ← 本文件：贡献规矩（人类 + AI）
 └── AGENTS.md            ← AI 代理红线（强制，冲突时以它为准）
@@ -83,11 +83,9 @@
    风险更高，一般不优先。
 3. **实施**：改 `packages/<group>/<pkg>/src`，改动后先做语法/格式校验（如 `node --check`）。
 4. **构建**：`pnpm run build` 全绿。
-5. **独立实例验证（必经）**：本地打包（`scripts/package-npm.sh`）后起独立实例
-   （非 3080 端口）在浏览器实测；实测结果逐条记录。**正式实例（3080）不做任何实验。**
-6. **正式安装（仅用户）**：`npm i -g ./dist/npm/*.tgz`（会停/重启 dsh web），
-   交给用户在 SSH 终端手动执行。
-7. **收尾**：记录验证结论与回退路径，git 提交（Conventional Commits）。
+5. **起实例验收（必经）**：本地打包（`node scripts/package-npm.mjs`）后全局安装起实例
+   （停/起全局 `dsh` 前先与用户确认）在浏览器实测；实测结果逐条记录。
+6. **收尾**：记录验证结论与回退路径，git 提交（Conventional Commits）；用户自测通过后才 push GitHub。
 
 ## 6. 插件开发规范（成为插件开发者）
 
@@ -100,7 +98,7 @@
 - **构建工具链**：tsdown + lightningcss + typescript；client bundle 有纯度门
   （只能 require 平台表 + INLINE_SAFE 白名单里的包）。
 - **打包产物必须可验证**：每个包含 `lib/`（构建产物）与 `package.json`；
-  本地打包后在独立实例实测。
+  本地打包后起实例实测。
 - **上游化意识**：能配置化（profile 挂载 / settings.yaml）就不改包；
   能上游化（PR / issue）就上游化；第三方生态已有同类时优先复用。
 - **发布（可选，对生态贡献时）**：npm 包 + GitHub 仓库打 `dsh-plugin` 主题标签，
@@ -115,17 +113,16 @@ Config schema / 打包分发三方式 / Web UI 使用）+ 本工作区约定（G
 
 ## 8. 打包 / 验证（整合包）
 
-本仓库 = `@deepseek-ai/dsh` CLI + 第一方插件整合包，验证走「构建 → 打包 → 本地全局安装 → 独立实例实测」：
+本仓库 = `@deepseek-ai/dsh` CLI + 第一方插件整合包，验证走「构建 → 打包 → 全局安装 → 起实例实测」：
 
 ```bash
 pnpm install && pnpm run build                 # 1. 构建
-bash scripts/package-npm.sh [--scope <个人>]   # 2. 打包 → dist/npm/*.tgz
-npm i -g ./dist/npm/*.tgz                      # 3. 本地安装（体验同 npx @deepseek-ai/dsh web）
-dsh web --port 3090                            # 4. 起独立实例验证（端口避开正式 3080）
+node scripts/package-npm.mjs [--scope <个人>]  # 2. 打包 → dist/npm/*.tgz（Linux 可用 bash scripts/package-npm.sh）
+npm i -g ./dist/npm/*.tgz                      # 3. 全局安装（体验同 npx @deepseek-ai/dsh web）
+dsh web                                        # 4. 起实例验收（默认端口）
 ```
 
-隔离保证：验证实例用独立 `DSH_HOME` + 非 3080 端口；正式实例（3080）、正式
-DSH_HOME、全局安装目录均不被任何验证步骤触碰。
+本机即唯一运行环境：验证与日常使用是同一个 `dsh web`；停/起/重装全局 `dsh` 前先与用户确认。
 
 ## 9. 提交与记录规范
 
@@ -136,7 +133,7 @@ DSH_HOME、全局安装目录均不被任何验证步骤触碰。
 - **变更记录**：验证结论与回退路径记在 git 提交里（Conventional Commits），
   重大决策按仓库规范补 Agent Note。
 - **AI 协作**：AI 动手改插件源码前先确认改造方案；AI 只做构建/装测试环境/
-  验证/记录，正式安装与重启由用户执行。使用 AI 生成内容时如实记录模型与工具。
+  验证/记录，停/起/重装全局 `dsh` 前先与用户确认。使用 AI 生成内容时如实记录模型与工具。
 
 ## 10. 版本控制与发布
 
@@ -167,22 +164,21 @@ git pull --rebase && git push
 
 ## 11. 验证与门禁
 
-- 提交/安装前：`pnpm run build` 构建全绿 + 独立实例实测通过。
+- 提交/安装前：`pnpm run build` 构建全绿 + 起实例实测通过。
 - 语法校验：`node --check`。
-- 正式安装前检查清单：
-  1. 独立实例（非 3080 端口）全链路验证通过并记录；
-  2. 正式安装（`npm i -g`）已备份/幂等；
-  3. 回退路径明确（旧 tarball / 旧全局安装）；
-  4. 用户在场，由用户在 SSH 终端执行会重启 dsh web 的操作。
+- 全局安装前检查清单：
+  1. 构建全绿 + 打包后起实例全链路验证通过并记录；
+  2. 回退路径明确（旧 tarball / 旧全局安装）；
+  3. 停/起/重装全局 `dsh` 前先与用户确认；用户自测通过后才 push GitHub。
 
 ## 12. 升级应对（DSH 官方升级之后）
 
 > 按 [docs/升级适配指南.md](docs/升级适配指南.md) 逐项核对：官方已实现同功能 → 弃用 fork，
-> 未官方化 → 重 base 到新版源码。**升级期间正式实例（3080）保持不动。**
+> 未官方化 → 重 base 到新版源码。**升级重 base 不得静默丢定制（逐文件核对「- 方向」+ 起实例冒烟）。**
 
 1. 更新根 README 与 [docs/升级适配指南.md](docs/升级适配指南.md) §1 里的基线版本号。
 2. 逐项核对 [升级适配指南.md §2](docs/升级适配指南.md) 的 fork 清单。
-3. 重新 `pnpm install && pnpm run build` 构建整合包，本地打包后独立实例重验。
+3. 重新 `pnpm install && pnpm run build` 构建整合包，本地打包后起实例重验。
 4. 自研插件（第一方包）通常天然免疫，只需重验。
 
 ## 13. 参考链接
@@ -210,9 +206,8 @@ git pull --rebase && git push
 - **⚠ 运行中的 `dsh web` 会热重载 `cordis.patch.yml` 的改动**：在服务存活时改写该文件，
   会触发配置热重载、把承载 Web/agent 会话的进程搞崩（表现为工具调用莫名中断/任务失败）。
   → 所有 profile 配置改动必须**原子化**：先停服务 → 写配置 → 再启动。
-- **⚠ agent 绝不能自己重启 `dsh web`**：agent 就运行在 dsh web 进程里，一旦 pkill/重启，
-  执行中的工具调用会被中断（等于自杀）。凡需重启 dsh 的操作（停→改→起）一律封装成脚本，
-  交给用户在 SSH 终端执行。
+- **⚠ 停/起 `dsh web` 前先确认**：停/起/重装全局 `dsh` 会中断正在进行的会话与任务，
+  代理执行此类操作前必须先与用户确认。
 - **端口不要硬编码进 dsh 侧配置**：trustedHosts 固化用**无端口 host**（任意端口放行），
   改端口只动 `dsh web --port`，与 dsh 配置解耦。
 - **同一端口无法同时收 HTTP 与 HTTPS**（服务通性）：「http 自动跳 https」只能另开端口，
@@ -220,8 +215,8 @@ git pull --rebase && git push
 - **局域网访问优先整体上 HTTPS，不要逐个打 polyfill**：明文 HTTP 是非安全上下文，
   `crypto.randomUUID` 等浏览器 API 不可用；`dsh web` 默认直接 HTTPS（0.0.0.0:3080，
   纯 JS 自签证书，也可在访问门禁卡上传自有证书）+ `--trusted-host` 一次解决，而非逐个补丁。
-- **⚠ 打包测试必须与正式实例隔离**：验证实例用独立 `DSH_HOME` + 独立端口（非 **3080**），
-  与正式实例（**3080**）完全隔离；禁止 pkill -f 模糊匹配。
+- **⚠ 全局安装会替换当前运行版本**：`npm i -g ./dist/npm/*.tgz` 后需重启 `dsh web` 才生效，
+  验收时逐项做插件存在性冒烟；禁止 pkill -f 模糊匹配杀进程。
 - **用户偏好**：首次启动**绝不自动生成/打印任何随机口令**，只提示用户自己设置；按钮少而精。
 - **插件配置入口规范**：一律用「设置 → 插件 → 插件配置」区独立卡片（`settings.plugin.item`，
   样式同官方「网页搜索」卡片），禁止独立标签页（见 [docs/开发规范.md §2.5](docs/开发规范.md)）。
