@@ -47,15 +47,25 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 /** Locale namespace of this plugin's dictionaries. */
 const NS = 'mobile-adapt'
 
-let mql: MediaQueryList = window.matchMedia(`(max-width: ${String(MOBILE_ADAPT_DEFAULTS.breakpoint)}px)`)
+let mql: MediaQueryList | null = null
 /** Current narrow threshold in px — settings-driven, drives the matchMedia rebuild. */
 let narrowPx: number = MOBILE_ADAPT_DEFAULTS.breakpoint
 /** Master switch from settings; off disables every narrow-screen behavior. */
 let enabledFlag = true
 
+/** Lazily build the narrow media query — module-eval time has no window in
+ *  some loader/test environments, so nothing browser-shaped runs at import. */
+function query(): MediaQueryList {
+  if (mql === null) {
+    mql = window.matchMedia(`(max-width: ${String(narrowPx)}px)`)
+    mql.addEventListener('change', onMediaChange)
+  }
+  return mql
+}
+
 /** The effective narrow verdict: the media query alone is not authoritative. */
 function isNarrow(): boolean {
-  return enabledFlag && mql.matches
+  return enabledFlag && query().matches
 }
 
 let frame: HTMLElement | null = null
@@ -115,9 +125,9 @@ function applySettings(cfg: Required<Config>): void {
 
 /** Rebuild the narrow media query for a new breakpoint (no-op when unchanged). */
 function rebuildNarrowQuery(px: number): void {
-  if (narrowPx === px) return
+  if (narrowPx === px && mql !== null) return
   narrowPx = px
-  mql.removeEventListener('change', onMediaChange)
+  mql?.removeEventListener('change', onMediaChange)
   mql = window.matchMedia(`(max-width: ${String(px)}px)`)
   mql.addEventListener('change', onMediaChange)
   onMediaChange()
@@ -479,15 +489,13 @@ function scheduleNarrow(): void {
 /** 安装并返回清理函数（供 ctx.effect 使用）。 */
 function install(): () => void {
   disposed = false
+  query()
   applyNarrow()
 
-  mql.addEventListener('change', onMediaChange)
-
-  // 观察 frame 出现/样式变化（aionui 会重写 grid，需持续覆盖）；
-  // 回调经 scheduleNarrow 做 rAF 合并 + 桌面稳态短路
+  // query() 创建时已挂 change 监听；观察 frame 出现/样式变化（aionui 会
+  // 重写 grid，需持续覆盖）；回调经 scheduleNarrow 做 rAF 合并 + 桌面稳态短路
   bodyObserver = new MutationObserver(scheduleNarrow)
   bodyObserver.observe(document.body, { childList: true, subtree: true })
-
   const f = findFrame()
   if (f !== null) {
     styleObserver = new MutationObserver(scheduleNarrow)
@@ -503,7 +511,8 @@ function install(): () => void {
 
   return () => {
     disposed = true
-    mql.removeEventListener('change', onMediaChange)
+    mql?.removeEventListener('change', onMediaChange)
+    mql = null
     if (bodyObserver !== null) bodyObserver.disconnect()
     if (styleObserver !== null) styleObserver.disconnect()
     if (expObserver !== null) expObserver.disconnect()
