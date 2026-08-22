@@ -25,6 +25,16 @@ npm i -g ./dist/npm/*.tgz                      # 全局安装（体验同 npx @d
 dsh web                                        # 起实例验收
 ```
 
+**开发迭代用快路径，最终验收才走上面的慢路径**：
+
+```bash
+pnpm run dev:web                               # watch：前端产物（各包 lib/client.js + web bundle）增量重建，实例热重载
+pnpm run dsh -- web                            # tsx 直跑源码起实例（= node --import tsx/esm apps/cli/src/bin.ts）
+```
+
+- 快路径前提：先跑过一次 `pnpm run build`（dev:web 增量基于既有产物，不能自举）；`dev:web` 与 `pnpm run build` 互斥，不得同时跑。
+- 快路径只用于开发调试；「完成定义」里的验收仍必须走慢路径（打包 → 全局安装 → 起实例逐项实测），因为快路径跳过了 tarball 打包环节（如 `files` 清单漏资源这类只有打包后才暴露的问题）。
+
 ## 协作规则
 
 ## 设计文档是唯一事实来源
