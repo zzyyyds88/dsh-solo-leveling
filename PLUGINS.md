@@ -14,7 +14,7 @@
 |---|---|---|
 | `dsh-host-access-gate` + `dsh-client-ui-access-gate` | host / client | **访问门禁**：登录门闸（首次 `/setup` 设口令、会话 Cookie + 限速、`access-gate` 口令命名空间）+「设置 → 插件 → 插件配置 → 访问门禁」卡片（改口令 + HTTPS 证书方式：自动自签 / 上传自有证书） |
 | `dsh-defaults` + `dsh-client-ui-defaults` | settings / client | 默认工作目录 / 默认重试次数的设置命名空间 +「默认值」卡片 |
-| `dsh-client-ui-mobile-adapt` | client | **手机端适配**：窄屏聊天区占满全宽、右侧面板变抽屉（含遮罩关闭）、输入框 16px 防 iOS 缩放、虚拟键盘避让（输入卡可滚到键盘上方、桌宠让位）、桌宠缩小让位 |
+| `dsh-client-ui-mobile-adapt` | client | **手机端适配**：窄屏聊天区占满全宽、右侧面板变抽屉（含遮罩关闭）、输入框 16px 防 iOS 缩放、虚拟键盘避让（输入卡可滚到键盘上方、桌宠让位）、桌宠缩小让位；「移动端适配」设置卡可调总开关/断点/三个抽屉宽度/桌宠缩放（保存即生效） |
 | `dsh-client-ui-pet` | client | **网页桌宠**：随任务/工具/上下文/活跃会话切换表情，WebAudio 音效（基础+附加分组）、edge-tts 离线语音、账房 token 统计、纸屑庆祝 |
 | `dsh-client-ui-task-board` | client | **任务看板**：五列 + cron 定时跑 + 真实会话执行 |
 | `dsh-client-ui-live-stats` | client | **实时令牌统计**：TPS / LLM 耗时 / 上下文 / 缓存命中 / 输入输出 token |
@@ -63,5 +63,5 @@
 
 - fork 保留/弃用与重 base 口径：见 [docs/升级适配指南.md](docs/升级适配指南.md)。
 - 可调参数一律进「设置 → 插件 → 插件配置」卡片（AGENTS.md 红线 8）；手机端适配的
-  断点 / 抽屉宽度 / 桌宠缩放目前仍硬编码在 CSS 中，设置卡待补（见
-  [docs/整合迁移路线图.md §7](docs/整合迁移路线图.md) 开放项）。
+  断点 / 抽屉宽度 / 桌宠缩放已通过「移动端适配」卡片暴露（2026-08-22 补齐，
+  含总开关，保存即生效）。

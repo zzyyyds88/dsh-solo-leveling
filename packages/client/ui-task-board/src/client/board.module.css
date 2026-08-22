@@ -891,3 +891,36 @@ html[data-dsh-taskboard-active]:not([data-dsh-ssh-active]) [class*='centerCol'] 
     animation: none;
   }
 }
+
+/* --- narrow screens: horizontal-scroll kanban ---------------------------------
+   五列在手机上会压缩成 ~70px 的不可读窄条；改为列定宽 + 横向滚动 +
+   滚动吸附，列/卡视觉与桌面完全一致，桌面布局不受影响。 */
+@media (max-width: 768px) {
+  .board {
+    padding: 10px 12px 12px;
+    gap: 10px;
+  }
+
+  .boardHeader {
+    flex-wrap: wrap;
+  }
+
+  .search {
+    flex: 1 1 100%;
+  }
+
+  .columns {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .column {
+    flex: 0 0 min(78vw, 264px);
+    scroll-snap-align: start;
+  }
+}

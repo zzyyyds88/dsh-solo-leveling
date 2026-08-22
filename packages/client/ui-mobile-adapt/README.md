@@ -30,17 +30,23 @@ Desktop layout stays untouched. On viewports ≤ 768 px the plugin:
   scroll;
 - scales the pet down and tucks it into a corner, hiding it while a modal is open.
 
-The host half injects the narrow-screen CSS through `webServer.tapIndex`; the
-browser half (`./client`) stamps `data-dshm-role` on the frame columns, drives
-the drawer/scrim/menu behavior and the grid override via `data-dshm-narrow` on
-the frame. It deliberately uses `data-*` attributes rather than `classList`,
-because React rewrites `className` and a `MutationObserver` on it forms a
-feedback loop that kills the renderer.
+The host half registers the `mobile-adapt` settings section and taps the
+default-breakpoint CSS into index.html through `webServer.tapIndex` (no flash
+before the browser bundle loads); the browser half (`./client`) stamps
+`data-dshm-role` on the frame columns, drives the drawer/scrim/menu behavior
+and the grid override via `data-dshm-narrow` on the frame, renders the
+plugin-config card, and takes over the stylesheet when the configured
+breakpoint or master switch deviates from the defaults. It deliberately uses
+`data-*` attributes rather than `classList`, because React rewrites
+`className` and a `MutationObserver` on it forms a feedback loop that kills
+the renderer.
 
 ## Model Experience
 
-No model-visible effect: this is a browser-only presentation layer. It emits no
-cordis events, registers no tools or settings, and reads no session data.
+No model-visible effect: this is a browser-only presentation layer. It emits
+no cordis events, registers no tools, and reads no session data. The one
+host-side surface is the `mobile-adapt` settings namespace behind the
+user-facing plugin-config card.
 
 ## Known Limitations and Deferred Work
 
@@ -51,5 +57,7 @@ cordis events, registers no tools or settings, and reads no session data.
 - The maid-atelier skin pins `--maid-sidebar-width` to `0` on mobile (see the
   skin's own mobile media query) because the sidebar is a drawer there, not a
   permanent column; other skins are unaffected.
-- Tunables (breakpoint, drawer widths, pet scale) are still hardcoded; the
-  settings card is a tracked open item (roadmap section 7).
+- Tunables (master switch, breakpoint, drawer widths, pet scale) live in the
+  `mobile-adapt` settings namespace and edit through the "Mobile adaptation"
+  plugin-config card; saving takes effect immediately (widths via CSS
+  variables, breakpoint/master switch via a stylesheet rebuild).

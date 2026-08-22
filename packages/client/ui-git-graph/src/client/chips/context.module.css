@@ -711,3 +711,36 @@
     transition: none;
   }
 }
+
+/* --- narrow screens ------------------------------------------------------------
+   手机上对话框占满可用视口（100dvh 跟随地址栏收放），提交行收掉短哈希
+   把宽度让给主题与分支引用；桌面布局不变。本模块 .dialog 为图谱与
+   新建分支两个弹窗共用。 */
+@media (max-width: 768px) {
+  .dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 24px);
+    padding: 12px 10px 10px;
+  }
+
+  .dialogHeader {
+    padding: 0 2px;
+  }
+
+  .graphBody {
+    padding: 2px;
+  }
+
+  .graphRow {
+    gap: 8px;
+    padding: 7px 6px;
+  }
+
+  .graphOid {
+    display: none;
+  }
+
+  .graphSubject {
+    font-size: 12px;
+  }
+}

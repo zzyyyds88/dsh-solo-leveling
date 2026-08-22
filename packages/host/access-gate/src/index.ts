@@ -279,13 +279,22 @@ const PAGE_STYLE = `
   .error { display: none; margin-top: 16px; padding: 10px 12px; border-radius: 11px;
            background: rgba(255,80,80,.16); border: 1px solid rgba(255,80,80,.42); color: #ffb8b8; font-size: 13px; line-height: 1.5; }
   .foot { margin-top: 26px; text-align: left; color: rgba(212,222,242,.55); font-size: 12px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+  /* 手机：允许滚动（键盘弹起时卡片可滚入可视区）、safe center 防裁切、
+     16px 输入防 iOS 聚焦缩放；视觉不变 */
+  @media (max-width: 768px) {
+    body { overflow-y: auto; align-items: safe center; min-height: 100dvh; }
+    .card { padding: 28px 20px 22px; }
+    h1 { font-size: 18px; }
+    input { font-size: 16px; }
+    button { letter-spacing: 2px; }
+  }
 `
 /** Login page (normal mode), blue liquid glass. */
 const LOGIN_PAGE = `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DeepSeek Harness · 登录</title>
 <style>${PAGE_STYLE}</style>
 </head>
@@ -321,7 +330,7 @@ const SETUP_PAGE = `<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DeepSeek Harness · 首次设置</title>
 <style>${PAGE_STYLE}</style>
 </head>
