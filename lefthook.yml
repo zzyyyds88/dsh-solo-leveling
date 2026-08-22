@@ -34,6 +34,26 @@ pre-commit:
     - name: whitespace (staged)
       run: git diff --cached --check
 
+    # Post-edit validation signal (better-harness F-1): route the staged diff
+    # to its dependent unit specs BEFORE the commit, instead of relying on the
+    # post-hoc CI matrix. `vitest related` resolves the dependency graph from
+    # the staged files to the specs that cover them; --passWithNoTests keeps
+    # doc/config-only commits fast. The web browser lane owns its own config
+    # (apps/web/tests needs the built dist) and stays out of this hook.
+    - name: affected tests (staged)
+      glob: '{packages,apps,vendor,scripts}/**/*.{ts,tsx,mts,cts}'
+      exclude:
+        - 'vendor/*/src/**'
+        - 'apps/web/tests/**'
+      run: node_modules/.bin/vitest related --run --passWithNoTests --reporter dot {staged_files}
+
+    # Runtime inject declarations are commit-time checked (better-harness F-2):
+    # a client plugin that uses ctx.<service> without declaring it in its
+    # exported inject list crashes only at browser boot otherwise.
+    - name: client inject declarations (staged)
+      glob: 'packages/client/**/*.{ts,tsx}'
+      run: node_modules/.bin/tsx scripts/verify-client-inject-declarations.ts
+
     - name: vendor manifest guard
       run: scripts/check-vendor-manifest.sh
 

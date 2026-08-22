@@ -1,5 +1,7 @@
 // Shared plumbing for the web smoke tests (dist location, free port, failure shots).
 import { existsSync, mkdirSync } from 'node:fs'
+import { request as httpRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,17 +20,25 @@ export const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 export const ZH_BROWSER_LOCALE = 'zh-CN'
 
 /**
+ * The one password every test scenario uses when the access gate must stay
+ * on (docs/开发规范.md §2.3): `DSH_ACCESS_GATE_PASSWORD=<this>` for spawned
+ * hosts, the same value typed into the login page. Never invent another.
+ */
+export const TEST_ACCESS_GATE_PASSWORD = 'test123456'
+
+/**
  * Open the standard browser-test page advertising English before client boot.
  * This keeps role locators and goldens deterministic while leaving the Host
  * settings document free to override the provisional browser-derived locale;
  * scenarios asserting the Chinese surface advertise
- * {@link ZH_BROWSER_LOCALE} instead.
+ * {@link ZH_BROWSER_LOCALE} instead. ignoreHTTPSErrors stays on for the
+ * fork's self-signed `dsh web` TLS default; it is inert on plain-http lanes.
  * @param browser - Playwright browser owning the page.
  * @param height - Viewport height; width is fixed to the lane baseline.
  * @returns the initialized page.
  */
 export async function newEnglishPage(browser: Browser, height = 1000): Promise<Page> {
-  return await browser.newPage({ viewport: { width: 1680, height }, locale: 'en-US' })
+  return await browser.newPage({ viewport: { width: 1680, height }, locale: 'en-US', ignoreHTTPSErrors: true })
 }
 
 /** Fail loud on a stale checkout instead of testing yesterday's bundle. */
@@ -51,6 +61,54 @@ export function probeFreePort(): Promise<number> {
       }
       probe.close(() => { resolvePort(address.port) })
     })
+  })
+}
+
+/** One probe response from {@link testHttpProbe}. */
+export interface TestHttpResponse {
+  /** HTTP status code. */
+  status: number
+  /** Location header (redirect probes). */
+  location: string | undefined
+  /** Response body text. */
+  body: string
+}
+
+/**
+ * Test-only HTTP probe that tolerates the fork's self-signed TLS: `dsh web`
+ * defaults to auto self-signed HTTPS, which Node's native fetch rejects
+ * (DEPTH_ZERO_SELF_SIGNED_CERT). Browser pages ride Playwright's
+ * ignoreHTTPSErrors instead; this is for the Node-side assertions.
+ * @param url - absolute http(s) URL of the spawned test host.
+ * @param options - method/headers/body; defaults to a plain GET.
+ * @returns status, redirect location, and body text.
+ */
+export function testHttpProbe(
+  url: string,
+  options: { method?: string; headers?: Record<string, string>; body?: string } = {},
+): Promise<TestHttpResponse> {
+  return new Promise((resolveProbe, reject) => {
+    const target = new URL(url)
+    const request = target.protocol === 'https:' ? httpsRequest : httpRequest
+    const req = request(target, {
+      method: options.method ?? 'GET',
+      headers: options.headers,
+      rejectUnauthorized: false,
+    }, (res) => {
+      let body = ''
+      res.setEncoding('utf8')
+      res.on('data', (chunk: string) => { body += chunk })
+      res.on('end', () => {
+        resolveProbe({
+          status: res.statusCode ?? 0,
+          location: res.headers.location,
+          body,
+        })
+      })
+    })
+    req.on('error', reject)
+    if (options.body !== undefined) req.write(options.body)
+    req.end()
   })
 }
 

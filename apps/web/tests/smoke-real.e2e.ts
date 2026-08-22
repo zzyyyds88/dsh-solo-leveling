@@ -25,7 +25,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot } from './support.ts'
+import { REPO_ROOT, connectFreshWorkspace, newEnglishPage, probeFreePort, requireDist, saveFailureShot, testHttpProbe } from './support.ts'
 
 const WEB_SURFACE_PROMPT = fileURLToPath(new URL('./snapshots/web-runtime-context/web-surface-prompt.expected.md', import.meta.url))
 
@@ -35,7 +35,7 @@ function waitForReadyLine(child: ChildProcess): Promise<string> {
     const timer = setTimeout(() => { reject(new Error(`dsh web not ready in 90s; output:\n${out}`)) }, 90_000)
     const onData = (chunk: Buffer): void => {
       out += chunk.toString()
-      const match = /dsh web: (http:\/\/[^\s]+)/.exec(out)
+      const match = /dsh web: (https?:\/\/[^\s]+)/.exec(out)
       if (match?.[1] !== undefined) {
         clearTimeout(timer)
         resolveReady(match[1])
@@ -51,7 +51,9 @@ function waitForReadyLine(child: ChildProcess): Promise<string> {
 }
 
 async function rpc<T>(baseUrl: string, method: string, payload: unknown): Promise<T> {
-  const response = await fetch(`${baseUrl}/api/${method}`, {
+  // testHttpProbe instead of native fetch: the fork defaults `dsh web` to auto
+  // self-signed HTTPS, which Node fetch rejects (DEPTH_ZERO_SELF_SIGNED_CERT).
+  const response = await testHttpProbe(`${baseUrl}/api/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -61,8 +63,8 @@ async function rpc<T>(baseUrl: string, method: string, payload: unknown): Promis
       payload,
     }),
   })
-  if (!response.ok) throw new Error(`${method} failed over HTTP ${response.status}: ${await response.text()}`)
-  const body = await response.json() as {
+  if (response.status !== 200) throw new Error(`${method} failed over HTTP ${response.status}: ${response.body}`)
+  const body = JSON.parse(response.body) as {
     result: { ok: true; value: T } | { ok: false; error: { code: string; message: string } }
   }
   if (!body.result.ok) throw new Error(`${method} failed: ${body.result.error.code}: ${body.result.error.message}`)
@@ -166,6 +168,10 @@ describe('dsh web keyless CLI smoke', () => {
         env: {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-no-call',
+          // Fork divergence: the shipped access gate boots to a first-run
+          // password setup on an empty DSH_HOME; these scenarios exercise the
+          // composition, not the gate (docs/开发规范.md §2.3).
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(sessionsDir, '.dsh'),
           DSH_AGENTS_HOME: join(sessionsDir, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -175,8 +181,8 @@ describe('dsh web keyless CLI smoke', () => {
     )
     try {
       const readyUrl = await waitForReadyLine(child)
-      expect(readyUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
-      expect((await fetch(readyUrl)).status).toBe(200)
+      expect(readyUrl).toMatch(/^https:\/\/127\.0\.0\.1:\d+$/)
+      expect((await testHttpProbe(readyUrl)).status).toBe(200)
     } finally {
       const closed = child.exitCode === null
         ? new Promise<void>((resolveClose) => { child.once('close', () => { resolveClose() }) })
@@ -233,6 +239,7 @@ describe('dsh web keyless CLI smoke', () => {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-workspace',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -346,6 +353,7 @@ describe('dsh web keyless CLI smoke', () => {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-web-retry',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
         },
@@ -429,6 +437,7 @@ describe('dsh web keyless CLI smoke', () => {
           DEEPSEEK_API_KEY: 'keyless-web-code-mode',
           DEEPSEEK_BASE_URL: `http://127.0.0.1:${address.port}`,
           DSH_TOOLS_MODE: 'code',
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(workspace, '.dsh'),
           DSH_AGENTS_HOME: join(workspace, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
@@ -498,6 +507,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY || notReady.length > 0)('web smoke
         cwd: sessionsDir,
         env: {
           ...process.env,
+          DSH_ACCESS_GATE_MODE: 'off',
           DSH_HOME: join(sessionsDir, '.dsh'),
           DSH_AGENTS_HOME: join(sessionsDir, '.agents'),
           TSX_TSCONFIG_PATH: join(REPO_ROOT, 'tsconfig.json'),
