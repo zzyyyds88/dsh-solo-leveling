@@ -4,7 +4,7 @@
 > 所有自研/收录插件已迁入 `packages/<group>/<pkg>/`（包名 `@deepseek-ai/dsh-*`），
 > 按官方分组命名并装配进 `packages/bundle/*/cordis.patch.yml`，`pnpm run build` 后
 > `dsh web` 一装全有，不再走「旧目录 + profile 挂载」老路。fork 逐项映射见
-> [docs/升级适配指南.md](docs/升级适配指南.md)。
+> [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)。
 
 ## 1. 正在使用的插件
 
@@ -26,7 +26,7 @@
 
 > 8 个同名 fork（webserver / apiproxy / connection / ui-settings / directory-picker-browse /
 > llm / llm-deepseek / llm-pi-ai）已重 base 到 rc.2 对应包源码，保留/弃用现状见
-> [docs/升级适配指南.md §2](docs/升级适配指南.md)。
+> [docs/工作区/升级适配指南.md §2](docs/工作区/升级适配指南.md)。
 
 ### 1.2 已退役的旧部署形态（git 历史可见，不再维护）
 
@@ -61,7 +61,7 @@
 打包后全局安装（`npm i -g ./dist/npm/*.tgz`）起实例验收，停/起/重装前先与用户确认。
 详见 [AGENTS.md](AGENTS.md) 红线。
 
-- fork 保留/弃用与重 base 口径：见 [docs/升级适配指南.md](docs/升级适配指南.md)。
+- fork 保留/弃用与重 base 口径：见 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)。
 - 可调参数一律进「设置 → 插件 → 插件配置」卡片（AGENTS.md 红线 5）；手机端适配的
   断点 / 抽屉宽度 / 桌宠缩放已通过「移动端适配」卡片暴露（2026-08-22 补齐，
   含总开关，保存即生效）。

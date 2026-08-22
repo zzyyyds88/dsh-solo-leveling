@@ -449,7 +449,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // deployments; the hermetic e2e lane boots keyless on 127.0.0.1 and never
     // authenticates, so force the gate off here (the shipped web-app bundle
     // defaults it on, which would redirect every page to /setup). Restored
-    // after the rc.8 rebase dropped it (docs/开发规范.md §2.3).
+    // after the rc.8 rebase dropped it (docs/工作区/开发规范.md §2.3).
     { id: 'access-gate', config: { mode: 'off' } },
     // The bundle's web-runtime row resolves the same built dist under test
     // (apps/web IS @deepseek-ai/dsh-web-frontend); native browser opening and the

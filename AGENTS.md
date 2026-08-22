@@ -11,10 +11,10 @@
 ## 红线（违反即失败，无例外）
 
 1. **绝不直接改产物。** 禁止修改 node_modules / 安装包里的文件（lib/*.js 等）。改插件 = 改源码（src/）→ `pnpm run build` → 本地打包验证。插件源码由用户掌握改造方向，动手前先确认改造方案。
-2. **改 harness 源码，不碰产物。** 本仓库已 fork 官方源码：自研/收录能力一律以 **第一方包**形式整合进 `packages/<group>/<pkg>/`（包名 `@deepseek-ai/dsh-*`），**不再**走「`@deepseek-ai/*` 同包名覆盖 fork + 脚本铺 profile」的旧路（该路已被本 fork 取代）。fork 逐项映射见 [docs/升级适配指南.md §2](docs/升级适配指南.md)；新插件装配点见 `packages/client/AGENTS.md` 与 `apps/cli/composition.md`。
+2. **改 harness 源码，不碰产物。** 本仓库已 fork 官方源码：自研/收录能力一律以 **第一方包**形式整合进 `packages/<group>/<pkg>/`（包名 `@deepseek-ai/dsh-*`），**不再**走「`@deepseek-ai/*` 同包名覆盖 fork + 脚本铺 profile」的旧路（该路已被本 fork 取代）。fork 逐项映射见 [docs/工作区/升级适配指南.md §2](docs/工作区/升级适配指南.md)；新插件装配点见 `packages/client/AGENTS.md` 与 `apps/cli/composition.md`。
 3. **升级重 base 不得静默丢定制。** 同步上游新版文件后，必须用 `git diff` 逐文件核对「- 方向」没有删掉 fork 定制行——装配/启动类文件（`cordis.patch.yml`、composition、preset、`apps/cli` 与 `packages/bundle/web-app` 的启动接线）尤其要单独过一遍；最后起实例做插件存在性冒烟验证，不能只靠构建与单测全绿。
 4. **不创建散落文件。** 仓库根即 harness monorepo：`packages/`、`apps/`、`vendor/`、`website/`、`python/`、`native/`、`examples/` 等是 harness 结构，不得另建散落目录。自研/收录插件按官方分组迁入 `packages/<group>/<pkg>/`。工作区运维文件（`docs/`、`scripts/`）保持在根；临时文件用完即删，不留仓库。
-5. **一切可调参数必须进「设置 → 插件 → 插件配置」卡片，禁止固化。** 整合包内今后新增的任何插件，凡有可调参数（阈值、尺寸、端点、次数、开关等）都必须通过「设置 → 插件 → 插件配置」区的独立卡片（`settings.plugin.item`，样式同官方「网页搜索」卡片）暴露出来、即时生效，**绝不允许把参数硬编码进源码/样式/资源**。配置口径见 [docs/开发规范.md §2.5](docs/开发规范.md)；需要默认值时在 schema 里给默认值（如 `dsh-defaults`），由设置卡覆盖，而非写死在代码里。
+5. **一切可调参数必须进「设置 → 插件 → 插件配置」卡片，禁止固化。** 整合包内今后新增的任何插件，凡有可调参数（阈值、尺寸、端点、次数、开关等）都必须通过「设置 → 插件 → 插件配置」区的独立卡片（`settings.plugin.item`，样式同官方「网页搜索」卡片）暴露出来、即时生效，**绝不允许把参数硬编码进源码/样式/资源**。配置口径见 [docs/工作区/开发规范.md §2.5](docs/工作区/开发规范.md)；需要默认值时在 schema 里给默认值（如 `dsh-defaults`），由设置卡覆盖，而非写死在代码里。
 
 ## 打包 / 验证速查（整合包）
 
@@ -29,7 +29,7 @@ dsh web                                        # 起实例验收
 
 ## 设计文档是唯一事实来源
 
-- [docs/开发规范.md](docs/开发规范.md)、[docs/升级适配指南.md](docs/升级适配指南.md)、[docs/整合迁移路线图.md](docs/整合迁移路线图.md) 是当前有效的产品与技术设计基线；本文件（红线）对代理行为约束的权威性高于三者。
+- [docs/工作区/开发规范.md](docs/工作区/开发规范.md)、[docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)、[docs/工作区/整合迁移路线图.md](docs/工作区/整合迁移路线图.md) 是当前有效的产品与技术设计基线；本文件（红线）对代理行为约束的权威性高于三者。
 - 代码、测试、配置与设计文档冲突时，以当前设计文档为准；发现冲突后应立即修正。
 - 历史实施记录（如 plans/、research/）只用于追溯，不得覆盖当前设计。
 - `apps/cli/reference/` 中的内容仅供调研参考，不属于本项目规范，也不作为实现依据。
@@ -86,7 +86,7 @@ dsh web                                        # 起实例验收
 
 ## 工作流速查
 
-0. **开发必须遵从 [docs/开发规范.md](docs/开发规范.md)**（上游官方要点 + 本工作区约定 + 完成定义），官方开发基础见 <https://deepseek-harness.github.io/deepseek-harness/develop/basic/>。**插件配置入口一律用「设置 → 插件 → 插件配置」区独立卡片（`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页**，详见开发规范 §2.5。**DSH 官方升级适配必须遵从 [docs/升级适配指南.md](docs/升级适配指南.md)**：铁律「**官方新版已实现与本仓库相同功能 → 优先用官方、弃用对应 fork/适配层**」，保留的 fork 必须重 base 到新版官方源码，详见该指南 §2 清单与 §3 流程。
+0. **开发必须遵从 [docs/工作区/开发规范.md](docs/工作区/开发规范.md)**（上游官方要点 + 本工作区约定 + 完成定义），官方开发基础见 <https://deepseek-harness.github.io/deepseek-harness/develop/basic/>。**插件配置入口一律用「设置 → 插件 → 插件配置」区独立卡片（`settings.plugin.item`，样式同官方「网页搜索」卡片），禁止独立标签页**，详见开发规范 §2.5。**DSH 官方升级适配必须遵从 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)**：铁律「**官方新版已实现与本仓库相同功能 → 优先用官方、弃用对应 fork/适配层**」，保留的 fork 必须重 base 到新版官方源码，详见该指南 §2 清单与 §3 流程。
 1. 先调研：`dsh-plugin` 主题 / awesome-dsh-plugin / Oh-My-DSH 找现成方案；开发基础以 <https://deepseek-harness.github.io/deepseek-harness/develop/basic/> 为准。
 2. 每个项目：定位链路（前端 bundle 实时读盘刷新即生效；后端插件需重启）→ 实施 → 语法校验（`node --check`）→ **本地打包验证** → 记录变更/回退。
 3. 整合插件时读 `packages/README.md`（分组规范、包名 `@deepseek-ai/dsh-*`、层级表）与 `packages/client/AGENTS.md`（新插件 checklist）；迁移前先读懂 `apps/cli/composition.md` 与 `packages/preset/` 确定装配点。
@@ -107,7 +107,7 @@ dsh web                                        # 起实例验收
 
 - 本仓库基线 = deepseek-harness `dsh-v0.1.1-rc.2`（已平铺仓库根；上一基线 `dsh-v0.1.0-rc.8`）；**不跟随官方更新**，自维护基线；所有 workspace 包版本号带 `-local.1` 本地后缀（如 `0.1.1-rc.2-local.1`）防 npm 安装被官方包覆盖。
 - vendored packages are rescoped ([mapping](docs/rescope.md)) and `private: true`. `@deepseek-ai/cordis` is a peerDependency (+ dev) of every harness package.
-- 整合迁移铁律：**官方 rc.2 已实现同功能 → 优先用官方、弃用对应 fork/适配层**；保留的 fork 必须重 base 到 rc.2 源码（见 [docs/升级适配指南.md](docs/升级适配指南.md)）。
+- 整合迁移铁律：**官方 rc.2 已实现同功能 → 优先用官方、弃用对应 fork/适配层**；保留的 fork 必须重 base 到 rc.2 源码（见 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)）。
 - 平台支持：Linux / Windows / Termux（Android）三平台均可构建打包运行；打包脚本有跨平台 node（`scripts/package-npm.mjs`）与 bash（`scripts/package-npm.sh`）两个版本。
 - 构建入口：`pnpm install && pnpm run build`；打包 `node scripts/package-npm.mjs`；验证走全局安装（`npm i -g ./dist/npm/*.tgz` → `dsh web`）。
 - 皮肤中心只保留 **maid-atelier（Abyssal Maid Atelier）**，其余皮肤源码已删除。

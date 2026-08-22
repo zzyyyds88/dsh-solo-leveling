@@ -21,7 +21,7 @@ export const ZH_BROWSER_LOCALE = 'zh-CN'
 
 /**
  * The one password every test scenario uses when the access gate must stay
- * on (docs/开发规范.md §2.3): `DSH_ACCESS_GATE_PASSWORD=<this>` for spawned
+ * on (docs/工作区/开发规范.md §2.3): `DSH_ACCESS_GATE_PASSWORD=<this>` for spawned
  * hosts, the same value typed into the login page. Never invent another.
  */
 export const TEST_ACCESS_GATE_PASSWORD = 'test123456'

@@ -2,7 +2,7 @@
 // protected deployment sealed until the right password arrives. Fork
 // divergence coverage: upstream has no gate, so no upstream scenario exists.
 // The test password is the workspace-wide constant test123456
-// (docs/开发规范.md §2.3 — never invent another). Zero model calls: the
+// (docs/工作区/开发规范.md §2.3 — never invent another). Zero model calls: the
 // scenario spawns a real `dsh web` on a keyless credential and drives the
 // gate's plain-HTML login page plus its API seal in a real chromium.
 import type { ChildProcess } from 'node:child_process'
@@ -58,7 +58,7 @@ describe('web e2e: access gate login', () => {
         env: {
           ...process.env,
           DEEPSEEK_API_KEY: 'keyless-gate-no-call',
-          // The workspace-wide test password (docs/开发规范.md §2.3).
+          // The workspace-wide test password (docs/工作区/开发规范.md §2.3).
           DSH_ACCESS_GATE_PASSWORD: TEST_ACCESS_GATE_PASSWORD,
           DSH_HOME: join(world, '.dsh'),
           DSH_AGENTS_HOME: join(world, '.agents'),

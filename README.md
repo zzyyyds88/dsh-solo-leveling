@@ -31,7 +31,7 @@ English | [中文](README.zh.md)
 | 三平台适配（Linux / Windows / Termux）+ 跨平台打包脚本 | ✅ 完成 |
 | 同步更新工作区文档（AGENTS / PLUGINS / 路线图 / 组 README） | ✅ 完成 |
 
-fork 逐项映射与升级适配见 [docs/升级适配指南.md](docs/升级适配指南.md)。
+fork 逐项映射与升级适配见 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)。
 
 ## 目录结构
 
