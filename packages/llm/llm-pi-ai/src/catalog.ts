@@ -177,26 +177,6 @@ export function catalogProviderIds(): readonly string[] {
 }
 
 /**
- * Whether the installed catalog provider for one route declares an api-key
- * method — the only authentication this adapter obtains on its own.
- *
- * A key is what the harness resolves through its own credential seam and hands
- * pi-ai per request. pi-ai's other method, OAuth, resolves from a *stored*
- * OAuth credential alone: `resolveProviderAuth` has no ambient path for it,
- * this adapter builds its `Models` collection with no credential store, and
- * nothing here runs a login flow. So a provider offering OAuth by itself
- * leaves nothing for this adapter to authenticate with, and the posture such a
- * provider invites — no key configured, credentials discovered by the provider
- * — fails every request with `Provider is not configured`.
- * @param provider - provider route key.
- * @returns whether the catalog provider takes an api key; false for a route
- *   pi-ai does not ship, which the caller answers for separately.
- */
-export function catalogProviderTakesApiKey(provider: string): boolean {
-  return catalogProvider(provider)?.auth.apiKey !== undefined
-}
-
-/**
  * The installed catalog models for one route, indexed by model id.
  * @param provider - provider route key.
  * @returns catalog models by id; empty for a route pi-ai does not ship.
@@ -648,23 +628,6 @@ interface ModelReasoning {
 }
 
 /**
- * Resolve one model's reasoning capability from its declared efforts.
- *
- * A declared dict translates to pi-ai's `thinkingLevelMap` with every level
- * decided explicitly: declared levels carry their wire spelling, undeclared
- * levels are pinned to `null` (unsupported). Pinning matters because pi-ai's
- * own defaulting is asymmetric — an absent key means "supported" for the five
- * base levels but "unsupported" for `xhigh`/`max` — and a profile author
- * should not need to know that. A declared `off` with no value is the one
- * exception: it stays absent from the map, which pi-ai reads as "supported,
- * send nothing" — the correct dispatch where not thinking is the parameter's
- * absence — while `off` with a value sends that value.
- * @param provider - provider route key, for diagnostics.
- * @param entry - the configured model entry.
- * @param base - the installed catalog entry of the same id, when one exists.
- * @returns the reasoning fields the materialized model carries.
- */
-/**
  * The reasoning-dispatch map a hand-declared OpenAI-compatible model carries
  * when it names no `reasoningEfforts`. Fork restoration: the integration
  * serves third-party endpoints, and a hand-written model has no catalog entry
@@ -679,6 +642,24 @@ export const DEFAULT_HAND_DECLARED_THINKING_LEVEL_MAP: ThinkingLevelMap = Object
   high: 'high',
 })
 
+/**
+ * Resolve one model's reasoning capability from its declared efforts.
+ *
+ * A declared dict translates to pi-ai's `thinkingLevelMap` with every level
+ * decided explicitly: declared levels carry their wire spelling, undeclared
+ * levels are pinned to `null` (unsupported). Pinning matters because pi-ai's
+ * own defaulting is asymmetric — an absent key means "supported" for the five
+ * base levels but "unsupported" for `xhigh`/`max` — and a profile author
+ * should not need to know that. A declared `off` with no value is the one
+ * exception: it stays absent from the map, which pi-ai reads as "supported,
+ * send nothing" — the correct dispatch where not thinking is the parameter's
+ * absence — while `off` with a value sends that value.
+ * @param provider - provider route key, for diagnostics.
+ * @param entry - the configured model entry.
+ * @param base - the installed catalog entry of the same id, when one exists.
+ * @param api - the model's wire protocol, used for the hand-declared fallback.
+ * @returns the reasoning fields the materialized model carries.
+ */
 function resolveModelReasoning(
   provider: string,
   entry: PiAiModelProfile,

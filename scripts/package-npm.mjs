@@ -6,7 +6,7 @@
  * （等价于 scripts/package-npm.sh，但用 Node 实现，Windows/Termux 也能跑）。
  *
  * 版本策略（关键）：本仓库所有 workspace 包版本号均带 `-local.1` 本地后缀
- * （如 0.1.0-rc.8-local.1）。官方 @deepseek-ai 包已在 registry 发布更高版本，
+ * （如 0.1.1-rc.2-local.1）。官方 @deepseek-ai 包已在 registry 发布更高版本，
  * 若不区分版本，`npm i -g ./dist/npm/*.tgz` 时 npm 按 semver「最高版本优先」
  * 会从 registry 拉官方包覆盖本仓库的 fork 定制。本地后缀使本地版本恒高于
  * 官方（非数字 prerelease 段 > 数字段），且官方不会发布带 `-local.` 后缀的

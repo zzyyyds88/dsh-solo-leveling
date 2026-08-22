@@ -2,9 +2,23 @@
 
 [English](session-reference.md) | 中文
 
-结构化的跨会话引用请求与准备后的消息上下文。[包约定](../../packages/context/session-reference) 定义规范 URI、当前表层投影、标签安全的 JSON 与字节保留、稳定错误和不可信的模型提示词。宿主适配器使用这些类型，而不会把各自 UI 的提及语法传入 agent（智能体）核心。
+由 Host 支撑的文件发现，以及结构化的跨会话引用请求与准备后的消息上下文。[文件引用约定](../../packages/context/file-reference)负责仅含路径的补全记录与语法；[会话引用约定](../../packages/context/session-reference)定义规范 URI、当前表层投影、标签安全的 JSON 与字节保留、稳定错误和不可信的模型提示词。宿主适配器使用这些类型，而不会把各自 UI 的提及语法传入 agent（智能体）核心。
 
-来源：[`packages/context/session-reference/src/types.ts`](../../packages/context/session-reference/src/types.ts)
+来源：[`packages/context/file-reference/src/types.ts`](../../packages/context/file-reference/src/types.ts) · [`packages/context/session-reference/src/types.ts`](../../packages/context/session-reference/src/types.ts)
+
+## 文件候选项
+
+`FileReferenceCandidate` 是仅含路径的发现结果。被寻址的 agent 提供工作目录范围；提供方负责排序和命名空间访问，但不会读取文件内容。
+
+```ts type-equiv
+/** One path-only completion candidate inside the target session cwd. */
+interface FileReferenceCandidate {
+  /** User-facing path accepted by normal prompts and filesystem tools. */
+  path: string
+  /** Directories keep completion open; files finish the mention. */
+  kind: 'file' | 'directory'
+}
+```
 
 ## 输入与候选项
 
@@ -36,23 +50,13 @@ interface SessionReferenceCandidate {
 }
 ```
 
-`SessionReferenceMentionCandidate` 在该记录上扩展出规范化的 prompt mention；`FileReferenceCandidate` 是 file-reference seam 的纯路径补全记录。
+`sessionReferenceResolver/candidates` Remote 方法向浏览器消费方提供同一发现能力，并为每个候选附上规范提示词 mention。
 
 ```ts type-equiv
 /** One discovery candidate carrying its canonical prompt mention. */
 interface SessionReferenceMentionCandidate extends SessionReferenceCandidate {
   /** Canonical `@[label](dsh-session:…)` mention serialized into the prompt draft. */
   mention: string
-}
-```
-
-```ts type-equiv
-/** One path-only completion candidate inside the target session cwd. */
-interface FileReferenceCandidate {
-  /** User-facing path accepted by normal prompts and filesystem tools. */
-  path: string
-  /** Directories keep completion open; files finish the mention. */
-  kind: 'file' | 'directory'
 }
 ```
 
@@ -92,7 +96,7 @@ type SessionReferenceErrorCode =
 
 ## Cordis API
 
-Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — this section is byte-identical in both language sides of the page. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
 <a id="ctxfilereferences--filereferenceservice-abstract-seam"></a>
 
@@ -121,9 +125,9 @@ abstract list( agent: Agent, query: string, signal: AbortSignal, ): Promise<File
 @Remote('list') remoteExportList( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>
 ```
 
-Types: [Agent](core.md)
+Types: [Agent](core.zh.md)
 
-Source: [`packages/context/file-reference/src/index.ts:27`](../../packages/context/file-reference/src/index.ts)
+Source: [`packages/context/file-reference/src/index.ts`](../../packages/context/file-reference/src/index.ts)
 
 <a id="ctxsessionreferenceresolver--sessionreferenceresolver"></a>
 
@@ -164,7 +168,7 @@ async listCandidates( agent: Agent, query: string = '', limit: number = this.con
 async prepare( agent: Agent, content: ContentBlock[], references: SessionReferenceInput[], signal?: AbortSignal, ): Promise<PreparedReferencedMessage>
 ```
 
-Types: [Agent](core.md) · [ContentBlock](llm-streaming.md)
+Types: [Agent](core.zh.md) · [ContentBlock](llm-streaming.zh.md)
 
-Source: [`packages/context/session-reference/src/index.ts:75`](../../packages/context/session-reference/src/index.ts)
+Source: [`packages/context/session-reference/src/index.ts`](../../packages/context/session-reference/src/index.ts)
 <!-- END GENERATED cordis-surface -->

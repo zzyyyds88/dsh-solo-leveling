@@ -1,5 +1,7 @@
 # 大宝贝定制版（Dabao Custom Edition）
 
+English | [中文](README.zh.md)
+
 > **DeepSeek Harness 定制整合包 —— 不跟随官方更新，fork 自玩。** 基线：`deepseek-ai/deepseek-harness` @ [`dsh-v0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2)（上一基线 `dsh-v0.1.0-rc.8`，commit `f1f7dc36fa`）。
 
 ## 为什么 fork（背景）

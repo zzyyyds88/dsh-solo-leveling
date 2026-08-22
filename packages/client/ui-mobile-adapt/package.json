@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-mobile-adapt",
   "description": "Mobile adaptation for the Web GUI: narrow-screen full-width chat, drawer side panels, touch-composer and dialog polish",
-  "version": "0.1.0-rc.8-local.1",
+  "version": "0.1.1-rc.2-local.1",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,8 @@
 import { z } from 'zod'
 // Type-only: pulls the session-projection map table (merge-extensible) so the
-// liveTokenUsage projection key registers against it (augmentation lives in
-// @deepseek-ai/dsh-token-meter/projection).
+// liveTokenUsage projection key registers against it (the SessionProjectionMap
+// half lives in ./types/token-meter.d.ts; the state half beside this file's
+// State type).
 import type {} from '@deepseek-ai/dsh-session-projection/types'
 import type { Message, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 import type { EpochHeader, SessionEvent, SurfaceEvent } from '@deepseek-ai/dsh-session'
@@ -96,6 +97,67 @@ interface State {
   header: EpochHeader | null
   active: ActiveStep | null
 }
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionStateMap {
+    liveTokenUsage: State
+  }
+}
+
+const bucketsSchema = z.object({
+  uncachedInputTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  cacheReadTokens: z.number().nonnegative(),
+  cacheWriteTokens: z.number().nonnegative(),
+}).strict()
+
+const outputBlockSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('text'), characters: z.number().int().nonnegative() }).strict(),
+  z.object({ kind: z.literal('reasoning'), characters: z.number().int().nonnegative() }).strict(),
+  z.object({
+    kind: z.literal('tool-call'),
+    nameCharacters: z.number().int().nonnegative(),
+    argumentCharacters: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({ kind: z.literal('fixed'), tokens: z.number().nonnegative() }).strict(),
+])
+
+const activeStepSchema = z.object({
+  turn: z.number().int().nonnegative(),
+  step: z.number().int().nonnegative(),
+  buckets: bucketsSchema,
+  exact: z.boolean(),
+  blocks: z.record(z.string(), outputBlockSchema),
+  pricedTokens: z.number().nonnegative(),
+  pricedBlocks: z.number().int().nonnegative(),
+  firstOutputTime: z.number().nonnegative().optional(),
+  latestOutputTime: z.number().nonnegative().optional(),
+}).strict()
+
+const settledSampleSchema = z.object({
+  turn: z.number().int().nonnegative(),
+  step: z.number().int().nonnegative(),
+  buckets: bucketsSchema,
+  estimated: z.boolean(),
+  tokensPerSecond: z.number().nonnegative().nullable(),
+}).strict()
+
+/**
+ * The live-token unit's persisted-state schema. Token figures stay int-less:
+ * the active step folds heuristic estimates that need not round. The header
+ * arm stays opaque — EpochHeader belongs to the session types and the fold
+ * only re-estimates through it, so a structural copy would rot against
+ * upstream churn.
+ */
+const liveTokenUsageStateSchema = z.object({
+  settled: bucketsSchema,
+  settledEstimates: z.number().int().nonnegative(),
+  last: settledSampleSchema.nullable(),
+  surface: z.record(z.string(), z.number().nonnegative()),
+  surfaceTokens: z.number().nonnegative(),
+  header: z.unknown().nullable(),
+  active: activeStepSchema.nullable(),
+}).strict() as unknown as z.ZodType<State>
 
 function surfaceMessage(event: SurfaceEvent): Message {
   switch (event.type) {
@@ -276,12 +338,10 @@ function view(state: State): LiveTokenUsageProjection {
  * @param spec - resolved estimator settings for the fold.
  * @returns the replayable `liveTokenUsage` projection definition.
  */
-export function createLiveTokenUsageProjectionDefinition(
-  spec: EstimatorSpec,
-): ProjectionDefinition<'liveTokenUsage', State> {
+export function createLiveTokenUsageProjectionDefinition(spec: EstimatorSpec) {
   return {
     key: 'liveTokenUsage',
-    schema: projectionSchema,
+    stateSchema: liveTokenUsageStateSchema,
     init: () => ({
       settled: zeroBuckets(),
       settledEstimates: 0,
@@ -389,11 +449,14 @@ export function createLiveTokenUsageProjectionDefinition(
       if (isSurfaceEvent(event)) next = { ...next, ...applySurface(next, event, spec) }
       return next
     },
-    view,
+    wire: {
+      viewSchema: projectionSchema,
+      view,
+    },
     // Bumped with the pure-JSON state shape (surface Map->Record,
     // header/tokensPerSecond undefined->null, sparse blocks->Record):
     // a checkpoint row with the old shape is discarded at read time
     // instead of revived into the new shape (issue #250 follow-up).
     stateVersion: 3,
-  }
+  } satisfies ProjectionDefinition<'liveTokenUsage', State>
 }

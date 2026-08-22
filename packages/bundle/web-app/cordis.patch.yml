@@ -118,8 +118,8 @@
     # Plain route-registration carrier; host and port come from the app's
     # webStartup provider, with these deployment fallbacks. TLS is prepared by
     # the same provider (auto self-signed cert, or the operator's uploaded
-    # cert), so the server always speaks HTTPS. The dist is served by the
-    # web-runtime row below through the fallback seat.
+    # cert), so the server always speaks HTTPS. The dist is served by
+    # the web-runtime row below through the fallback seat.
     - id: webserver
       name: '@deepseek-ai/dsh-host-webserver'
       inject: [webStartup]
@@ -150,11 +150,12 @@
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
-    # section and the bash runtime variable, and prints the URL line. The
-    # webStartup provider supplies invocation-only values; after the server
-    # binds, this row samples LAN trust once and provides `webRuntime`. A
-    # complete agent-preset persona suppresses the prompt section for that
-    # agent while retaining the host-owned shell variable.
+    # section and the bash runtime variable, prints the URL line, and opens the
+    # canonical local URL after the full tree settles. The webStartup provider
+    # supplies invocation-only values; after the server binds, this row samples
+    # LAN trust once and provides `webRuntime`. A complete agent-preset persona
+    # suppresses the prompt section for that agent while retaining the host-owned
+    # shell variable.
     - id: web-runtime
       name: '@deepseek-ai/dsh-web-app'
       inject: [webStartup]
@@ -164,15 +165,12 @@
         surfaceContext: true
         trustedHosts: !!js ctx.webStartup.trustedHosts
 
-    # The client-plugin reload chain. Disabled in production web boots: its
-    # node half constructs an HMR service that requires the Node process to run
-    # with --expose-internals (a dev-only flag), and HMR has no use without a
-    # live rebuild watcher (pnpm run dev:web). Development overlays re-enable
-    # the row. It is a row rather than a child of web-runtime because its node
-    # half is a client-side package, which a host-side bundle cannot import.
+    # The client-plugin reload chain, always mounted: it is idle until a
+    # rebuild watcher (pnpm run dev:web) actually rewrites client bundles. It
+    # is a row rather than a child of web-runtime because its node half is a
+    # client-side package, which a host-side bundle cannot import.
     - id: client-hmr
       name: '@deepseek-ai/dsh-client-hmr'
-      disabled: true
 
     # ── browser plugin roster (dsh.client rows; node halves are layer-2 hosts) ──
 
@@ -266,7 +264,7 @@
       name: '@deepseek-ai/dsh-client-ui-workspace'
 
     # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
-    # it (ui-commands), and the two reference sources (ui-skill / ui-subagent).
+    # it (ui-commands), and the reference sources (ui-skill / ui-reference).
     - id: ui-input-trigger
       name: '@deepseek-ai/dsh-client-ui-input-trigger'
 

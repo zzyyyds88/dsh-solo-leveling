@@ -103,10 +103,6 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
       world,
       {
         DEEPSEEK_API_KEY: 'keyless-hmr-no-call',
-        // Fork divergence: the shipped access gate boots to a first-run
-        // password setup on an empty DSH_HOME; this scenario exercises HMR,
-        // not the gate (docs/开发规范.md §2.3).
-        DSH_ACCESS_GATE_MODE: 'off',
         DSH_HOME: join(world, '.dsh'),
       },
     ))

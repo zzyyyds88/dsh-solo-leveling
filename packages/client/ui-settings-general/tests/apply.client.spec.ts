@@ -174,11 +174,7 @@ describe('ui-settings-general apply', () => {
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(b.slots.entries('settings.action')).toEqual([])
-    // Fork semantics: settings stay readable/writable for authenticated
-    // remote callers (the ui-settings fork boots its describe mirror
-    // unconditionally), so the mirror's single startup read happens
-    // off-loopback too; only the loopback-only document action is withheld.
-    expect(b.settingsDescribe).toHaveBeenCalledTimes(1)
+    expect(b.settingsDescribe).not.toHaveBeenCalled()
     await fiber.dispose()
     for (const [name] of SEATS) expect(b.slots.entries(name)).toEqual([])
   })

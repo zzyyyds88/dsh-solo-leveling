@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-defaults",
   "description": "默认值设置命名空间：defaultWorkingDirectory + defaultRetryCount，供目录选择器与 LLM 适配器运行时消费",
-  "version": "0.1.0-rc.8-local.1",
+  "version": "0.1.1-rc.2-local.1",
   "publishConfig": {
     "access": "public"
   },

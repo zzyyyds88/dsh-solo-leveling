@@ -32,9 +32,9 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection } from '@deepseek-ai/dsh-settings'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { Config, MOBILE_ADAPT_SETTINGS_NAMESPACE } from './settings.ts'
+import { Config as MobileAdaptSchema, MOBILE_ADAPT_SETTINGS_NAMESPACE } from './settings.ts'
 import { buildMobileCss, MOBILE_ADAPT_DEFAULTS } from './shared.ts'
-import type { Config as MobileAdaptConfig } from './shared.ts'
+import type { Config } from './shared.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'client-ui-mobile-adapt'
@@ -58,8 +58,8 @@ function buildTap() {
  * @param ctx - plugin context carrying the webServer service.
  * @param config - deployment configuration (schema defaults applied by the loader).
  */
-export function apply(ctx: Context, config: MobileAdaptConfig = {}): void {
-  installSettingsSection(ctx, MOBILE_ADAPT_SETTINGS_NAMESPACE, Config, config, {
+export function apply(ctx: Context, config: Config = {}): void {
+  installSettingsSection(ctx, MOBILE_ADAPT_SETTINGS_NAMESPACE, MobileAdaptSchema, config, {
     // 行为全在浏览器半（scope.subscribe 即时响应），host 侧无需派生。
     setSource: () => {},
     onChange: () => {},

@@ -41,8 +41,7 @@ export const settingsOpenDocumentRequestSchema = z.object({}) satisfies z.ZodTyp
 
 /** settings.openDocument response value. */
 export const settingsOpenDocumentValueSchema = z.object({
-  opened: z.boolean(),
-  path: z.string().optional(),
+  opened: z.literal(true),
 }) satisfies z.ZodType<Wire<ResponseValue<'settings.openDocument'>>>
 
 /** settings.update request payload. */

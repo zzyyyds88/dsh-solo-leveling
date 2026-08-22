@@ -452,13 +452,10 @@ describe('SettingsScopeBinder.bind', () => {
     expect(theme.getSnapshot()).toMatchObject({ revision: 1 })
   })
 
-  // Local fork: the settings scope always uses host persistence, so a remote
-  // (non-loopback) browser behind the access gate reads/writes host settings
-  // like a local one — anonymous callers are refused by the 403 gate.
-  it('binds a remote browser in host mode and starts a settings read', async () => {
+  it('binds a remote browser in memory mode without starting a settings read', async () => {
     const describeCall = vi.fn()
     const wire = { settings: { describe: describeCall } }
-    const mirror = new SettingsDescribeMirror(wire as never, 'host')
+    const mirror = new SettingsDescribeMirror(wire as never, 'memory')
     const ctx = new Context()
     ctx.provide('connection', { api: wire, isLoopback: false } as never)
     let scope!: SettingsScope<UiTestSettings>
@@ -471,8 +468,8 @@ describe('SettingsScopeBinder.bind', () => {
       },
     })
     await fiber.await()
-    expect(scope.getSnapshot()).toMatchObject({ status: 'loading', mode: 'host' })
+    expect(scope.getSnapshot()).toMatchObject({ status: 'unavailable', mode: 'memory', writable: false })
     await fiber.dispose()
-    expect(describeCall).toHaveBeenCalled()
+    expect(describeCall).not.toHaveBeenCalled()
   })
 })

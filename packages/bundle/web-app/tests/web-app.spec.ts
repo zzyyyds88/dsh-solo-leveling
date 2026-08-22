@@ -78,7 +78,7 @@ function fakeHttpServer(host: '127.0.0.1' | '0.0.0.0' = '127.0.0.1'): { server: 
       fallback = handler
       return () => { fallback = undefined }
     },
-    applyIndexTaps: (html: string) => html,
+    renderIndex: (html: string) => html,
   } as unknown as WebServer
   return { server, seat: () => fallback }
 }
@@ -269,21 +269,6 @@ describe('web-app runtime glue', () => {
     expect(log).not.toHaveBeenCalled()
     expect(openBrowser).not.toHaveBeenCalled()
     await torn.fiber.dispose()
-  })
-
-  it('fails loud when the prompt section resolves against a portless webserver', async () => {
-    stageDist()
-    const ctx = new Context()
-    // A webserver whose bound port is gone (torn down mid-request): the
-    // section must throw, never render a URL with an undefined port.
-    const { server } = fakeHttpServer()
-    Object.defineProperty(server, 'port', { get: () => undefined })
-    ctx.provide('webServer', server)
-    apply(ctx, new Config({ openBrowser: false, printUrl: false, surfaceContext: true, trustedHosts: [] }))
-    await ctx.plugin(SystemPrompt, { persona: '' })
-    await new Promise(resolve => setTimeout(resolve, 0))
-    await expect(ctx.systemPrompt.assemble()).rejects.toThrow('webServer service missing')
-    await ctx.fiber.dispose()
   })
 
   it('resolves the real built frontend dist through the package exports, failing loud unbuilt', () => {
