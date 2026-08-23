@@ -69,10 +69,12 @@ export interface SettingsApi {
    * hand it to the platform text-document opener. macOS forces a text editor;
    * Linux and Windows use the desktop file association. The request carries
    * no path, so the browser cannot choose an arbitrary Host filesystem target.
+   * Headless deployments without a native opener answer `opened: false` with
+   * the materialized path, so the client can surface where the file lives.
    */
   openDocument(
     request: RpcRequest<{}>, signal: AbortSignal,
-  ): Promise<RpcResponse<{ opened: true }>>
+  ): Promise<RpcResponse<{ opened: true } | { opened: false; path: string }>>
 
   /**
    * Merge a patch into one namespace's user layer (validate → persist →

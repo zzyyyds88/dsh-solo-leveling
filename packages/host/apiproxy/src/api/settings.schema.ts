@@ -39,10 +39,11 @@ export const settingsDescribeValueSchema = z.object({
 /** settings.openDocument request payload. */
 export const settingsOpenDocumentRequestSchema = z.object({}) satisfies z.ZodType<Wire<RequestPayload<'settings.openDocument'>>>
 
-/** settings.openDocument response value. */
-export const settingsOpenDocumentValueSchema = z.object({
-  opened: z.literal(true),
-}) satisfies z.ZodType<Wire<ResponseValue<'settings.openDocument'>>>
+/** settings.openDocument response value: opened, or the materialized path when no native opener exists. */
+export const settingsOpenDocumentValueSchema = z.union([
+  z.object({ opened: z.literal(true) }),
+  z.object({ opened: z.literal(false), path: z.string() }),
+]) satisfies z.ZodType<Wire<ResponseValue<'settings.openDocument'>>>
 
 /** settings.update request payload. */
 export const settingsUpdateRequestSchema = z.object({

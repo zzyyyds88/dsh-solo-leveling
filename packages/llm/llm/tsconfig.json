@@ -24,6 +24,9 @@
       "path": "../../runtime-diagnostics/invariants"
     },
     {
+      "path": "../../settings/settings"
+    },
+    {
       "path": "../../util/timeout"
     }
   ]
