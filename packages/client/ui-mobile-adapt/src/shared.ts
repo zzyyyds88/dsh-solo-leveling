@@ -298,6 +298,34 @@ export function buildMobileCss(breakpointPx: number): string {
     max-width: calc(100vw - 16px) !important;
     height: calc(100dvh - 16px) !important;
     max-height: calc(100dvh - 16px) !important;
+    /* 近全屏面板：桌面 24px 大圆角在手机上浪费四角空间 */
+    border-radius: 12px !important;
+  }
+  /* 顶部操作触控目标：打开配置文件等 28 高 → 36；关闭 28×28 → 40×40 */
+  [role='dialog'][aria-modal='true'] [class*='actions'] button {
+    min-height: 36px !important;
+  }
+  [role='dialog'][aria-modal='true'] [class*='close'] {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  /* 内容区与顶栏之间留出呼吸 */
+  [role='dialog'][aria-modal='true'] [class*='options'] {
+    padding-top: 8px !important;
+  }
+  /* 外观主题方块：桌面 flex-basis 180px 在窄内容区放不下一行，退化为
+     三个 84px 全宽竖排巨块；改为一行三等分紧凑块（16 图标 + 12px 文字） */
+  [role='dialog'][aria-modal='true'] [class*='themeCube'] {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    min-height: 58px !important;
+    padding: 10px 4px !important;
+    font-size: 12px !important;
+    line-height: 18px !important;
+  }
+  /* 模型提供方行操作（编辑/删除）：28 高 → 36 触控友好 */
+  [role='dialog'][aria-modal='true'] [class*='rowActions'] button {
+    min-height: 36px !important;
   }
   [role='dialog'][aria-modal='true'] > nav {
     width: 64px !important;
