@@ -189,6 +189,15 @@ export function buildMobileCss(breakpointPx: number): string {
     touch-action: none;
   }
 
+  /* ── 1.5 会话标题行：窄屏水平居中 ─────────────────────────────────
+     桌面端面包屑（当前会话标题）随标题簇靠左；手机上标题行与左上角浮出
+     的菜单按钮同处顶栏，靠左的标题会被按钮压住且视觉偏坠。窄屏把标题簇
+     内容（面包屑 + 后随动作）整体居中：簇本身 flex:1 占满整行，改的是
+     簇内主轴对齐，不为布局加结构。 */
+  [data-dsh-frame][data-dshm-narrow] [class*='titleCluster'] {
+    justify-content: center !important;
+  }
+
   /* ── 2. 输入区：贴边 + 安全区 + 16px 防 iOS 聚焦缩放 ───────────── */
   /* 键盘避让：iOS 布局视口不随键盘压缩，client 半把键盘高度写进
      --dsm-keyboard-inset，这里加出等高滚动余量让输入卡可滚到键盘上方；
