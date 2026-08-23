@@ -262,7 +262,8 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
   // setup is still in flight — a signal, or a fast one-shot's appExit. Loader
   // presence and fiber state own liveness; the initial check skips a tree
   // that already exited, and the catch below re-checks for an exit that
-  // landed mid-setup. Watching is unconditional: a one-shot surface exits
+  // landed mid-setup. Watching rides the boot's module hooks (Local fork:
+  // plain-node installs skip it); a one-shot surface exits
   // through its bounded shutdown, which disposes the watchers before the
   // loop drains.
   if (!signalShutdown.signal.aborted
@@ -274,24 +275,30 @@ export async function runProfile(options: RunProfileOptions): Promise<{ ctx: Con
       // untested), so when the composition leaves no HMR service, mount a
       // watch-only instance with no module roots — cordis.patch.yml edits stay
       // live on every long-lived surface. A silent skip would break the
-      // documented hot-reload contract. HMR injects the timer service, which a
-      // bare custom profile may not mount either.
-      if (ctx.get('hmr') === undefined) {
-        if (ctx.get('timer') === undefined) {
-          await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-timer' })
+      // documented hot-reload contract. The watch-only service needs Node's
+      // module hooks (loader.internal), which only exist under tsx/dev boots;
+      // plain-node production installs skip both the service and the watchers
+      // so boot never crashes — config edits then apply on the next restart.
+      // (Local fork: docs/工作区/升级适配指南.md §2.2.) HMR injects the timer
+      // service, which a bare custom profile may not mount either.
+      if (ctx.get('loader')?.internal !== undefined) {
+        if (ctx.get('hmr') === undefined) {
+          if (ctx.get('timer') === undefined) {
+            await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-timer' })
+          }
+          await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-hmr', config: { root: [] } })
         }
-        await ctx.loader.create({ name: '@deepseek-ai/cordis-plugin-hmr', config: { root: [] } })
+        await watchUserPatches(ctx, {
+          binName: NAME,
+          filename: composed.profile.patchPath,
+          compose: composeLive,
+        })
+        await watchUserPatches(ctx, {
+          binName: NAME,
+          filename: homePatchPath(),
+          compose: composeLive,
+        })
       }
-      await watchUserPatches(ctx, {
-        binName: NAME,
-        filename: composed.profile.patchPath,
-        compose: composeLive,
-      })
-      await watchUserPatches(ctx, {
-        binName: NAME,
-        filename: homePatchPath(),
-        compose: composeLive,
-      })
     } catch (error) {
       suppressShutdownError(ctx, signalShutdown.signal, error)
     }
