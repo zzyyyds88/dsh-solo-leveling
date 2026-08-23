@@ -66,10 +66,8 @@
       config:
         maxNoteBytes: 8192
 
-    # Browser Session export: `/export` command plus the shared download dialog.
-    - id: session-log-download
-      name: '@deepseek-ai/dsh-session-log-export'
-
+    # 不装配 session-log-export（用户要求移除 Session log 头部按钮与 /export
+    # 命令；上游包源码保留，重 base 时保持此不装配定制，见 升级适配指南 §2）。
     - id: workspace
       name: '@deepseek-ai/dsh-workspace'
 
