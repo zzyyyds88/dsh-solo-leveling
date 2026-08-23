@@ -22,12 +22,14 @@ export type ConfigurablePluginsTabProps =
 
 /**
  * Render cards registered by plugins that expose editable settings.
- * @param props - locale copy, slot rendering, and the namespaces to dispatch.
- * @returns the card list, or the empty line once the Host has answered.
+ * @param props - locale copy, slot rendering, the namespaces to dispatch, and
+ *   the directory read's failure face.
+ * @returns the card list; while the Host has not answered once, a loading,
+ *   failure (with retry), or empty line — never silence.
  */
 export function ConfigurablePluginsTab(props: ConfigurablePluginsTabProps) {
   const { t, renderSlot } = props
-  const { loaded, namespaces } = props.useConfigurablePlugins(snapshot => snapshot)
+  const { loaded, namespaces, error } = props.useConfigurablePlugins(snapshot => snapshot)
   if (namespaces.length > 0) {
     return (
       <ul className={css.cards}>
@@ -39,5 +41,13 @@ export function ConfigurablePluginsTab(props: ConfigurablePluginsTabProps) {
       </ul>
     )
   }
-  return loaded ? <p className={css.empty}>{t('empty')}</p> : null
+  if (error !== null) {
+    return (
+      <div className={css.failure} role="alert">
+        <p>{t('loadFailed')}{error !== '' ? ` ${error}` : ''}</p>
+        <button type="button" onClick={() => props.retry()}>{t('retry')}</button>
+      </div>
+    )
+  }
+  return <p className={css.empty}>{loaded ? t('empty') : t('loading')}</p>
 }

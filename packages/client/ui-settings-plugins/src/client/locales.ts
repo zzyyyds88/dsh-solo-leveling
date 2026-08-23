@@ -3,6 +3,7 @@
 /** Locale keys these surfaces render. */
 export type PluginsSettingsLocaleKey =
   | 'nav' | 'title' | 'intro' | 'tabs' | 'configurableTab' | 'empty'
+  | 'loading' | 'loadFailed' | 'retry'
   | 'overridden' | 'reset' | 'readOnly' | 'expand' | 'collapse'
   | 'save' | 'saving' | 'discard' | 'unsaved' | 'saveFailed' | 'invalidNumber'
   | 'bashTitle' | 'bashDescription' | 'bashTimeoutMs' | 'bashTimeoutMsHint'
@@ -20,6 +21,9 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   tabs: 'Plugin views',
   configurableTab: 'Plugin configuration',
   empty: 'This deployment exposes no plugin settings.',
+  loading: 'Loading plugin settings…',
+  loadFailed: 'Plugin settings could not be loaded.',
+  retry: 'Retry',
   overridden: 'Overridden',
   reset: 'Reset to default',
   readOnly: 'This deployment stores settings read-only.',
@@ -61,6 +65,9 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   tabs: '插件视图',
   configurableTab: '插件配置',
   empty: '本部署没有开放任何插件设置。',
+  loading: '正在加载插件设置…',
+  loadFailed: '插件设置加载失败。',
+  retry: '重试',
   overridden: '已覆盖',
   reset: '恢复默认',
   readOnly: '本部署的设置为只读。',

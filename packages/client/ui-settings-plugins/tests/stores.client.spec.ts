@@ -611,6 +611,42 @@ describe('ConfigurablePluginsTabController', () => {
     await settings.mirror.load()
 
     expect(controller.inject().hooks.configurablePlugins.getSnapshot().namespaces).toEqual(['bash'])
+    // A held answer keeps serving through the failed refresh; no alert line.
+    expect(controller.inject().hooks.configurablePlugins.getSnapshot().error).toBeNull()
+  })
+
+  it('surfaces a failed first read as an error and recovers on retry', async () => {
+    const settings = settingsApi(['bash'])
+    settings.describe.mockRejectedValueOnce(new Error('offline'))
+    const controller = new ConfigurablePluginsTabController(settings.mirror, () => ledger('bash'))
+    await settings.mirror.ensure()
+    expect(controller.inject().hooks.configurablePlugins.getSnapshot()).toEqual({
+      loaded: false, namespaces: [], error: 'offline',
+    })
+
+    controller.retry()
+    await settings.mirror.ensure()
+
+    expect(controller.inject().hooks.configurablePlugins.getSnapshot()).toEqual({
+      loaded: true, namespaces: ['bash'], error: null,
+    })
+  })
+
+  it('reports a terminal unavailable mirror as an empty failure detail', () => {
+    const snapshot: SettingsMirrorSnapshot = {
+      status: 'unavailable' as const,
+      view: undefined,
+      error: null,
+    }
+    const describeFace = {
+      getSnapshot: () => snapshot,
+      subscribe: () => () => {},
+      ensure: () => Promise.resolve(),
+      acceptView: vi.fn(),
+    } as never
+    const controller = new ConfigurablePluginsTabController(describeFace, () => ledger('bash'))
+    expect(controller.inject().hooks.configurablePlugins.getSnapshot().loaded).toBe(false)
+    expect(controller.inject().hooks.configurablePlugins.getSnapshot().error).toBe('')
   })
 
   it('stops following the mirror once disposed, and never claims it was answered', async () => {
@@ -621,7 +657,7 @@ describe('ConfigurablePluginsTabController', () => {
     await settings.mirror.load()
 
     expect(controller.inject().hooks.configurablePlugins.getSnapshot())
-      .toEqual({ loaded: false, namespaces: [] })
+      .toEqual({ loaded: false, namespaces: [], error: null })
   })
 
   it('ignores a slot-ledger change that arrives after disposal', async () => {
@@ -655,7 +691,7 @@ describe('ConfigurablePluginsTabController', () => {
     } as never
     const controller = new ConfigurablePluginsTabController(describeFace, () => ledger('bash'))
     expect(controller.inject().hooks.configurablePlugins.getSnapshot())
-      .toEqual({ loaded: true, namespaces: [] })
+      .toEqual({ loaded: true, namespaces: [], error: null })
 
     controller.dispose()
     snapshot = {
@@ -672,7 +708,7 @@ describe('ConfigurablePluginsTabController', () => {
     notify()
 
     expect(controller.inject().hooks.configurablePlugins.getSnapshot())
-      .toEqual({ loaded: true, namespaces: [] })
+      .toEqual({ loaded: true, namespaces: [], error: null })
   })
 
   it('reports the Host answered even when it serves nothing this tab shows', async () => {
@@ -682,6 +718,6 @@ describe('ConfigurablePluginsTabController', () => {
     await settings.mirror.ensure()
 
     expect(controller.inject().hooks.configurablePlugins.getSnapshot())
-      .toEqual({ loaded: true, namespaces: [] })
+      .toEqual({ loaded: true, namespaces: [], error: null })
   })
 })

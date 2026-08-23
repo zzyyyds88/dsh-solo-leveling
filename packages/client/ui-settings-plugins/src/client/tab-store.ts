@@ -32,19 +32,30 @@ export interface ConfigurablePluginsTabState {
    * chose.
    */
   namespaces: string[]
+  /**
+   * Failure detail while the Host has not answered once: the mirror's last
+   * wire-failure message, or '' for a browser that can never reach settings.
+   * null means "no failure to report" — either an answer is held (the empty
+   * line then speaks for it) or a first read is still in flight. Surfaced as
+   * an alert line with a retry control, never as silence: a blank panel is
+   * indistinguishable from a broken page.
+   */
+  error: string | null
 }
 
-/** The registration-side face the tab's slot entry injects. */
+/** The registration-side face the tab's slot registration injects. */
 export interface ConfigurablePluginsTabFace {
   hooks: {
     /** Section snapshot bound by the renderer as usePluginConfigSection. */
     configurablePlugins: SnapshotStore<ConfigurablePluginsTabState>
   }
+  /** One directory re-read attempt, wired to the tab's failure-line control. */
+  retry(): void
 }
 
 /** Derives the served namespaces from the shared describe mirror and pairs them with the cards that claim them. */
 export class ConfigurablePluginsTabController {
-  private readonly store = createSnapshotStore<ConfigurablePluginsTabState>({ loaded: false, namespaces: [] })
+  private readonly store = createSnapshotStore<ConfigurablePluginsTabState>({ loaded: false, namespaces: [], error: null })
   private disposed = false
   private readonly unsubscribe: () => void
 
@@ -68,6 +79,17 @@ export class ConfigurablePluginsTabController {
     this.publish()
   }
 
+  /**
+   * Re-read after a failed directory answer, wired to the tab's retry control.
+   * A failed first read leaves the mirror idle, so ensure starts a fresh read;
+   * once an answer is held the mirror keeps serving it and this is a no-op
+   * refresh at worst. A disposed controller retries nothing.
+   */
+  retry(): void {
+    if (this.disposed) return
+    void this.describeFace.ensure()
+  }
+
   /** Stop publishing and stop following the mirror. */
   dispose(): void {
     this.disposed = true
@@ -79,7 +101,7 @@ export class ConfigurablePluginsTabController {
    * @returns the tab's snapshot source.
    */
   inject(): ConfigurablePluginsTabFace {
-    return { hooks: { configurablePlugins: this.store } }
+    return { hooks: { configurablePlugins: this.store }, retry: () => this.retry() }
   }
 
   private publish(): void {
@@ -89,14 +111,17 @@ export class ConfigurablePluginsTabController {
     const served = new Set(mirrored.view?.namespaces.map(view => view.ns) ?? [])
     const namespaces = this.entries().flatMap(entry =>
       entry.options.key !== undefined && served.has(entry.options.key) ? [entry.options.key] : [])
+    // No held answer plus a failure detail is the alert line's trigger; a held
+    // answer keeps serving through later failures, so its error stays null.
+    const error = loaded ? null : mirrored.error ?? (mirrored.status === 'unavailable' ? '' : null)
     const previous = this.store.getSnapshot()
     // Every settings-document commit refreshes the mirror, and most commits
     // change nothing this section shows. An observable source must keep its
     // snapshot reference until the fact moves, or each unrelated save
     // re-renders the whole card list (packages/client/AGENTS.md reactive rule 5).
-    if (previous.loaded === loaded
+    if (previous.loaded === loaded && previous.error === error
       && previous.namespaces.length === namespaces.length
       && previous.namespaces.every((ns, index) => ns === namespaces[index])) return
-    this.store.set({ loaded, namespaces })
+    this.store.set({ loaded, namespaces, error })
   }
 }

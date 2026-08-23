@@ -65,8 +65,10 @@ function renderSection(rows: readonly PluginsSettingsTabEntry[]) {
  * standing in for the slot ledger: a key it names renders that text, and one
  * it does not renders nothing, exactly as an unclaimed key does.
  */
-function renderConfigurable(namespaces: string[], cards: Record<string, string> = {}, loaded = true) {
-  const store = createSnapshotStore<ConfigurablePluginsTabState>({ loaded, namespaces })
+function renderConfigurable(
+  namespaces: string[], cards: Record<string, string> = {}, loaded = true, error: string | null = null,
+) {
+  const store = createSnapshotStore<ConfigurablePluginsTabState>({ loaded, namespaces, error })
   const props = {
     t,
     useConfigurablePlugins: bindSnapshotSelector(store),
@@ -162,6 +164,34 @@ describe('PluginsSettingsSection', () => {
 })
 
 describe('ConfigurablePluginsTab', () => {
+
+  it('renders the failure line with retry while no answer is held and a read failed', () => {
+    const onRetry = vi.fn()
+    const store = createSnapshotStore<ConfigurablePluginsTabState>({
+      loaded: false, namespaces: [], error: 'offline',
+    })
+    const props = {
+      t,
+      retry: onRetry,
+      useConfigurablePlugins: bindSnapshotSelector(store),
+      renderSlot: () => null,
+    } as unknown as ConfigurablePluginsTabProps
+    render(<ConfigurablePluginsTab {...props} />)
+
+    expect(screen.getByRole('alert').textContent).toContain(en.loadFailed)
+    fireEvent.click(screen.getByRole('button', { name: en.retry }))
+    expect(onRetry).toHaveBeenCalledOnce()
+  })
+
+  it('shows the loading line until the first Host answer and the empty line after', () => {
+    renderConfigurable([], {}, false)
+    expect(screen.getByText(en.loading)).toBeTruthy()
+    cleanup()
+
+    renderConfigurable([])
+    expect(screen.getByText(en.empty)).toBeTruthy()
+    expect(screen.queryByText(en.loading)).toBeNull()
+  })
   it('says so when no plugin contributed a card', () => {
     renderConfigurable([], { bash: 'shell' })
 
