@@ -118,6 +118,8 @@
     # the same provider (auto self-signed cert, or the operator's uploaded
     # cert), so the server always speaks HTTPS. The dist is served by
     # the web-runtime row below through the fallback seat.
+    # (Local fork: docs/工作区/升级适配指南.md §2.2 — official defaults are
+    # loopback HTTP; this deployment ships HTTPS on 0.0.0.0:3080.)
     - id: webserver
       name: '@deepseek-ai/dsh-host-webserver'
       inject: [webStartup]
