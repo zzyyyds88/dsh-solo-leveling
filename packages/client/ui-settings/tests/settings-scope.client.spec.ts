@@ -422,6 +422,138 @@ describe('SettingsScopeController', () => {
   })
 })
 
+describe('SettingsScopeController.mutate', () => {
+  /** A namespace view carrying a user layer and secret slots, as writes answer. */
+  function layeredView(
+    revision: number,
+    extras: Partial<SettingsNamespaceView> = {},
+  ): SettingsNamespaceView {
+    return { ...view({ preference: 'system' }, revision), ...extras }
+  }
+
+  it('commits several fields as one Host mutation and folds the answer into the mirror', async () => {
+    const describeCall = vi.fn().mockResolvedValueOnce(described({ preference: 'system' }, 4))
+    const mutate = vi.fn().mockResolvedValueOnce(ok(layeredView(5, {
+      user: { baseURL: 'http://192.168.3.94:6780/v1', model: 'dots3-note-prev' },
+    })))
+    const { mirror, scope } = derivedScope({ describe: describeCall, mutate })
+    await mirror.load()
+
+    const result = await scope.mutate([
+      { field: 'baseURL', op: 'set', value: 'http://192.168.3.94:6780/v1' },
+      { field: 'model', op: 'set', value: 'dots3-note-prev' },
+    ])
+
+    expect(mutate).toHaveBeenCalledOnce()
+    expect(mutate).toHaveBeenCalledWith({
+      ns: 'ui-test',
+      ops: [
+        { op: 'set', path: ['baseURL'], value: 'http://192.168.3.94:6780/v1' },
+        { op: 'set', path: ['model'], value: 'dots3-note-prev' },
+      ],
+      expectedRevision: 4,
+    })
+    expect(result).toEqual({
+      ok: true,
+      fields: [
+        { field: 'baseURL', landed: true },
+        { field: 'model', landed: true },
+      ],
+    })
+    expect(scope.getSnapshot()).toMatchObject({ revision: 5 })
+  })
+
+  it('judges redacted secret writes through slot markers instead of the user layer', async () => {
+    const describeCall = vi.fn().mockResolvedValueOnce(described({ preference: 'system' }, 2))
+    const mutate = vi.fn()
+      .mockResolvedValueOnce(ok(layeredView(3, { secrets: [{ path: ['apiKey'], set: true }] })))
+      .mockResolvedValueOnce(ok(layeredView(4, { secrets: [{ path: ['apiKey'], set: false }] })))
+    const { mirror, scope } = derivedScope({ describe: describeCall, mutate })
+    await mirror.load()
+
+    const stored = await scope.mutate([{ field: 'apiKey', op: 'set', value: 'sk-new-key' }])
+    const cleared = await scope.mutate([{ field: 'apiKey', op: 'unset' }])
+
+    expect(stored).toEqual({ ok: true, fields: [{ field: 'apiKey', landed: true }] })
+    expect(cleared).toEqual({ ok: true, fields: [{ field: 'apiKey', landed: true }] })
+  })
+
+  it('reports an unset as landed when the answer drops the field from the user layer', async () => {
+    const describeCall = vi.fn().mockResolvedValueOnce(described({ preference: 'system' }, 2))
+    const mutate = vi.fn().mockResolvedValueOnce(ok(layeredView(3, { user: {} })))
+    const { mirror, scope } = derivedScope({ describe: describeCall, mutate })
+    await mirror.load()
+
+    const result = await scope.mutate([{ field: 'baseURL', op: 'unset' }])
+
+    expect(result).toEqual({ ok: true, fields: [{ field: 'baseURL', landed: true }] })
+  })
+
+  it('refuses a rejected batch whole, surfaces the seam reason, and recovers Host state', async () => {
+    const describeCall = vi.fn()
+      .mockResolvedValueOnce(described({ preference: 'system' }, 2))
+      .mockResolvedValueOnce(described({ preference: 'dark' }, 4))
+    const mutate = vi.fn().mockResolvedValueOnce(rejected())
+    const { mirror, scope } = derivedScope({ describe: describeCall, mutate })
+    await mirror.load()
+
+    const result = await scope.mutate([
+      { field: 'baseURL', op: 'set', value: 'http://x/v1' },
+      { field: 'model', op: 'set', value: 'm1' },
+    ])
+
+    expect(result).toEqual({
+      ok: false,
+      code: 'settings-rejected',
+      message: 'conflict',
+      fields: [
+        { field: 'baseURL', landed: false },
+        { field: 'model', landed: false },
+      ],
+    })
+    expect(describeCall).toHaveBeenCalledTimes(2)
+    expect(scope.getSnapshot()).toMatchObject({ value: { preference: 'dark' }, revision: 4 })
+  })
+
+  it('reports a thrown batch as a refusal with the transport message and recovers', async () => {
+    const describeCall = vi.fn()
+      .mockResolvedValueOnce(described({ preference: 'system' }, 2))
+      .mockResolvedValueOnce(described({ preference: 'light' }, 3))
+    const mutate = vi.fn().mockRejectedValueOnce(new Error('offline'))
+    const { mirror, scope } = derivedScope({ describe: describeCall, mutate })
+    await mirror.load()
+
+    const result = await scope.mutate([{ field: 'preference', op: 'set', value: 'dark' }])
+
+    expect(result).toMatchObject({ ok: false, message: 'offline' })
+    expect(describeCall).toHaveBeenCalledTimes(2)
+    expect(scope.getSnapshot()).toMatchObject({ value: { preference: 'light' } })
+  })
+
+  it('answers an empty batch without touching the wire', async () => {
+    const mutate = vi.fn()
+    const { scope } = derivedScope({ mutate })
+    expect(await scope.mutate([])).toEqual({ ok: true, fields: [] })
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
+  it('refuses without a wire call in memory mode and after disposal', async () => {
+    const mutateRpc = vi.fn()
+    const wire = { settings: { mutate: mutateRpc } } as never
+    const memory = new SettingsScopeController<UiTestSettings>(
+      wire, { namespace: 'ui-test' }, new SettingsDescribeMirror(wire, 'memory'), 'memory', settingsSchema,
+    )
+    const memoryResult = await memory.mutate([{ field: 'preference', op: 'set', value: 'dark' }])
+    expect(memoryResult).toMatchObject({ ok: false })
+    expect(mutateRpc).not.toHaveBeenCalled()
+
+    const { scope } = derivedScope({ mutate: vi.fn() })
+    await scope.dispose()
+    const disposedResult = await scope.mutate([{ field: 'preference', op: 'set', value: 'dark' }])
+    expect(disposedResult).toMatchObject({ ok: false })
+  })
+})
+
 describe('SettingsScopeBinder.bind', () => {
   it('shares one mirror read across bound scopes and disposes each with its fiber', async () => {
     const describeCall = vi.fn().mockResolvedValue(described({ preference: 'dark' }, 1))

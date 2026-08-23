@@ -49,6 +49,44 @@ export interface SettingsScopeSpec<T> {
 }
 
 /**
+ * One field-level write in a {@link SettingsScope.mutate} batch. The same
+ * edit `set`/`unset` performs, named by field so a batched answer can report
+ * per-field landing.
+ */
+export interface SettingsScopeBatchWrite {
+  /** Scalar field inside the namespace section. */
+  field: string
+  /** set stores a value; unset drops the leaf. */
+  op: 'set' | 'unset'
+  /** Value for op set (absent for unset). */
+  value?: unknown
+}
+
+/** Per-field landing report of one {@link SettingsScope.mutate} batch. */
+export interface SettingsScopeBatchFieldResult {
+  /** Field this entry writes. */
+  field: string
+  /**
+   * Whether the Host holds this field's staged value afterwards, judged from
+   * the write's own answer view: user-layer presence for plain fields,
+   * secret-slot markers for redacted ones (a secret never rides back).
+   */
+  landed: boolean
+}
+
+/** Outcome of one {@link SettingsScope.mutate} batch; refusal fails it whole. */
+export interface SettingsScopeBatchResult {
+  /** Whether the Host accepted every op as one unit. */
+  ok: boolean
+  /** Per-field landing, in request order; always present when ok. */
+  fields: SettingsScopeBatchFieldResult[]
+  /** Host rejection code (refused batch). */
+  code?: string
+  /** Host rejection message (refused batch). */
+  message?: string
+}
+
+/**
  * Reactive owner handle over one namespace's durable section — the browser
  * mirror of the Host-side `SettingsScope` owner seam. Domain services read
  * and observe the snapshot and route explicit user choices through `set`.
@@ -78,4 +116,13 @@ export interface SettingsScope<T> {
    * @returns settlement after the clear and any latest-write recovery read.
    */
   unset(field: string): Promise<void>
+  /**
+   * Optional batch surface: commit several field edits as ONE Host mutation,
+   * so cross-field validate hooks judge them as a unit instead of rejecting
+   * every intermediate single-field state. Shares {@link set}'s ordering,
+   * revision, and recovery contract; a refused batch reports why and leaves
+   * the document untouched. Scopes without the surface simply omit it —
+   * callers fall back to per-field writes.
+   */
+  mutate?(writes: readonly SettingsScopeBatchWrite[]): Promise<SettingsScopeBatchResult>
 }

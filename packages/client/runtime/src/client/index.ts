@@ -51,6 +51,7 @@ export { abbreviateHomePath, resolveWorkspacePath } from './workspaces/path.ts'
 // dsh-client-ui-settings (see that package's settings-scope.ts).
 export type {
   SettingsScope, SettingsScopeSnapshot, SettingsScopeSpec,
+  SettingsScopeBatchWrite, SettingsScopeBatchFieldResult, SettingsScopeBatchResult,
 } from './contract/settings-scope.ts'
 export type { Session } from './sessions/session.ts'
 export type { ISession, ProjectionsFace, SessionFace } from './contract/session.ts'

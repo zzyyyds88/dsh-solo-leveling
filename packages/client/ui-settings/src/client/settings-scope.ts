@@ -14,7 +14,8 @@ import type {
   ConnectionHandle, IApiClient, SettingsNamespaceView, SettingsPathOpView,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import {
-  createSnapshotStore, type SettingsScope, type SettingsScopeSnapshot,
+  createSnapshotStore, type SettingsScope, type SettingsScopeBatchResult,
+  type SettingsScopeBatchWrite, type SettingsScopeSnapshot,
   type SettingsScopeSpec, type SnapshotStore,
 } from '@deepseek-ai/dsh-client-runtime/client'
 // Type-only, and deliberately NOT `@deepseek-ai/dsh-api-remotes/client`: this
@@ -119,6 +120,122 @@ export class SettingsScopeController<T> implements SettingsScope<T> {
    */
   unset(field: string): Promise<void> {
     return this.write({ op: 'unset', path: [field] })
+  }
+
+  /**
+   * Commit several field edits as ONE Host mutation — the batch surface of
+   * {@link SettingsScope.mutate}. The Host applies the ops to the section as
+   * stored and resolves/validates once, so cross-field constraints (an
+   * endpoint+model pair, say) judge the final state instead of every
+   * intermediate single-field state a per-field loop would stage. Shares
+   * {@link set}'s queueing: one wire call behind already-queued writes, fenced
+   * by the latest known revision, folded into the mirror only when still the
+   * latest settlement. A refused batch recovers Host state and reports the
+   * seam's own code and message so an editor can surface why.
+   * @param writes - field edits in request order; later ops observe earlier ones.
+   * @returns per-field landing judged from the answer view (user-layer compare
+   * for plain fields, secret-slot markers for redacted ones), or the refusal.
+   */
+  async mutate(writes: readonly SettingsScopeBatchWrite[]): Promise<SettingsScopeBatchResult> {
+    if (writes.length === 0) return { ok: true, fields: [] }
+    const dead = (): SettingsScopeBatchResult => ({
+      ok: false,
+      fields: writes.map(write => ({ field: write.field, landed: false })),
+      ...(this.persistence === 'memory'
+        ? { message: 'settings preferences are process-local in this browser' }
+        : {}),
+    })
+    if (this.persistence === 'memory' || this.disposed) return dead()
+    const generation = ++this.writeGeneration
+    let settle!: (result: SettingsScopeBatchResult) => void
+    const done = new Promise<SettingsScopeBatchResult>((resolve) => { settle = resolve })
+    // Same chain discipline as `enqueue`, carrying the batch result out: the
+    // queue tail stays fulfilled, and a disposal landing before the task runs
+    // settles the caller instead of leaving it hanging.
+    const task = this.tail.then(async () => {
+      if (this.disposed) {
+        settle(dead())
+        return
+      }
+      try {
+        settle(await this.runBatch(generation, writes))
+      } catch (error) {
+        settle({
+          ok: false,
+          fields: writes.map(write => ({ field: write.field, landed: false })),
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    })
+    this.tail = task.catch(() => {})
+    return done
+  }
+
+  /** The wire round-trip behind {@link mutate}, after the queue granted the turn. */
+  private async runBatch(
+    generation: number,
+    writes: readonly SettingsScopeBatchWrite[],
+  ): Promise<SettingsScopeBatchResult> {
+    const unlanded = writes.map(write => ({ field: write.field, landed: false }))
+    const revision = this.pendingRevision ?? this.getSnapshot().revision
+    let response: Awaited<ReturnType<SettingsFace['settings']['mutate']>>
+    try {
+      response = await this.api.settings.mutate({
+        ns: this.spec.namespace,
+        ops: writes.map(write => write.op === 'set'
+          ? { op: 'set' as const, path: [write.field], value: write.value }
+          : { op: 'unset' as const, path: [write.field] }),
+        ...(revision === undefined ? {} : { expectedRevision: revision }),
+      })
+    } catch (error) {
+      await this.recover(generation)
+      return {
+        ok: false,
+        fields: unlanded,
+        message: error instanceof Error ? error.message : String(error),
+      }
+    }
+    if (!response.result.ok) {
+      await this.recover(generation)
+      return {
+        ok: false,
+        fields: unlanded,
+        code: response.result.error.code,
+        message: response.result.error.message,
+      }
+    }
+    const answer = response.result.value
+    if (generation === this.writeGeneration) {
+      this.pendingRevision = undefined
+      this.mirror.acceptView(answer)
+    } else {
+      this.pendingRevision = answer.revision
+    }
+    // Landing is judged from the ANSWER view, not the local snapshot: a
+    // superseded batch must still report truthfully about its own write. A
+    // redacted secret never appears in the user layer, so its slot marker is
+    // the only witness that the value stuck.
+    const user = typeof answer.user === 'object' && answer.user !== null
+      ? answer.user as Record<string, unknown>
+      : undefined
+    const secretSlots = new Map(answer.secrets
+      .filter(slot => slot.path.length === 1)
+      .map(slot => [slot.path[0] as string, slot.set]))
+    return {
+      ok: true,
+      fields: writes.map((write) => {
+        const slot = secretSlots.get(write.field)
+        if (slot !== undefined) {
+          return { field: write.field, landed: write.op === 'set' ? slot : !slot }
+        }
+        if (user === undefined) return { field: write.field, landed: false }
+        const present = Object.hasOwn(user, write.field)
+        return {
+          field: write.field,
+          landed: write.op === 'set' ? present && user[write.field] === write.value : !present,
+        }
+      }),
+    }
   }
 
   private write(op: SettingsPathOpView): Promise<void> {
