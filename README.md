@@ -7,7 +7,7 @@ English | [中文](README.zh.md)
 ![桌面端](assets/readme-desktop.png)
 
 <p align="center">
-  <img src="assets/readme-mobile-chat.png" width="280" alt="手机端 · 会话" />
+  <img src="assets/readme-mobile-hero.png" width="280" alt="手机端 · 新会话" />
   <img src="assets/readme-mobile-settings.png" width="280" alt="手机端 · 设置" />
 </p>
 
