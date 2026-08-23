@@ -323,7 +323,11 @@ export function buildMobileCss(breakpointPx: number): string {
   [role='dialog'][aria-modal='true'] > div[class*='content'] {
     min-width: 0 !important;
   }
-  /* 字段行：文字区占满整行、控件换行到下一行全宽，避免文本被挤压成竖排 */
+  /* 字段行：文字区占满整行、控件换行到下一行全宽，避免文本被挤压成竖排。
+     作用域只限「设置单元行」（.row = rowText + 控件，语言/预设/权限等）；
+     排除模型管理的提供方行（rowCard/rowHead/rowIdentity/rowActions）——
+     那些是紧凑的身份行（名称 + 8px 凭证圆点 + 编辑/删除），被换行规则
+     误伤会把圆点拉成 100% 宽的色条、把操作按钮拉成全宽巨块。 */
   [role='dialog'][aria-modal='true'] [class*='rowText'] {
     flex: 1 1 100% !important;
     flex-basis: 100% !important;
@@ -336,12 +340,12 @@ export function buildMobileCss(breakpointPx: number): string {
     width: 100% !important;
     max-width: 100% !important;
   }
-  [role='dialog'][aria-modal='true'] [class*='row'] {
+  [role='dialog'][aria-modal='true'] [class*='row']:not([class*='rowCard']):not([class*='rowHead']):not([class*='rowIdentity']):not([class*='rowActions']) {
     flex-wrap: wrap !important;
     align-items: flex-start !important;
     gap: 8px !important;
   }
-  [role='dialog'][aria-modal='true'] [class*='row'] > :last-child:not(input[type='checkbox']):not(input[type='radio']) {
+  [role='dialog'][aria-modal='true'] [class*='row']:not([class*='rowCard']):not([class*='rowHead']):not([class*='rowIdentity']):not([class*='rowActions']) > :last-child:not(input[type='checkbox']):not(input[type='radio']) {
     width: 100% !important;
     flex-basis: 100% !important;
   }
