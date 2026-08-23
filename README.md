@@ -4,6 +4,33 @@ English | [中文](README.zh.md)
 
 > **DeepSeek Harness 定制整合包 —— 不跟随官方更新，fork 自玩。** 基线：`deepseek-ai/deepseek-harness` @ [`dsh-v0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2)（上一基线 `dsh-v0.1.0-rc.8`，commit `f1f7dc36fa`）。
 
+![桌面端](assets/readme-desktop.png)
+
+<p align="center">
+  <img src="assets/readme-mobile-chat.png" width="280" alt="手机端 · 会话" />
+  <img src="assets/readme-mobile-settings.png" width="280" alt="手机端 · 设置" />
+</p>
+
+## 这是什么
+
+一句话：**把自己的 Agent 控制台搬到任何屏幕上** —— 桌面三栏工作台 + 手机端全功能适配，同一份 `dsh web` 实例服务两端。
+
+本仓库 = **大宝贝定制版**：deepseek-harness 源码平铺在仓库根，自研/收录插件与「改官方包」的定制改动整合进 harness 源码。**不跟随官方更新**，自维护基线，整体构建、整体分发。
+
+## 特色能力
+
+| 能力 | 说明 |
+|---|---|
+| **手机端全功能适配** | 侧栏/详情/aionui 面板窄屏变抽屉、键盘避让、安全区、会话标题居中、桌宠展开抬位、设置弹窗专项（触控目标/紧凑布局）；总开关/断点/抽屉宽度/桌宠缩放全部进设置卡 |
+| **访问门禁** | HTTPS + 口令登录门闸（限速、会话 Cookie、首次 `/setup` 引导），口令与证书方式可在 GUI 里改 |
+| **网页桌宠** | 随任务/工具/上下文切换表情的 Live2D 女仆：状态气泡、音效与语音、账房 token 统计、纸屑庆祝，可最小化贴角 |
+| **皮肤中心** | maid-atelier（深渊女仆工坊）主题：侧栏角色立绘、蕾丝装饰、标题栏品牌字 |
+| **图像理解** | 文本模型外挂视觉端点（OpenAI 兼容）：`describe_image` 工具 + 会话内图片预览，端点/模型/密钥/限额全部在设置卡配置 |
+| **插件配置卡体系** | 所有自研插件的可调参数统一进「设置 → 插件 → 插件配置」卡片，批量原子保存、拒绝原因可见，无硬编码 |
+| **任务看板 / 实时统计 / Git 图谱** | 会话任务五列看板 + cron 定时跑；流式 token 速率与缓存命中实时统计；提交图谱可视化 |
+
+完整插件清单见 [PLUGINS.md](PLUGINS.md)；fork 定制点与升级口径见 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)。
+
 ## 为什么 fork（背景）
 
 官方宣称「一切皆插件，支持一切接插件」。但实测发现，有一批能力**必须改官方包本体**才能做出来，例如：
@@ -12,39 +39,7 @@ English | [中文](README.zh.md)
 - 设置命名空间暴露（`dsh-host-apiproxy`）；
 - LLM 重试兜底与思考强度档位（`dsh-llm` / `dsh-llm-deepseek` / `dsh-llm-pi-ai`）。
 
-这些改动保留的是 `@deepseek-ai/*` 官方包名，`dsh plugin add` 只会解析到官方原版 —— **改完就装不回去了**，只能靠安装脚本直接往 profile 铺同名 fork（升级又会被覆盖）。
-
-与其「npm 装一半纯插件 + 脚本铺一半同名 fork」两套流程，不如**直接 fork 整个 DeepSeek Harness**，把这些改动改进 harness 源码本体，整体构建、整体分发 —— 这就是本仓库。
-
-## 这是什么
-
-本仓库 = **大宝贝定制版**：deepseek-harness 源码平铺在仓库根，自研/收录插件与「改官方包」的定制改动整合进 harness 源码。**不跟随官方更新**，自维护基线。
-
-## 整合进度
-
-| 阶段 | 状态 |
-|---|---|
-| 拉取官方基线（rc.8 `f1f7dc36fa` 平铺到仓库根） | ✅ 完成 |
-| 基线升级 `dsh-v0.1.1-rc.2`（全部 fork 重 base，逐项核对见升级适配指南 §2） | ✅ 完成 |
-| 8 个 `@deepseek-ai/*` 同名 fork 重 base 进对应 `packages/*/*` | ✅ 完成 |
-| 自研插件（门闸 / 默认值 / 桌宠 / 手机端 / 任务套件等 15 包）迁入 `packages/*/*` | ✅ 完成 |
-| 三平台适配（Linux / Windows / Termux）+ 跨平台打包脚本 | ✅ 完成 |
-| 同步更新工作区文档（AGENTS / PLUGINS / 路线图 / 组 README） | ✅ 完成 |
-
-fork 逐项映射与升级适配见 [docs/工作区/升级适配指南.md](docs/工作区/升级适配指南.md)。
-
-## 目录结构
-
-仓库根即 harness monorepo；自研/收录内容按官方分组规范并入：
-
-```
-仓库根                 ← deepseek-harness monorepo（rc.2 平铺）
-├── packages/          ← harness 包（host/ client/ llm/ settings/ …）+ 迁入的自研插件
-├── apps/              ← dsh CLI 与 Web 前端产品装配
-├── vendor/            ← 上游 vendored 框架包
-├── docs/              ← harness 文档 + 本工作区文档
-├── scripts/           ← harness 脚本 + 本工作区打包脚本
-```
+这些改动保留的是 `@deepseek-ai/*` 官方包名，`dsh plugin add` 只会解析到官方原版 —— **改完就装不回去了**。与其「npm 装一半纯插件 + 脚本铺一半同名 fork」两套流程，不如**直接 fork 整个 DeepSeek Harness**，把改动整合进源码本体 —— 这就是本仓库。
 
 ## 构建与运行
 
@@ -96,6 +91,18 @@ dsh web                                # Termux 内 HTTPS 端口，手机浏览�
 - Termux 是 Linux 环境：本仓库与官方代码均为纯 Node/POSIX，直接可用。
 - native 依赖（`koffi`、`node-pty`，用于文件系统/终端能力）在 Termux 需从源码编译：上面的 `binutils make clang` 即为此准备；若安装失败可 `npm i -g --omit=optional ./dist/npm/*.tgz` 降级（失去部分原生能力，核心 Web GUI 仍可用）。
 - 无 root 的 Termux 监听低端口受限，使用默认 3080 即可。
+
+## 目录结构
+
+```
+仓库根                 ← deepseek-harness monorepo（rc.2 平铺）
+├── packages/          ← harness 包（host/ client/ llm/ settings/ …）+ 迁入的自研插件
+├── apps/              ← dsh CLI 与 Web 前端产品装配
+├── vendor/            ← 上游 vendored 框架包
+├── docs/              ← harness 文档 + 本工作区文档
+├── scripts/           ← harness 脚本 + 本工作区打包脚本
+└── assets/            ← README 配图与社区入口图
+```
 
 ## 远期计划（迁回官方基线）
 
