@@ -6,27 +6,6 @@ English | [中文](README.zh.md)
 
 **把自己的 Agent 控制台搬到任何屏幕上** —— 桌面三栏工作台 + 手机端全功能适配，同一份 `dsh web` 实例服务两端。
 
-## 界面一览
-
-**桌面工作台**（三栏布局 · maid-atelier 皮肤 · 网页桌宠）：
-
-![桌面工作台](assets/readme-desktop.png)
-
-**手机端**（窄屏自适应：抽屉导航 · 会话标题居中 · 桌宠展开抬位）：
-
-<table>
-  <tr>
-    <td width="50%" align="center">
-      <img src="assets/readme-mobile-hero.png" alt="手机端 · 新会话" />
-      <br><sub>新会话：hero 引导 + 输入卡沉底 + 桌宠不挡输入</sub>
-    </td>
-    <td width="50%" align="center">
-      <img src="assets/readme-mobile-settings.png" alt="手机端 · 设置" />
-      <br><sub>设置：图标导航 + 单列布局 + 触控友好的控件</sub>
-    </td>
-  </tr>
-</table>
-
 ## 这是什么
 
 本仓库 = **大宝贝定制版**：deepseek-harness 源码平铺在仓库根，自研/收录插件与「改官方包」的定制改动整合进 harness 源码。**不跟随官方更新**，自维护基线，整体构建、整体分发。
@@ -115,7 +94,7 @@ dsh web                                # Termux 内 HTTPS 端口，手机浏览�
 ├── vendor/            ← 上游 vendored 框架包
 ├── docs/              ← harness 文档 + 本工作区文档
 ├── scripts/           ← harness 脚本 + 本工作区打包脚本
-└── assets/            ← README 配图与社区入口图
+└── assets/            ← 社区入口图等静态资源
 ```
 
 ## 远期计划（迁回官方基线）
