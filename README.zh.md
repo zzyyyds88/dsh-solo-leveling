@@ -57,6 +57,15 @@ npm i -g ./dist/npm/*.tgz
 dsh web                                # https://0.0.0.0:3080
 ```
 
+**Linux 服务器部署实测备注（2026-08）**：
+
+- npm 11 的 allow-scripts 安全机制会拦截 native 依赖的安装脚本（koffi / node-pty / esbuild / protobufjs / @google/genai / dsh-subprocess-local），全局安装后需补跑一次白名单安装，否则文件系统/终端等原生能力缺失：
+  ```bash
+  npm i -g --allow-scripts=koffi,node-pty,esbuild,protobufjs,@google/genai,@deepseek-ai/dsh-subprocess-local ./dist/npm/*.tgz
+  ```
+- 守护进程用 systemd：`/etc/systemd/system/dsh-web.service`（`Restart=always` + 开机自启），kill -9 实测自动拉起正常。
+- 构建环境实测：Node v26 + 仓库锁定 TypeScript 6.0.3 + pnpm 11.7.0 全绿；依赖可走国内镜像（npmmirror）。
+
 ### Windows（PowerShell）
 
 ```powershell
