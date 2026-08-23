@@ -366,19 +366,20 @@ export function buildMobileCss(breakpointPx: number): string {
     max-width: 100% !important;
   }
 
-  /* ── 5. 桌宠：与 3080 完全一致的尺寸（0.75）+ 在屏内 ────────────
-     用户要求：3090 桌宠大小必须和 3080 一致（3080 即 0.75）。
-     right/bottom 保持 8/74：出屏（-30/-24）是 3080 旧构建的 bug，
-     修好后 3080 重装也会是 8/74。缩放值走 --dshm-pet-scale（设置卡可调）。 */
+  /* ── 5. 桌宠：窄屏默认展开，整体抬到输入区上方 ──────────────────
+     展开态尺寸走 --dshm-pet-scale（设置卡可调，默认 0.75）；bottom 抬高
+     到输入卡之上（统计条 + 模型行 + 输入卡 ≈ 190px），角色不再压住
+     输入区——遮让由定位解决，组件端窄屏不再默认折叠成小圆角标。
+     折叠态（最小化按钮）仍贴角：10px 底距 + 安全区。 */
   [data-dsh-live2d-root] {
     --pet-scale: var(--dshm-pet-scale, 0.75) !important;
     right: 8px !important;
-    bottom: 74px !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 190px) !important;
   }
   [data-dsh-live2d-root][data-collapsed='true'] {
     --pet-scale: 1 !important;
     right: 8px !important;
-    bottom: 10px !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px) !important;
   }
   /* 弹层打开时把桌宠让开（避免遮挡设置/选择器内容） */
   body:has([role='dialog'][aria-modal='true']) [data-dsh-live2d-root] {

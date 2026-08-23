@@ -282,9 +282,11 @@ export function DeepSeekPet({ useSessions, resolveSession, openSession }: PetPro
     questionCount, taskActive, userCorrection, waitingMs: 0,
   })
   const [visual, setVisual] = useState<DerivedVisual>(immediate)
-  // 窄屏（移动端）默认折叠成小圆角标：展开态的角色会遮住底部输入框，
-  // 折叠让小圆贴角，双击再展开（桌面端保持展开默认）。
-  const [collapsed, setCollapsed] = useState(() => window.innerWidth <= 768)
+  // 展开态为默认（桌面与手机一致）：手机端曾默认折叠成小圆角标避让
+  // 输入框，但那让桌宠在窄屏上"消失"成一个小点；改为 mobile-adapt
+  // 的窄屏 CSS 把展开态整体抬到输入区上方（bottom 加高），遮让问题由
+  // 定位解决，不再靠默认折叠。最小化按钮/双击仍可折叠。
+  const [collapsed, setCollapsed] = useState(false)
   const [phase, setPhase] = useState(0)
   const [thinkingMs, setThinkingMs] = useState(0)
   const [visualMs, setVisualMs] = useState(0)
