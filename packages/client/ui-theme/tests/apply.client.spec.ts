@@ -126,7 +126,7 @@ describe('ui-theme apply', () => {
     await vi.waitFor(() => { expect(b.mutate).toHaveBeenCalledTimes(2) })
   })
 
-  it('loads Host settings at boot, refreshes its namespace, and keeps remote browsers process-local', async () => {
+  it('loads Host settings at boot and refreshes its namespace', async () => {
     const b = await bench()
     // The shared mirror read once at bench time; a Host-side change reaches it
     // through the document invalidation, exactly as production announces one.
@@ -147,15 +147,20 @@ describe('ui-theme apply', () => {
     b.setHostPreference('dark')
     b.ctx.emit('connection/reset')
     await vi.waitFor(() => { expect(theme.getTheme().preference).toBe('dark') })
+  })
 
+  it('serves remote browsers from Host settings too (Local fork: docs/工作区/升级适配指南.md §2.1)', async () => {
+    // The fork binds host persistence on every browser: a remote boot reads
+    // the document and a theme change writes through instead of staying
+    // process-local. A previous revision asserted the official memory-mode
+    // contract here — restoring it would silently reintroduce that revert.
     const remote = await bench(false)
     declareItems(remote.slots)
     await remote.ctx.plugin({ inject: [...inject], apply }).await()
     const remoteTheme = remote.ctx.get('theme') as ThemeRuntime
+    await vi.waitFor(() => { expect(remote.describe).toHaveBeenCalled() })
     remoteTheme.setTheme('dark')
-    await Promise.resolve()
-    expect(remote.describe).not.toHaveBeenCalled()
-    expect(remote.mutate).not.toHaveBeenCalled()
+    await vi.waitFor(() => { expect(remote.mutate).toHaveBeenCalled() })
   })
 
   it('activates before a slow settings refresh and converges when it settles', async () => {

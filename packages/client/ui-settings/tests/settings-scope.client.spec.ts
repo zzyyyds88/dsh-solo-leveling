@@ -584,10 +584,20 @@ describe('SettingsScopeBinder.bind', () => {
     expect(theme.getSnapshot()).toMatchObject({ revision: 1 })
   })
 
-  it('binds a remote browser in memory mode without starting a settings read', async () => {
-    const describeCall = vi.fn()
+  it('binds a remote browser in host mode and reads settings (Local fork: docs/工作区/升级适配指南.md §2.1)', async () => {
+    // The fork binds host persistence regardless of isLoopback: an
+    // authenticated remote caller reads and writes Host settings. A previous
+    // revision of this test asserted the official memory-mode contract here —
+    // restoring it would silently reintroduce that revert.
+    const describeCall = vi.fn(() => Promise.resolve({
+      rpcId: 'remote-bind' as never,
+      result: {
+        ok: true as const,
+        value: { writable: true, hasDocument: true, namespaces: [view({ preference: 'dark' })] },
+      },
+    }))
     const wire = { settings: { describe: describeCall } }
-    const mirror = new SettingsDescribeMirror(wire as never, 'memory')
+    const mirror = new SettingsDescribeMirror(wire as never, 'host')
     const ctx = new Context()
     ctx.provide('connection', { api: wire, isLoopback: false } as never)
     let scope!: SettingsScope<UiTestSettings>
@@ -600,8 +610,11 @@ describe('SettingsScopeBinder.bind', () => {
       },
     })
     await fiber.await()
-    expect(scope.getSnapshot()).toMatchObject({ status: 'unavailable', mode: 'memory', writable: false })
+    await vi.waitFor(() => {
+      expect(scope.getSnapshot()).toMatchObject({ status: 'ready', mode: 'host', writable: true })
+    })
+    expect(scope.getSnapshot().value).toEqual({ preference: 'dark' })
     await fiber.dispose()
-    expect(describeCall).not.toHaveBeenCalled()
+    expect(describeCall).toHaveBeenCalled()
   })
 })

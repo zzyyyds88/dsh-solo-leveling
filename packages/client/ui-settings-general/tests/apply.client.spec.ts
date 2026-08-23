@@ -174,7 +174,10 @@ describe('ui-settings-general apply', () => {
     const fiber = b.ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
     expect(b.slots.entries('settings.action')).toEqual([])
-    expect(b.settingsDescribe).not.toHaveBeenCalled()
+    // Local fork (docs/工作区/升级适配指南.md §2.1): the describe mirror reads
+    // on every browser, loopback or not — the document ACTION stays
+    // loopback-only, but the settings document itself is served remotely.
+    expect(b.settingsDescribe).toHaveBeenCalledTimes(1)
     await fiber.dispose()
     for (const [name] of SEATS) expect(b.slots.entries(name)).toEqual([])
   })

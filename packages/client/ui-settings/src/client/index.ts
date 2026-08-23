@@ -51,7 +51,11 @@ export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const mirror = new SettingsDescribeMirror(
     connection.api,
-    connection.isLoopback ? 'host' : 'memory',
+    // Local fork: always host persistence. Behind the access gate an
+    // authenticated remote caller may read/write settings (connection's
+    // webAuthAuthed admits it); anonymous callers are refused by the 403
+    // gate, which reads as "unavailable" — equivalent to memory mode.
+    'host',
   )
   ctx.effect(() => {
     const disposers = [
