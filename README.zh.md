@@ -4,16 +4,30 @@
 
 > **DeepSeek Harness 定制整合包 —— 不跟随官方更新，fork 自玩。** 基线：`deepseek-ai/deepseek-harness` @ [`dsh-v0.1.1-rc.2`](https://github.com/deepseek-ai/deepseek-harness/tree/dsh-v0.1.1-rc.2)（上一基线 `dsh-v0.1.0-rc.8`，commit `f1f7dc36fa`）。
 
-![桌面端](assets/readme-desktop.png)
+**把自己的 Agent 控制台搬到任何屏幕上** —— 桌面三栏工作台 + 手机端全功能适配，同一份 `dsh web` 实例服务两端。
 
-<p align="center">
-  <img src="assets/readme-mobile-hero.png" width="280" alt="手机端 · 新会话" />
-  <img src="assets/readme-mobile-settings.png" width="280" alt="手机端 · 设置" />
-</p>
+## 界面一览
+
+**桌面工作台**（三栏布局 · maid-atelier 皮肤 · 网页桌宠）：
+
+![桌面工作台](assets/readme-desktop.png)
+
+**手机端**（窄屏自适应：抽屉导航 · 会话标题居中 · 桌宠展开抬位）：
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <img src="assets/readme-mobile-hero.png" alt="手机端 · 新会话" />
+      <br><sub>新会话：hero 引导 + 输入卡沉底 + 桌宠不挡输入</sub>
+    </td>
+    <td width="50%" align="center">
+      <img src="assets/readme-mobile-settings.png" alt="手机端 · 设置" />
+      <br><sub>设置：图标导航 + 单列布局 + 触控友好的控件</sub>
+    </td>
+  </tr>
+</table>
 
 ## 这是什么
-
-一句话：**把自己的 Agent 控制台搬到任何屏幕上** —— 桌面三栏工作台 + 手机端全功能适配，同一份 `dsh web` 实例服务两端。
 
 本仓库 = **大宝贝定制版**：deepseek-harness 源码平铺在仓库根，自研/收录插件与「改官方包」的定制改动整合进 harness 源码。**不跟随官方更新**，自维护基线，整体构建、整体分发。
 
