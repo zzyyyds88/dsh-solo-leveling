@@ -1,15 +1,19 @@
 /**
- * Task-board client plugin: wires the framework-free core (controller,
- * execution service, store) to the real client runtime and mounts the two
- * DOM surfaces — the sidebar entry row and the board view in the center
- * column.
+ * Task-board client plugin: wires the framework-free core (controller, host
+ store) to the real client runtime and mounts the two DOM surfaces — the
+ sidebar entry row and the board view in the center column.
+ *
+ * The board is a pure view over the host half (`@deepseek-ai/dsh-host-task-board`):
+ * edits replay onto /api/task-board/*, the ledger reloads from SSE change
+ * snapshots, manual runs go through POST /run, and nothing schedules or drives
+ * sessions in the browser anymore.
  *
  * Failure policy: DOM mounting problems are logged, never thrown — the web
  * shell fails the whole boot when a plugin apply throws, and an external
  * plugin must not take the GUI down.
  */
-import type { ClientContext, SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ConnectionHandle, PromptContentPart } from '@deepseek-ai/dsh-client-connection/client'
+import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale) and its
 // LocaleNamespaceMap merge table.
@@ -19,9 +23,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: declares the keyed `settings.plugin.item` slot (plugin-config section).
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import { BoardController } from '../core/controller.ts'
-import { ExecutionService } from '../core/execution.ts'
-import { SchedulerService } from '../core/scheduler.ts'
-import { LocalStorageTaskStore } from '../core/store.ts'
+import { HostApiTaskStore } from './host-store.ts'
 import { claimTaskboardApply, releaseTaskboardApply } from './apply-guard.ts'
 import { mountBoard } from './board-mount.tsx'
 import { mountSidebarEntry } from './sidebar-entry.ts'
@@ -84,86 +86,38 @@ export function apply(ctx: ClientContext): void {
     const workspaces = ctx.workspaces
     const connection = ctx.get('connection') as ConnectionHandle
 
-    // Core wiring: real runtime faces into the framework-free services.
-    const store = new LocalStorageTaskStore()
-    const exec = new ExecutionService({
-      sessions: {
-        list: sessions.list,
-        binding: (id) => {
-          const binding = sessions.binding(id as SessionId)
-          if (binding === undefined) return undefined
-          const { session } = binding
-          return {
-            session: {
-              rename: title => session.rename(title),
-              prompt: (content, mode) =>
-                session.prompt(content as PromptContentPart[], mode).then(result =>
-                  result.ok ? { ok: true as const } : { ok: false as const, error: result.error }),
-              command: line =>
-                session.command(line).then(result =>
-                  result.ok ? { ok: true as const, matched: result.value.matched } : { ok: false as const, error: result.error }),
-              getSnapshot: () => session.getSnapshot(),
-              subscribe: fn => session.subscribe(fn),
-            },
-          }
-        },
-        noteAgentPreset: (sessionId, agentPreset) =>{  sessions.noteAgentPreset(sessionId as SessionId, agentPreset) },
-      },
-      workspaces: {
-        list: workspaces.list,
-        connectWorkspace: id => workspaces.connectWorkspace(id as WorkspaceId),
-      },
-      presets: {
-        select: async (sessionId, agentPreset) => {
-          try {
-            const response = await connection.api.agentPresets.select({ sessionId: sessionId as SessionId, agentPreset })
-            return response.result.ok ? { ok: true as const } : { ok: false as const, error: response.result.error }
-          } catch (error) {
-            return { ok: false as const, error }
-          }
-        },
-      },
-      history: {
-        loadTail: async (sessionId) => {
-          const response = await connection.api.sessions.history({
-            sessionId: sessionId as SessionId,
-            maxMessages: 20,
-          })
-          return response.result.ok
-            ? { events: response.result.value.events.map(entry => entry.event) }
-            : undefined
-        },
-      },
+    // Core wiring: the ledger of record lives in the host half. Edits replay
+    // onto /api/task-board/* as create/update/delete diffs; the authoritative
+    // state flows back through SSE change snapshots (each one swaps the store
+    // cache and fires the controller's external reload below).
+    const disposers: Array<() => void> = []
+    const store = new HostApiTaskStore()
+    const source = new EventSource('/api/task-board/events')
+    source.addEventListener('change', (event) => {
+      try {
+        store.ingest((JSON.parse((event as MessageEvent<string>).data) as { tasks?: unknown }).tasks)
+      } catch {
+        // A malformed frame is skipped; the next change re-baselines.
+      }
     })
+    disposers.push(() => { source.close() })
+
     const controller = new BoardController({
       store,
-      exec,
+      // Manual "run now": the host owns the whole execution; a non-2xx answer
+      // (unknown task / already running / failed launch) reads as refused.
+      runner: id =>
+        fetch('/api/task-board/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id }),
+        }).then(response => response.ok).catch(() => false),
       sessions: {
         list: sessions.list,
         open: (id) =>{  sessions.open(id as SessionId) },
       },
     })
     controller.start()
-
-    // Scheduled runs: a browser-side heartbeat that triggers due tasks through
-    // the same run path as the manual Run button. The first tick is gated on
-    // the session list baseline so a page-load catch-up never fires into a
-    // not-yet-ready runtime; tab visibility recovery ticks immediately.
-    const scheduler = new SchedulerService({
-      tasks: () => controller.getSnapshot().tasks,
-      now: () => Date.now(),
-      runTask: id => controller.runTask(id),
-      applySchedule: (id, nextRunAt, lastTriggeredAt) =>{
-        controller.applyScheduleNextRun(id, nextRunAt, lastTriggeredAt) },
-      ready: () => sessions.list.getSnapshot().phase === 'ready',
-      environment: {
-        addEventListener: (type, listener) =>{  document.addEventListener(type, listener) },
-        removeEventListener: (type, listener) =>{  document.removeEventListener(type, listener) },
-      },
-    })
-    scheduler.start()
-
-    const disposers: Array<() => void> = []
 
     // Execution-target option feeds: the workspace list drives the workspace
     // picker, and the agent-preset roster drives the mode picker. Both are
@@ -212,7 +166,6 @@ export function apply(ctx: ClientContext): void {
 
     uiDisposer = () => {
       for (const dispose of disposers.splice(0)) dispose()
-      scheduler.dispose()
       controller.dispose()
       uiDisposer = undefined
     }

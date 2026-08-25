@@ -305,6 +305,7 @@
     { "path": "./packages/host/access-gate" },
     { "path": "./packages/host/git-graph" },
     { "path": "./packages/host/aionui-panel" },
+    { "path": "./packages/host/task-board" },
     { "path": "./packages/sdk/client" },
     { "path": "./packages/sdk/protocol" },
     { "path": "./packages/lsp/lsp" },

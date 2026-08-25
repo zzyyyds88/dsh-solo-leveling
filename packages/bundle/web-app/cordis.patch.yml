@@ -147,6 +147,10 @@
     - id: aionui-panel
       name: '@deepseek-ai/dsh-host-aionui-panel'
 
+    # Task board host half: ledger persistence + in-process cron scheduler + /api/task-board/* routes.
+    - id: task-board
+      name: '@deepseek-ai/dsh-host-task-board'
+
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt

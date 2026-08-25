@@ -1,14 +1,15 @@
 /**
  * Host loader entry for the task-board plugin.
  *
- * Everything the board does is browser work (DOM, localStorage, driving the
- * client runtime's session services over the wire), so the host half's main
- * behavior is a system-prompt section announcing the plugin to every agent.
- * The section registers while this plugin is in the host composition (mount /
- * DSH restart) and disappears when the plugin leaves it (unmount / restart),
- * so agents always know the board exists and how to cooperate with it. The
- * announcement can be turned off through the web settings plugin-configuration
- * surface (`announceToAgent`); the section then disappears live.
+ * The board's ledger, scheduling, and executions live in the host half
+ * (`@deepseek-ai/dsh-host-task-board`, mounted from the same bundle); this
+ * entry's behavior is the system-prompt section announcing the plugin to every
+ * agent. The section registers while this plugin is in the host composition
+ * (mount / DSH restart) and disappears when the plugin leaves it (unmount /
+ * restart), so agents always know the board exists and how to cooperate with
+ * it. The announcement can be turned off through the web settings
+ * plugin-configuration surface (`announceToAgent`); the section then disappears
+ * live.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
@@ -22,7 +23,7 @@ const SECTION_ORDER = 200
 export const inject = ['systemPrompt']
 
 /** Model-facing announcement: plugin presence, capabilities, and limits. */
-export const TASK_BOARD_GUIDANCE = '本机已安装 dsh-task-board 插件（DSH Web GUI 的任务看板）：侧边栏「任务看板」入口；在 dsh-web-ui 插件全家桶仓库（packages/dsh-task-board）统一维护，经聚合包 web-ui-all 一键安装。能力：多列看板管理任务；任务可真实执行（驱动 agent 会话）；任务可钉住执行目标——工作区 / 模式（agent 预设）/ 权限（read-only / workspace-write / danger-full-access），缺省用运行时默认；任务支持 5 段 cron 定时执行（如 0 23 * * *）；数据存浏览器 localStorage（键 dsh.taskBoard.v1）。限制：定时调度在浏览器端，需 GUI 标签页打开，错过即跳过；执行消耗 API 额度。用户提到「任务看板 / 看板 / 定时任务」时即指本插件，请据此协作。'
+export const TASK_BOARD_GUIDANCE = '本机已安装 dsh-task-board 插件（DSH Web GUI 的任务看板）：侧边栏「任务看板」入口。能力：多列看板管理任务；任务可真实执行（驱动 agent 会话）；任务可钉住执行目标——工作区 / 模式（agent 预设）/ 权限（read-only / workspace-write / danger-full-access），缺省用运行时默认；任务支持 5 段 cron 定时执行（如 0 23 * * *）；台账存于宿主 $DSH_HOME/task-board/ledger.json，由 host 进程统一调度与执行，网页标签页不开也照跑，网页看板与手机遥控端共用同一份台账（host 经 /api/task-board/* 与 task-board/changed 事件同步）。限制：定时错过即跳过，不补发；执行消耗 API 额度。用户提到「任务看板 / 看板 / 定时任务」时即指本插件，请据此协作。'
 
 /**
  * Settings namespace of the board's announcement capability — the section the

@@ -1,0 +1,33 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../webserver"
+    },
+    {
+      "path": "../apiproxy"
+    },
+    {
+      "path": "../../workspace/workspace"
+    },
+    {
+      "path": "../../util/home-paths"
+    },
+    {
+      "path": "../../util/atomic-write"
+    },
+    {
+      "path": "../../runtime-diagnostics/invariants"
+    }
+  ]
+}

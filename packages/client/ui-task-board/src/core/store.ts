@@ -1,17 +1,13 @@
 /**
- * Task persistence: a small storage seam with a localStorage backend.
+ * Task persistence seam: backends behind the board controller's
+ * load/save/clear/subscribeExternal contract.
  *
- * The task-board client plugin runs in the browser, and dsh exposes no
- * browser-writable file channel (same conclusion the skin-center research
- * reached for cordis.patch.yml), so tasks persist in the browser's
- * localStorage under a versioned key — the same persistence mechanism dsh's
- * own client snapshot stores use (`createSnapshotStore` persist). Data
- * survives page refreshes and dsh restarts (same origin), and survives
- * plugin uninstall (the key is simply left in place).
- *
- * The seam keeps the backend swappable (e.g. an IndexedDB or a host-file
- * channel later); tests run against the in-memory backend and a jsdom
- * localStorage backend.
+ * Since the task-board host half took over the ledger of record, the browser's
+ * live backend is the host API (`client/host-store.ts`); the localStorage
+ * backend here remains only as the one-shot migration source (rows written by
+ * earlier releases under `dsh.taskBoard.v1`) and the in-memory backend serves
+ * tests. The seam keeps further backends swappable without touching the
+ * controller.
  */
 import { isValidCron } from './schedule.ts'
 import { isTaskPermission, isTaskStatus, type ScheduleRule, type TaskRecord, type TaskStatus } from './tasks.ts'

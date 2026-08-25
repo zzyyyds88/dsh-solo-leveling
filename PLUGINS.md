@@ -16,7 +16,7 @@
 | `dsh-defaults` + `dsh-client-ui-defaults` | settings / client | 默认工作目录 / 默认重试次数的设置命名空间 +「默认值」卡片 |
 | `dsh-client-ui-mobile-adapt` | client | **手机端适配**：窄屏聊天区占满全宽、右侧面板变抽屉（含遮罩关闭）、输入框 16px 防 iOS 缩放、虚拟键盘避让（输入卡可滚到键盘上方、桌宠让位）、桌宠窄屏默认展开并抬到输入区上方（缩放可调，最小化仍贴角）、会话标题行窄屏水平居中、设置弹层手机端专项（触控目标/圆角/外观方块/字段行作用域修复）；「移动端适配」设置卡可调总开关/断点/三个抽屉宽度/桌宠缩放（保存即生效） |
 | `dsh-client-ui-pet` | client | **网页桌宠**：随任务/工具/上下文/活跃会话切换表情，WebAudio 音效（基础+附加分组）、edge-tts 离线语音、账房 token 统计、纸屑庆祝 |
-| `dsh-client-ui-task-board` | client | **任务看板**：五列 + cron 定时跑 + 真实会话执行 |
+| `dsh-host-task-board` + `dsh-client-ui-task-board` | host / client | **任务看板**：五列看板 + 真实会话执行；台账落 `$DSH_HOME/task-board/ledger.json`、cron 调度与执行收进 host 进程（网页不开也照跑），`/api/task-board/*`（CRUD/run/migrate/SSE）供网页看板与手机遥控共用，`task-board/changed` 事件广播全量快照 |
 | `dsh-client-ui-live-stats` | client | **实时令牌统计**：TPS / LLM 耗时 / 上下文 / 缓存命中 / 输入输出 token |
 | `dsh-client-ui-describe-image` | client | **图像理解**：`describe_image` 工具 +「Image understanding」配置卡（端点/模型/密钥/重试次数） |
 | `dsh-host-git-graph` + `dsh-client-ui-git-graph` | host / client | **Git 图谱**：分支选择器 + 提交历史 + 分支泳道 |

@@ -1,6 +1,6 @@
 # 任务看板 host 化设计（dsh-host-task-board）
 
-> 状态：设计定稿，待实现（2026-08-23）。
+> 状态：已实现（2026-08-23）。
 > 配套文档：[手机遥控插件.md](手机遥控插件.md)（App 侧消费方）、
 > App 侧设计 `DSH Reins/docs/design/dsh-remote-android-设计文档.md` 与技术文档（同级 `DSH Reins` 工作区）。
 > 本文件是任务看板 host 化的**唯一技术事实源**；实现与其冲突时以本文件为准并先改本文件。
@@ -98,7 +98,13 @@ host 半承载持久化与调度，client 半承载 UI。
 ### 5.4 执行
 
 - 与浏览器版同参：`apiProxy.sessions.create`（带 `workspaceId`/`agentPreset`=钉住的 mode）
-  → `apiProxy.sessions.prompt`（任务的 `prompt`），权限钉住按现行 controller 逻辑映射。
+  → `apiProxy.sessions.prompt`(任务的 `prompt`)；权限钉住沿用现行语义——经命令运行时
+  admit 一条 `/permission <id>` slash 命令（与浏览器半的 `session.command` 同通道，
+  绝不作为 prompt 正文发送），admit 失败则该次执行判失败且不发送任务 prompt。
+- 执行会话落定后由 apiProxy 的 host 帧流回填结果：`host/agent-error` 先到判 failed，
+  `host/session-status(running:false)` 后到（或先到且无 error）判 succeeded，二者幂等；
+  host 重启时遗留的未完结 running 执行在下次加载时统一 settle 为 cancelled（无帧可看的
+  会话无法对账，宁可放开互斥也不永久卡卡）。
 - 执行记录写入 `TaskRecord.executions`（id/sessionId/startedAt/endedAt/result/error），
   会话状态经 `host/session-status` 等事件回填 endedAt/result。
 - 手动触发与定时触发共用 `runTask`，带「正在运行」互斥。
@@ -112,7 +118,7 @@ POST 强制 `application/json`，body 上限 1MiB。
 | 路由 | 方法 | 请求 | 响应 |
 |---|---|---|---|
 | `/api/task-board/tasks` | GET | — | `{ok:true, value: TaskRecord[]}` |
-| `/api/task-board/tasks/create` | POST | 任务字段（不含 id/createdAt/updatedAt/executions） | `{ok:true, value: TaskRecord}` |
+| `/api/task-board/tasks/create` | POST | 任务字段（id/createdAt/updatedAt/executions 可省略；提供时按提供的身份落账，网页 diff 同步因此免于换 id） | `{ok:true, value: TaskRecord}` |
 | `/api/task-board/tasks/update` | POST | `{id, patch}` | `{ok:true, value: TaskRecord}` |
 | `/api/task-board/tasks/delete` | POST | `{id}` | `{ok:true, value:{deleted:true}}` |
 | `/api/task-board/run` | POST | `{id}` | `{ok:true, value:{executionId, sessionId}}` |
