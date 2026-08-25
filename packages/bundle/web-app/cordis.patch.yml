@@ -151,6 +151,13 @@
     - id: task-board
       name: '@deepseek-ai/dsh-host-task-board'
 
+    # Phone-remote BFF: /api/mobile/* (info / whitelisted RPC / respond /
+    # workspace-gated fs) + the /api/mobile/events WebSocket downlink for the
+    # DSH Reins app. taskBoard is an optional dependency (the whitelist trims
+    # its five methods when the board does not compose).
+    - id: mobile-remote
+      name: '@deepseek-ai/dsh-host-mobile-remote'
+
     # Web glue owned by this bundle: resolves the built frontend dist (an
     # assembly fact of dsh-web-app, never user config), mounts the
     # frontend-static fallback owner, registers the web-surface prompt
@@ -337,6 +344,11 @@
     # Task board: sidebar entry + kanban view + settings card (localStorage persistence).
     - id: ui-task-board
       name: '@deepseek-ai/dsh-client-ui-task-board'
+
+    # Phone-remote settings card (「手机遥控」): total switch + request-body cap,
+    # bound to the `mobile-remote` namespace the host mobile-remote plugin registers.
+    - id: ui-mobile-remote
+      name: '@deepseek-ai/dsh-client-ui-mobile-remote'
 
     # Image understanding for text-only models: describe_image tool (host) + settings card/preview (client).
     - id: ui-describe-image

@@ -103,6 +103,7 @@
     { "path": "./packages/client/ui-access-gate" },
     { "path": "./packages/client/ui-aionui-panel" },
     { "path": "./packages/client/ui-defaults" },
+    { "path": "./packages/client/ui-mobile-remote" },
     { "path": "./packages/client/ui-describe-image" },
     { "path": "./packages/client/ui-git-graph" },
     { "path": "./packages/client/ui-live-stats" },

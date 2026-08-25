@@ -121,13 +121,15 @@
     "@deepseek-ai/dsh-client-ui-git-graph": "workspace:^",
     "@deepseek-ai/dsh-client-ui-live-stats": "workspace:^",
     "@deepseek-ai/dsh-client-ui-mobile-adapt": "workspace:^",
+    "@deepseek-ai/dsh-client-ui-mobile-remote": "workspace:^",
     "@deepseek-ai/dsh-client-ui-pet": "workspace:^",
     "@deepseek-ai/dsh-client-ui-skin-center": "workspace:^",
     "@deepseek-ai/dsh-client-ui-skin-maid-atelier": "workspace:^",
     "@deepseek-ai/dsh-client-ui-task-board": "workspace:^",
     "@deepseek-ai/dsh-host-access-gate": "workspace:^",
     "@deepseek-ai/dsh-host-aionui-panel": "workspace:^",
-    "@deepseek-ai/dsh-host-git-graph": "workspace:^"
+    "@deepseek-ai/dsh-host-git-graph": "workspace:^",
+    "@deepseek-ai/dsh-host-mobile-remote": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
