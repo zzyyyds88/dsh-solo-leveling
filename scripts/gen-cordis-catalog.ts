@@ -113,6 +113,9 @@ export const SERVICE_PAGE: Record<string, string> = {
   web: 'web.md',
   workflowEngine: 'workflow.md',
   workspaceRegistry: 'workspace.md',
+  // Local fork: task-board host plugin (packages/host/task-board) provides ctx.taskBoard;
+  // its subsystems page docs/subsystems/task-board.md(.zh.md) is fork-owned.
+  taskBoard: 'task-board.md',
 }
 
 /**
@@ -192,6 +195,8 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
   'tools': 'tools.md',
   'webserver': 'web-server.md',
   'workflow': 'workflow.md',
+  // Local fork: task-board/changed full-snapshot broadcast from packages/host/task-board.
+  'task-board': 'task-board.md',
 }
 
 /**
@@ -224,6 +229,9 @@ export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
  */
 export const LINK_MAP: Readonly<Record<string, string>> = {
   Agent: 'core.md',
+  // Local fork: task-board ledger row type (packages/host/task-board/src/core/tasks.ts),
+  // referenced by ctx.taskBoard signatures and the task-board/changed event payload.
+  TaskRecord: 'task-board.md',
   AgentCancelCause: 'core.md',
   AgentFactory: 'core.md',
   AgentHandle: 'core.md',

@@ -589,6 +589,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     consumers: ['tool-cordis'],
     note: 'Registers host inspect providers, mirrors the client provider manifest, and routes client queries through the dynamic Cordis transport.',
   },
+  {
+    // Local fork: task-board host plugin (packages/host/task-board) provides ctx.taskBoard.
+    key: 'taskBoard',
+    pkg: 'task-board',
+    title: 'Task board ledger and scheduler',
+    mode: 'seam',
+    consumers: ['mobile-remote'],
+    note: 'Owns the durable kanban ledger, the in-process cron scheduler, and real session executions; browser and mobile views read /api/task-board/* full snapshots instead of holding state.',
+  },
 ]
 
 function generatedHeader(title: string): string[] {

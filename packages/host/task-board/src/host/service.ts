@@ -314,6 +314,9 @@ export class TaskBoardService extends Service {
    * to running (browser parity — the schedule rolls forward once the trigger
    * is taken); a later launch failure settles the execution record failed
    * instead of keeping the slot, which would re-fire every tick.
+   * @param id - the task to execute.
+   * @returns whether the run was accepted (an unknown task or a held mutex
+   *   yields false instead of throwing).
    */
   async runTask(id: string): Promise<boolean> {
     const accepted = this.acceptRun(id)
