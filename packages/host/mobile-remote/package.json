@@ -55,7 +55,7 @@
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-settings": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
-    "@types/node": "^22.20.0",
+    "@types/node": "^26.1.1",
     "@types/ws": "^8.5.10"
   }
 }

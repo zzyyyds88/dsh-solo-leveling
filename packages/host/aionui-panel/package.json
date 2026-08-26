@@ -54,6 +54,6 @@
     "@deepseek-ai/dsh-subprocess": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-workspace": "workspace:^",
-    "@types/node": "^22.20.0"
+    "@types/node": "^26.1.1"
   }
 }
