@@ -26,3 +26,16 @@ Namespace `mobile-remote`: `enabled` (default `true`) turns every mobile endpoin
 
 - `taskBoard` is an optional dependency: the five `task-board.*` whitelist rows appear only while the service composes.
 - The task-board ledger changes fan out through the cordis `task-board/changed` event as full-snapshot frames.
+
+## Model Experience
+
+None, as the BFF is phone-app transport only: it forwards whitelisted RPC to services that own their own model faces and registers no tool, prompt section, or schema of its own.
+
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
+
+## Known Limitations and Deferred Work
+
+- Downstream-only event stream: a phone sees pushes only while connected; there is no offline queue or server push notification path (reconnect/backfill belongs to the app's P4 phase).
+- The RPC surface is whitelist v1: only the enumerated methods forward; anything else is rejected `method-not-allowed` until a versioned contract widening.

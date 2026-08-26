@@ -29,16 +29,20 @@ Match order is fixed: exact table first, then longest matching prefix, then the 
 ## Config
 
 ```ts type-equiv
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the optional TLS material. */
 interface Config {
   /** Listen host; the two supported values are loopback and all-interfaces. */
   host: '127.0.0.1' | '0.0.0.0'
   /** Listen port; zero requests an OS-assigned port. */
   port: number
+  /** PEM private key; when both this and `tlsCert` are set the server speaks HTTPS. */
+  tlsKey?: string
+  /** PEM certificate; when both this and `tlsKey` are set the server speaks HTTPS. */
+  tlsCert?: string
 }
 ```
 
-`host` accepts only `127.0.0.1` (default posture) and `0.0.0.0` (deliberate network exposure); there is no TLS, auth, or origin policy, so a non-loopback bind exposes the server to that network. The dist location is an assembly fact of the frontend plugin that claims the seat.
+`host` accepts only `127.0.0.1` (default posture) and `0.0.0.0` (deliberate network exposure). When both TLS fields are set the listener speaks HTTPS, otherwise plain HTTP; this integration package boots it with self-signed HTTPS on `0.0.0.0` by default (a fork customization, owned by the web-app assembly and the access-gate settings card). The webserver itself owns no auth or origin policy — authentication rides the access-gate hook registered by the assembly. The dist location is an assembly fact of the frontend plugin that claims the seat.
 
 ## The service
 

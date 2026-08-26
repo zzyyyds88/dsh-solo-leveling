@@ -167,6 +167,10 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/web/web-fetch-http': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/web/web-search-exa': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-web.' },
   'packages/workflow/workflow': { kind: 'indirect', reason: 'The service delegates parent and child model rendering to its consumer and engine.' },
+  // Local fork: task-board host plugin — ledger/scheduler seam behind HTTP routes.
+  'packages/host/task-board': { kind: 'none', reason: 'The ledger/scheduler seam registers nothing model-facing; sessions it starts carry the task prompt through the standard chain.' },
+  // Local fork: mobile-remote host plugin — phone-app BFF transport only.
+  'packages/host/mobile-remote': { kind: 'none', reason: 'The BFF forwards whitelisted RPC to services that own their model faces; it registers no tool, prompt, or schema of its own.' },
 }
 
 interface Failure {

@@ -145,7 +145,12 @@ export function parseLedger(raw: string): TaskRecord[] {
   return tasks
 }
 
-/** Read + validate the ledger file; absence and read faults start from an empty ledger. */
+/**
+ * Read + validate the ledger file; absence and read faults start from an
+ * empty ledger.
+ * @param path - the ledger file path (`$DSH_HOME/task-board/ledger.json`).
+ * @returns the validated task rows, in file order.
+ */
 export async function loadLedgerFile(path: string): Promise<TaskRecord[]> {
   let raw: string
   try {
@@ -163,6 +168,8 @@ export async function loadLedgerFile(path: string): Promise<TaskRecord[]> {
  * Replace the ledger file in one atomic step (write tmp sibling + rename over
  * the target), creating parent directories. Write failures propagate to the
  * caller, which keeps serving the in-memory state and logs the fault.
+ * @param path - the ledger file path (`$DSH_HOME/task-board/ledger.json`).
+ * @param tasks - the full in-memory snapshot to persist.
  */
 export async function saveLedgerFile(path: string, tasks: readonly TaskRecord[]): Promise<void> {
   await writeFileAtomic(path, `${JSON.stringify(tasks, null, 2)}\n`, { mode: 0o600 })

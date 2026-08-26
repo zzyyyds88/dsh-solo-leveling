@@ -137,6 +137,7 @@ export class HostApiTaskStore implements TaskStore {
    * Swap the cache with a host-snapshot and notify the reload listeners.
    * Rows failing the structural guard are dropped defensively; a malformed
    * frame degrades to a partial refresh, never a broken board.
+   * @param rows - the raw `{tasks}` snapshot payload from the host.
    */
   ingest(rows: unknown): void {
     if (!Array.isArray(rows)) return

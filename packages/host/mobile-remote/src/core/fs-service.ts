@@ -136,7 +136,11 @@ export function deriveMime(rel: string, data: Buffer): string {
   return 'application/octet-stream'
 }
 
-/** Read the first 4 magic bytes of a file (empty buffer when unreadable). Exported for tests; not in the barrel. */
+/**
+ * Read the first 4 magic bytes of a file. Exported for tests; not in the barrel.
+ * @param abs - the absolute file path to sniff.
+ * @returns up to 4 bytes (empty buffer when unreadable).
+ */
 export async function readMagicBytes(abs: string): Promise<Buffer> {
   let handle: Awaited<ReturnType<typeof open>> | undefined
   try {

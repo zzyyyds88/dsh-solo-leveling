@@ -16,6 +16,14 @@ Host half of the DSH task board: the ledger of record, the in-process cron sched
 
 None. Tick cadence, body limits, and the ledger location are constants; there is deliberately nothing to tune in v1.
 
+## Model Experience
+
+None, as the board registers no tool, prompt section, or schema of its own; the sessions its scheduler starts carry the task's own prompt through the standard session chain.
+
+#### KV Cache effect
+
+None; this package neither assembles nor sends a provider request.
+
 ## Known Limitations and Deferred Work
 
 - No missed-run catch-up queue: by design, a run whose due instant passed while nothing was armed fires once and rolls forward.

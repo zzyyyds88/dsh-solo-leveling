@@ -29,16 +29,20 @@ interface WebRoute {
 ## 配置
 
 ```ts type-equiv
-/** Gateway config: the listen address. */
+/** Gateway config: the listen address and the optional TLS material. */
 interface Config {
   /** Listen host; the two supported values are loopback and all-interfaces. */
   host: '127.0.0.1' | '0.0.0.0'
   /** Listen port; zero requests an OS-assigned port. */
   port: number
+  /** PEM private key; when both this and `tlsCert` are set the server speaks HTTPS. */
+  tlsKey?: string
+  /** PEM certificate; when both this and `tlsKey` are set the server speaks HTTPS. */
+  tlsCert?: string
 }
 ```
 
-`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（刻意的网络暴露）；没有 TLS、认证或 origin 策略，因此绑定到非回环地址会把服务器暴露给该网络。dist 位置是认领席位的前端插件的组装事实。
+`host` 只接受 `127.0.0.1`（默认姿态）和 `0.0.0.0`（刻意的网络暴露）。两个 TLS 字段都配置时监听器以 HTTPS 通信，否则为纯 HTTP；本整合包默认以自签 HTTPS 绑定 `0.0.0.0` 启动（fork 定制，由 web-app 组装与访问门禁设置卡负责）。webserver 自身不持有认证或 origin 策略——认证经由组装层注册的访问门禁钩子挂接。dist 位置是认领席位的前端插件的组装事实。
 
 ## 服务
 
